@@ -69,6 +69,73 @@ class WorkEntry {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'client': client,
+      'type': type.name,
+      'date': date.toIso8601String(),
+      'startHour': startTime.hour,
+      'startMinute': startTime.minute,
+      'minutes': minutes,
+      'notes': notes,
+      'odometerStart': odometerStart,
+      'odometerEnd': odometerEnd,
+    };
+  }
+
+  factory WorkEntry.fromJson(Map<String, dynamic> json) {
+    int readInt(String key, int fallback) {
+      final value = json[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return fallback;
+    }
+
+    double? readNullableDouble(String key) {
+      final value = json[key];
+      if (value is num) return value.toDouble();
+      return null;
+    }
+
+    int boundInt(int value, int min, int max) {
+      if (value < min) return min;
+      if (value > max) return max;
+      return value;
+    }
+
+    final typeName = json['type'] as String?;
+    final type = EntryType.values.firstWhere(
+      (entryType) => entryType.name == typeName,
+      orElse: () => EntryType.homeVisit,
+    );
+
+    final dateText = json['date'] as String?;
+    final parsedDate = DateTime.tryParse(dateText ?? '') ?? DateTime.now();
+
+    final rawNotes = json['notes'];
+    final notes = rawNotes is List
+        ? rawNotes.whereType<String>().toList()
+        : <String>[];
+
+    return WorkEntry(
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      client: json['client'] as String? ?? 'Unknown Client',
+      type: type,
+      date: parsedDate,
+      startTime: TimeOfDay(
+        hour: boundInt(readInt('startHour', 9), 0, 23),
+        minute: boundInt(readInt('startMinute', 0), 0, 59),
+      ),
+      minutes: boundInt(readInt('minutes', 0), 0, 1440),
+      notes: notes,
+      odometerStart: readNullableDouble('odometerStart'),
+      odometerEnd: readNullableDouble('odometerEnd'),
+    );
+  }
+
   String textSummary(AppSettings settings) {
     final buffer = StringBuffer()
       ..writeln('$client - ${type.label}')

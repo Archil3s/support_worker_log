@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
+import '../../core/models/quick_entry_draft.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/draft_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/review_row.dart';
@@ -47,22 +51,97 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     'Follow-up Needed': 5,
   };
 
+  final DraftService _draftService = DraftService();
+
   String? selectedClient;
   EntryType selectedType = EntryType.homeVisit;
   DateTime selectedDate = DateTime.now();
   TimeOfDay startTime = TimeOfDay.now();
   int baseMinutes = 60;
   int textCount = 1;
-  final selectedNotes = <String>{};
+  bool draftLoaded = false;
 
+  final selectedNotes = <String>{};
   final odometerStartController = TextEditingController();
   final odometerEndController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    odometerStartController.addListener(_saveDraftIfLoaded);
+    odometerEndController.addListener(_saveDraftIfLoaded);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadDraft());
+    });
+  }
 
   @override
   void dispose() {
     odometerStartController.dispose();
     odometerEndController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDraft() async {
+    final clients = context.read<AppState>().clients;
+    final draft = await _draftService.loadQuickEntryDraft();
+
+    if (!mounted) return;
+
+    setState(() {
+      if (draft == null) {
+        selectedClient = clients.isEmpty ? null : clients.first;
+        draftLoaded = true;
+        return;
+      }
+
+      selectedClient = clients.contains(draft.selectedClient)
+          ? draft.selectedClient
+          : clients.isEmpty
+          ? null
+          : clients.first;
+
+      selectedType = draft.selectedType;
+      selectedDate = draft.selectedDate;
+      startTime = draft.startTime;
+      baseMinutes = draft.baseMinutes;
+      textCount = draft.textCount;
+
+      selectedNotes
+        ..clear()
+        ..addAll(draft.selectedNotes);
+
+      odometerStartController.text = draft.odometerStart;
+      odometerEndController.text = draft.odometerEnd;
+
+      draftLoaded = true;
+    });
+  }
+
+  QuickEntryDraft _currentDraft() {
+    return QuickEntryDraft(
+      selectedClient: selectedClient,
+      selectedType: selectedType,
+      selectedDate: selectedDate,
+      startTime: startTime,
+      baseMinutes: baseMinutes,
+      textCount: textCount,
+      selectedNotes: selectedNotes.toList()..sort(),
+      odometerStart: odometerStartController.text,
+      odometerEnd: odometerEndController.text,
+    );
+  }
+
+  void _saveDraftIfLoaded() {
+    if (!draftLoaded) return;
+    unawaited(_draftService.saveQuickEntryDraft(_currentDraft()));
+  }
+
+  void _updateDraftState(VoidCallback change) {
+    setState(change);
+    _saveDraftIfLoaded();
   }
 
   int get extraMinutes {
@@ -93,7 +172,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     );
 
     if (picked != null) {
-      setState(() => selectedDate = picked);
+      _updateDraftState(() => selectedDate = picked);
     }
   }
 
@@ -104,11 +183,11 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     );
 
     if (picked != null) {
-      setState(() => startTime = picked);
+      _updateDraftState(() => startTime = picked);
     }
   }
 
-  void saveEntry() {
+  Future<void> saveEntry() async {
     final appState = context.read<AppState>();
     final client = selectedClient;
 
@@ -132,6 +211,9 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     );
 
     appState.addEntry(entry);
+    await _draftService.clearQuickEntryDraft();
+
+    if (!mounted) return;
 
     setState(() {
       selectedDate = DateTime.now();
@@ -153,8 +235,17 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final appState = context.watch<AppState>();
     final clients = appState.clients;
 
-    if (clients.isNotEmpty && !clients.contains(selectedClient)) {
-      selectedClient = clients.first;
+    final activeClient = clients.contains(selectedClient)
+        ? selectedClient
+        : clients.isEmpty
+        ? null
+        : clients.first;
+
+    if (activeClient != selectedClient && draftLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _updateDraftState(() => selectedClient = activeClient);
+      });
     }
 
     final previewEarnings = (totalMinutes / 60) * appState.settings.hourlyRate;
@@ -166,13 +257,15 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
           title: 'Client',
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: clients.isEmpty ? null : selectedClient,
+              value: activeClient,
               isExpanded: true,
               items: [
                 for (final client in clients)
                   DropdownMenuItem(value: client, child: Text(client)),
               ],
-              onChanged: (value) => setState(() => selectedClient = value),
+              onChanged: (value) {
+                _updateDraftState(() => selectedClient = value);
+              },
             ),
           ),
         ),
@@ -189,9 +282,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                   label: Text(type.label),
                   selected: selectedType == type,
                   onSelected: (_) {
-                    setState(() {
-                      selectedType = type;
-                    });
+                    _updateDraftState(() => selectedType = type);
                   },
                 ),
             ],
@@ -226,7 +317,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                 width: double.infinity,
                 child: FilledButton.tonalIcon(
                   onPressed: () {
-                    setState(() {
+                    _updateDraftState(() {
                       selectedDate = DateTime.now();
                       startTime = TimeOfDay.now();
                     });
@@ -254,7 +345,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             minValue: selectedType == EntryType.textNote ? 1 : 5,
             step: selectedType == EntryType.textNote ? 1 : 5,
             onChanged: (value) {
-              setState(() {
+              _updateDraftState(() {
                 if (selectedType == EntryType.textNote) {
                   textCount = value;
                 } else {
@@ -307,7 +398,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                   label: Text(note),
                   selected: selectedNotes.contains(note),
                   onSelected: (selected) {
-                    setState(() {
+                    _updateDraftState(() {
                       if (selected) {
                         selectedNotes.add(note);
                       } else {
