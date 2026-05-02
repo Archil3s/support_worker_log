@@ -1,9 +1,6 @@
-[build]
+﻿[build]
   command = "dart run tool/generate_firebase_options.dart && flutter build web --release"
   publish = "build/web"
-
-[functions]
-  directory = "netlify/functions"
 
 [[redirects]]
   from = "/*"
