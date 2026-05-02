@@ -18,19 +18,12 @@ void main() {
 // Do not commit this file.
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return android;
-      default:
-        return web;
-    }
+    return web;
   }
 
   static FirebaseOptions get web => FirebaseOptions(
@@ -39,14 +32,6 @@ class DefaultFirebaseOptions {
         messagingSenderId: '${env('FIREBASE_MESSAGING_SENDER_ID')}',
         projectId: '${env('FIREBASE_PROJECT_ID')}',
         authDomain: '${env('FIREBASE_AUTH_DOMAIN')}',
-        storageBucket: '${env('FIREBASE_STORAGE_BUCKET')}',
-      );
-
-  static FirebaseOptions get android => FirebaseOptions(
-        apiKey: '${env('FIREBASE_ANDROID_API_KEY')}',
-        appId: '${env('FIREBASE_ANDROID_APP_ID')}',
-        messagingSenderId: '${env('FIREBASE_MESSAGING_SENDER_ID')}',
-        projectId: '${env('FIREBASE_PROJECT_ID')}',
         storageBucket: '${env('FIREBASE_STORAGE_BUCKET')}',
       );
 }
