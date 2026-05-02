@@ -6,7 +6,6 @@ import '../models/active_visit.dart';
 import '../models/app_settings.dart';
 import '../models/work_entry.dart';
 import '../services/storage_service.dart';
-import '../utils/sample_invoice_data.dart';
 
 class RemovedEntry {
   const RemovedEntry({required this.entry, required this.index});
@@ -31,14 +30,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     final data = await _storageService.load();
-
     _replaceInMemory(data);
-
-    final seeded = _seedInvoiceDatasetIfMissing();
-    if (seeded) {
-      await _save();
-    }
-
     notifyListeners();
   }
 
@@ -204,41 +196,6 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
 
     return true;
-  }
-
-  bool _seedInvoiceDatasetIfMissing() {
-    final invoiceEntries = sampleInvoiceEntries();
-    final existingIds = _entries.map((entry) => entry.id).toSet();
-
-    final missingEntries = invoiceEntries
-        .where((entry) => !existingIds.contains(entry.id))
-        .toList();
-
-    for (final entry in invoiceEntries) {
-      if (!_clients.contains(entry.client)) {
-        _clients.add(entry.client);
-      }
-    }
-
-    _clients.sort();
-
-    if (missingEntries.isNotEmpty) {
-      _entries.insertAll(0, missingEntries);
-    }
-
-    final anchor = DateTime(2025, 12, 14);
-    final currentAnchor = _settings.payPeriodAnchorDate;
-    final anchorNeedsUpdate =
-        currentAnchor == null ||
-        currentAnchor.year != anchor.year ||
-        currentAnchor.month != anchor.month ||
-        currentAnchor.day != anchor.day;
-
-    if (anchorNeedsUpdate) {
-      _settings = _settings.copyWith(payPeriodAnchorDate: anchor);
-    }
-
-    return missingEntries.isNotEmpty || anchorNeedsUpdate;
   }
 
   void _replaceInMemory(StoredAppData data) {

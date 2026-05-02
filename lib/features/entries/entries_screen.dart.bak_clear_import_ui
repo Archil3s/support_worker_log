@@ -189,18 +189,18 @@ class _EntriesScreenState extends State<EntriesScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         SectionCard(
-          title: 'Import Entries',
+          title: 'Invoice Tools',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.icon(
                 onPressed: _showImportSheet,
                 icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Import ChatGPT / CSV Rows'),
+                label: const Text('Paste Invoice Rows'),
               ),
               const SizedBox(height: 10),
               const Text(
-                'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
+                'Paste rows as: client,date,type,duration,km,note. Phone Call imports as phone, not home visit.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
@@ -515,12 +515,12 @@ class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Import ChatGPT / CSV Rows',
+              'Paste Invoice Rows',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 10),
             const Text(
-              'Paste rows with this header: client,date,type,duration,km,note. This is copy/paste import, not a file picker.',
+              'One row per support entry. Use comma, pipe, or tab-separated text.',
               style: TextStyle(color: Color(0xFF8396C7)),
             ),
             const SizedBox(height: 12),
@@ -529,10 +529,9 @@ class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
               minLines: 8,
               maxLines: 12,
               decoration: const InputDecoration(
-                labelText: 'Paste ChatGPT CSV here',
-                hintText: '''client,date,type,duration,km,note
-PR,09/01/2026,Phone Call,1 min,0,PR phone/contact log
-BD,20/12/2025,Home Visit,1.5h,5,Home visit''',
+                labelText: 'Paste rows here',
+                hintText:
+                    'PR,09/01/2026,Phone Call,1 min,0,PR phone/contact log',
                 alignLabelWithHint: true,
               ),
             ),
@@ -540,7 +539,7 @@ BD,20/12/2025,Home Visit,1.5h,5,Home visit''',
             FilledButton.icon(
               onPressed: parse,
               icon: const Icon(Icons.auto_fix_high_outlined),
-              label: const Text('Step 1 - Preview Import'),
+              label: const Text('Preview Import'),
             ),
             if (rows.isNotEmpty) ...[
               const SizedBox(height: 12),

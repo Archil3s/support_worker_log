@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
@@ -52,10 +53,10 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   late DateTime selectedDate;
   late TimeOfDay startTime;
   late int minutes;
-  late int textCount;
 
   late final TextEditingController odometerStartController;
   late final TextEditingController odometerEndController;
+  late final TextEditingController customNoteController;
 
   final selectedNotes = <String>{};
 
@@ -73,9 +74,17 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     selectedDate = widget.entry.date;
     startTime = widget.entry.startTime;
     minutes = widget.entry.minutes <= 0 ? 5 : widget.entry.minutes;
-    textCount = widget.entry.minutes <= 0 ? 1 : widget.entry.minutes;
 
-    selectedNotes.addAll(widget.entry.notes);
+    final knownNotes = noteOptions.toSet();
+    final customNotes = <String>[];
+
+    for (final note in widget.entry.notes) {
+      if (knownNotes.contains(note)) {
+        selectedNotes.add(note);
+      } else if (note.trim().isNotEmpty) {
+        customNotes.add(note.trim());
+      }
+    }
 
     odometerStartController = TextEditingController(
       text: _numberText(widget.entry.odometerStart),
@@ -83,12 +92,14 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     odometerEndController = TextEditingController(
       text: _numberText(widget.entry.odometerEnd),
     );
+    customNoteController = TextEditingController(text: customNotes.join('\n'));
   }
 
   @override
   void dispose() {
     odometerStartController.dispose();
     odometerEndController.dispose();
+    customNoteController.dispose();
     super.dispose();
   }
 
@@ -104,9 +115,9 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     return double.tryParse(value);
   }
 
-  int get savedMinutes {
-    return selectedType == EntryType.textNote ? textCount : minutes;
-  }
+  int get savedMinutes => minutes.clamp(1, 1440);
+
+  double get previewHours => savedMinutes / 60;
 
   Future<void> pickDate() async {
     final picked = await showDatePicker(
@@ -116,9 +127,8 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       lastDate: DateTime(2100),
     );
 
-    if (picked != null) {
-      setState(() => selectedDate = picked);
-    }
+    if (!mounted || picked == null) return;
+    setState(() => selectedDate = picked);
   }
 
   Future<void> pickStartTime() async {
@@ -127,25 +137,64 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       initialTime: startTime,
     );
 
-    if (picked != null) {
-      setState(() => startTime = picked);
-    }
+    if (!mounted || picked == null) return;
+    setState(() => startTime = picked);
+  }
+
+  void setDuration(int value) {
+    setState(() => minutes = value.clamp(1, 1440));
+  }
+
+  void adjustDuration(int delta) {
+    setDuration(minutes + delta);
+  }
+
+  List<String> buildNotes() {
+    final customNotes = customNoteController.text
+        .split('\n')
+        .map((note) => note.trim())
+        .where((note) => note.isNotEmpty);
+
+    final notes = [...selectedNotes, ...customNotes].toSet().toList()..sort();
+
+    return notes;
   }
 
   void save() {
-    final updatedEntry = widget.entry.copyWith(
+    final odometerStart = selectedType == EntryType.homeVisit
+        ? _parseOdometer(odometerStartController)
+        : null;
+    final odometerEnd = selectedType == EntryType.homeVisit
+        ? _parseOdometer(odometerEndController)
+        : null;
+
+    if (selectedType == EntryType.homeVisit &&
+        odometerStart != null &&
+        odometerEnd != null &&
+        odometerEnd < odometerStart) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Finish odometer must be higher than start.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final updatedEntry = WorkEntry(
+      id: widget.entry.id,
       client: selectedClient,
       type: selectedType,
       date: selectedDate,
       startTime: startTime,
       minutes: savedMinutes,
-      notes: selectedNotes.toList()..sort(),
-      odometerStart: selectedType == EntryType.homeVisit
-          ? _parseOdometer(odometerStartController)
-          : null,
-      odometerEnd: selectedType == EntryType.homeVisit
-          ? _parseOdometer(odometerEndController)
-          : null,
+      notes: buildNotes(),
+      odometerStart: odometerStart,
+      odometerEnd: odometerEnd,
     );
 
     widget.onSave(updatedEntry);
@@ -154,47 +203,53 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final safeClients = widget.clients.isEmpty
+        ? <String>[selectedClient]
+        : widget.clients;
+
     return SafeArea(
       child: DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.92,
+        initialChildSize: 0.94,
         minChildSize: 0.55,
-        maxChildSize: 0.96,
+        maxChildSize: 0.98,
         builder: (context, scrollController) {
           return ListView(
             controller: scrollController,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Edit Entry',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+              _SheetHeader(onClose: () => Navigator.of(context).pop()),
+              const SizedBox(height: 12),
+              _QuickFixPanel(
+                onToday: () {
+                  setState(() => selectedDate = DateTime.now());
+                },
+                onNow: () {
+                  setState(() => startTime = TimeOfDay.now());
+                },
+                onClearOdo: () {
+                  setState(() {
+                    odometerStartController.clear();
+                    odometerEndController.clear();
+                  });
+                },
               ),
               const SizedBox(height: 12),
               SectionCard(
                 title: 'Client',
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: selectedClient,
-                    isExpanded: true,
-                    items: [
-                      for (final client in widget.clients)
-                        DropdownMenuItem(value: client, child: Text(client)),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => selectedClient = value);
-                    },
-                  ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final client in safeClients)
+                      ChoiceChip(
+                        label: Text(client),
+                        selected: selectedClient == client,
+                        onSelected: (_) {
+                          setState(() => selectedClient = client);
+                        },
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -210,14 +265,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                         label: Text(type.label),
                         selected: selectedType == type,
                         onSelected: (_) {
-                          setState(() {
-                            selectedType = type;
-                            if (selectedType == EntryType.textNote) {
-                              textCount = savedMinutes <= 0 ? 1 : savedMinutes;
-                            } else {
-                              minutes = savedMinutes <= 0 ? 5 : savedMinutes;
-                            }
-                          });
+                          setState(() => selectedType = type);
                         },
                       ),
                   ],
@@ -227,96 +275,56 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               SectionCard(
                 title: 'Date & Start Time',
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: pickDate,
-                            icon: const Icon(Icons.today_outlined),
-                            label: Text(formatDate(selectedDate)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: pickStartTime,
-                            icon: const Icon(Icons.schedule_outlined),
-                            label: Text(formatTime(startTime)),
-                          ),
-                        ),
-                      ],
+                    OutlinedButton.icon(
+                      onPressed: pickDate,
+                      icon: const Icon(Icons.today_outlined),
+                      label: Text(formatDate(selectedDate)),
                     ),
                     const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.tonalIcon(
-                        onPressed: () {
-                          setState(() {
-                            selectedDate = DateTime.now();
-                            startTime = TimeOfDay.now();
-                          });
-                        },
-                        icon: const Icon(Icons.bolt_outlined),
-                        label: const Text('Now'),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: pickStartTime,
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: Text(formatTime(startTime)),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
               SectionCard(
-                title: selectedType == EntryType.textNote
-                    ? 'Text Counter'
-                    : 'Minutes',
-                child: _CounterRow(
-                  label: selectedType == EntryType.textNote
-                      ? '$textCount text${textCount == 1 ? '' : 's'}'
-                      : '$minutes minutes',
-                  helper: selectedType == EntryType.textNote
-                      ? 'Each text = 1 minute'
-                      : 'Total saved entry duration',
-                  value: selectedType == EntryType.textNote
-                      ? textCount
-                      : minutes,
-                  minValue: selectedType == EntryType.textNote ? 1 : 5,
-                  step: selectedType == EntryType.textNote ? 1 : 5,
-                  onChanged: (value) {
-                    setState(() {
-                      if (selectedType == EntryType.textNote) {
-                        textCount = value;
-                      } else {
-                        minutes = value;
-                      }
-                    });
-                  },
+                title: 'Duration',
+                child: _DurationEditor(
+                  minutes: savedMinutes,
+                  onSet: setDuration,
+                  onAdjust: adjustDuration,
                 ),
               ),
               if (selectedType == EntryType.homeVisit) ...[
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Odometer',
-                  child: Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: odometerStartController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Start',
-                          ),
+                      TextField(
+                        controller: odometerStartController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [_DecimalInputFormatter()],
+                        decoration: const InputDecoration(
+                          labelText: 'Start odometer',
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: odometerEndController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Finish',
-                          ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: odometerEndController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [_DecimalInputFormatter()],
+                        decoration: const InputDecoration(
+                          labelText: 'Finish odometer',
                         ),
                       ),
                     ],
@@ -325,55 +333,71 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               ],
               const SizedBox(height: 12),
               SectionCard(
-                title: 'Notes Chips',
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                title: 'Notes',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final note in noteOptions)
-                      FilterChip(
-                        label: Text(note),
-                        selected: selectedNotes.contains(note),
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              selectedNotes.add(note);
-                            } else {
-                              selectedNotes.remove(note);
-                            }
-                          });
-                        },
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final note in noteOptions)
+                          FilterChip(
+                            label: Text(note),
+                            selected: selectedNotes.contains(note),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  selectedNotes.add(note);
+                                } else {
+                                  selectedNotes.remove(note);
+                                }
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: customNoteController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Extra note',
+                        hintText: 'One note per line',
                       ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
               SectionCard(
-                title: 'Review',
+                title: 'Review Changes',
                 child: Column(
                   children: [
                     ReviewRow(label: 'Client', value: selectedClient),
                     ReviewRow(label: 'Type', value: selectedType.label),
                     ReviewRow(label: 'Date', value: formatDate(selectedDate)),
                     ReviewRow(label: 'Start', value: formatTime(startTime)),
-                    ReviewRow(label: 'Minutes', value: '$savedMinutes min'),
+                    ReviewRow(label: 'Duration', value: '$savedMinutes min'),
+                    ReviewRow(
+                      label: 'Hours',
+                      value: previewHours.toStringAsFixed(2),
+                    ),
                     if (selectedType == EntryType.homeVisit)
                       ReviewRow(
                         label: 'Odometer',
                         value:
                             '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} -> ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
                       ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Save Changes'),
-                      ),
-                    ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: save,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Save Changes'),
               ),
             ],
           );
@@ -383,47 +407,165 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   }
 }
 
-class _CounterRow extends StatelessWidget {
-  const _CounterRow({
-    required this.label,
-    required this.helper,
-    required this.value,
-    required this.minValue,
-    required this.step,
-    required this.onChanged,
-  });
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({required this.onClose});
 
-  final String label;
-  final String helper;
-  final int value;
-  final int minValue;
-  final int step;
-  final ValueChanged<int> onChanged;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(label),
-            subtitle: Text(helper),
+        const Expanded(
+          child: Text(
+            'Fix Entry',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 22,
+            ),
           ),
         ),
-        IconButton.filledTonal(
-          onPressed: value <= minValue ? null : () => onChanged(value - step),
-          icon: const Icon(Icons.remove),
+        IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
+      ],
+    );
+  }
+}
+
+class _QuickFixPanel extends StatelessWidget {
+  const _QuickFixPanel({
+    required this.onToday,
+    required this.onNow,
+    required this.onClearOdo,
+  });
+
+  final VoidCallback onToday;
+  final VoidCallback onNow;
+  final VoidCallback onClearOdo;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Quick Fixes',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton.tonalIcon(
+            onPressed: onToday,
+            icon: const Icon(Icons.today_outlined),
+            label: const Text('Set Date Today'),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: onNow,
+            icon: const Icon(Icons.schedule_outlined),
+            label: const Text('Set Time Now'),
+          ),
+          OutlinedButton.icon(
+            onPressed: onClearOdo,
+            icon: const Icon(Icons.clear),
+            label: const Text('Clear Odo'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DurationEditor extends StatelessWidget {
+  const _DurationEditor({
+    required this.minutes,
+    required this.onSet,
+    required this.onAdjust,
+  });
+
+  final int minutes;
+  final ValueChanged<int> onSet;
+  final ValueChanged<int> onAdjust;
+
+  @override
+  Widget build(BuildContext context) {
+    const presets = [15, 30, 45, 60, 90, 120];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '$minutes minutes (${(minutes / 60).toStringAsFixed(2)}h)',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+          ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text('$value'),
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final preset in presets)
+              ChoiceChip(
+                label: Text('$preset min'),
+                selected: minutes == preset,
+                onSelected: (_) => onSet(preset),
+              ),
+          ],
         ),
-        IconButton.filledTonal(
-          onPressed: () => onChanged(value + step),
-          icon: const Icon(Icons.add),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => onAdjust(-15),
+                child: const Text('-15'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => onAdjust(-5),
+                child: const Text('-5'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.tonal(
+                onPressed: () => onAdjust(5),
+                child: const Text('+5'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.tonal(
+                onPressed: () => onAdjust(15),
+                child: const Text('+15'),
+              ),
+            ),
+          ],
         ),
       ],
     );
+  }
+}
+
+class _DecimalInputFormatter extends TextInputFormatter {
+  const _DecimalInputFormatter();
+
+  static final RegExp _validPattern = RegExp(r'^\d*\.?\d*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+
+    if (text.isEmpty) return newValue;
+    if (!_validPattern.hasMatch(text)) return oldValue;
+    if ('.'.allMatches(text).length > 1) return oldValue;
+
+    return newValue;
   }
 }

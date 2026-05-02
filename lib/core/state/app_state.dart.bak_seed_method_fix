@@ -206,41 +206,6 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  bool _seedInvoiceDatasetIfMissing() {
-    final invoiceEntries = sampleInvoiceEntries();
-    final existingIds = _entries.map((entry) => entry.id).toSet();
-
-    final missingEntries = invoiceEntries
-        .where((entry) => !existingIds.contains(entry.id))
-        .toList();
-
-    for (final entry in invoiceEntries) {
-      if (!_clients.contains(entry.client)) {
-        _clients.add(entry.client);
-      }
-    }
-
-    _clients.sort();
-
-    if (missingEntries.isNotEmpty) {
-      _entries.insertAll(0, missingEntries);
-    }
-
-    final anchor = DateTime(2025, 12, 14);
-    final currentAnchor = _settings.payPeriodAnchorDate;
-    final anchorNeedsUpdate =
-        currentAnchor == null ||
-        currentAnchor.year != anchor.year ||
-        currentAnchor.month != anchor.month ||
-        currentAnchor.day != anchor.day;
-
-    if (anchorNeedsUpdate) {
-      _settings = _settings.copyWith(payPeriodAnchorDate: anchor);
-    }
-
-    return missingEntries.isNotEmpty || anchorNeedsUpdate;
-  }
-
   void _replaceInMemory(StoredAppData data) {
     _settings = data.settings.weeklyHoursGoal == 20
         ? data.settings.copyWith(weeklyHoursGoal: 10)

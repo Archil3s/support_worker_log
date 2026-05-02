@@ -1,4 +1,4 @@
-// ignore_for_file: prefer_collection_literals
+﻿// ignore_for_file: prefer_collection_literals
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -200,7 +200,7 @@ class _EntriesScreenState extends State<EntriesScreen> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
+                'Step 1: Ask ChatGPT to format your notes as CSV. Step 2: Tap Import ChatGPT / CSV Rows. Step 3: Paste the rows. Step 4: Preview, then Import.'
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
@@ -530,9 +530,8 @@ class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
               maxLines: 12,
               decoration: const InputDecoration(
                 labelText: 'Paste ChatGPT CSV here',
-                hintText: '''client,date,type,duration,km,note
-PR,09/01/2026,Phone Call,1 min,0,PR phone/contact log
-BD,20/12/2025,Home Visit,1.5h,5,Home visit''',
+                hintText:
+                    'client,date,type,duration,km,note\nPR,09/01/2026,Phone Call,1 min,0,PR phone/contact log\nBD,20/12/2025,Home Visit,1.5h,5,Home visit',
                 alignLabelWithHint: true,
               ),
             ),
@@ -842,3 +841,4 @@ extension _EntryDateFilterLabel on _EntryDateFilter {
     }
   }
 }
+

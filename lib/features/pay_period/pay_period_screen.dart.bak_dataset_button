@@ -22,7 +22,6 @@ class PayPeriodScreen extends StatefulWidget {
 
 class _PayPeriodScreenState extends State<PayPeriodScreen> {
   late PayPeriodRange selectedRange;
-  bool selectedRangeReady = false;
 
   @override
   void initState() {
@@ -30,24 +29,8 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     selectedRange = currentFortnight();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (selectedRangeReady) return;
-
-    final settings = context.read<AppState>().settings;
-    selectedRange = currentFortnight(anchorDate: settings.payPeriodAnchorDate);
-    selectedRangeReady = true;
-  }
-
   void showCurrentPeriod() {
-    final settings = context.read<AppState>().settings;
-    setState(
-      () => selectedRange = currentFortnight(
-        anchorDate: settings.payPeriodAnchorDate,
-      ),
-    );
+    setState(() => selectedRange = currentFortnight());
   }
 
   void showPreviousPeriod() {
