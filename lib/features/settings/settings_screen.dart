@@ -1,11 +1,17 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
 
+import '../../core/services/excel_export_service.dart';
 import '../../core/services/export_service.dart';
+import '../../core/services/pdf_timesheet_service.dart';
 import '../../core/state/app_state.dart';
+import '../../core/utils/formatters.dart';
+import '../../core/utils/pay_period_utils.dart';
 import '../../shared/widgets/section_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -17,10 +23,14 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const ExportService _exportService = ExportService();
+  static const ExcelExportService _excelExportService = ExcelExportService();
+  static const PdfTimesheetService _pdfTimesheetService = PdfTimesheetService();
 
   late final TextEditingController hourlyRateController;
   late final TextEditingController fuelRateController;
   final clientController = TextEditingController();
+
+  PayPeriodRange excelRange = currentFortnight();
 
   @override
   void initState() {
@@ -60,6 +70,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Rates saved')));
+  }
+
+  void showCurrentExcelPeriod() {
+    setState(() => excelRange = currentFortnight());
+  }
+
+  void showPreviousExcelPeriod() {
+    setState(() => excelRange = excelRange.previous);
+  }
+
+  void showNextExcelPeriod() {
+    setState(() => excelRange = excelRange.next);
   }
 
   Future<void> copyFullSummary() async {
@@ -109,6 +131,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       content: csv,
       copyLabel: 'Copy CSV',
       copiedMessage: 'CSV copied',
+    );
+  }
+
+  Future<void> exportExcel() async {
+    final appState = context.read<AppState>();
+
+    final workbook = _excelExportService.buildPayPeriodWorkbook(
+      entries: appState.entries,
+      settings: appState.settings,
+      range: excelRange,
+    );
+
+    await FileSaver.instance.saveFile(
+      name: workbook.fileName,
+      bytes: workbook.bytes,
+      fileExtension: 'xlsx',
+      mimeType: MimeType.microsoftExcel,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Excel export saved')));
+  }
+
+  Future<void> printTimesheet() async {
+    final appState = context.read<AppState>();
+
+    await Printing.layoutPdf(
+      name:
+          'support_worker_timesheet_${formatDate(excelRange.start)}_${formatDate(excelRange.end)}.pdf',
+      onLayout: (format) {
+        return _pdfTimesheetService.buildTimesheetPdf(
+          entries: appState.entries,
+          settings: appState.settings,
+          range: excelRange,
+          pageFormat: format,
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Timesheet sent to print/export')),
     );
   }
 
@@ -396,6 +464,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text(
                 'Exports include ${appState.entries.length} entries.',
                 textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Excel Pay Period Export',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${formatDate(excelRange.start)} - ${formatDate(excelRange.end)}',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: showPreviousExcelPeriod,
+                    icon: const Icon(Icons.chevron_left),
+                    label: const Text('Previous'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: showCurrentExcelPeriod,
+                    icon: const Icon(Icons.today_outlined),
+                    label: const Text('Current'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: showNextExcelPeriod,
+                    icon: const Icon(Icons.chevron_right),
+                    label: const Text('Next'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: exportExcel,
+                icon: const Icon(Icons.file_download_outlined),
+                label: const Text('Export Excel Summary'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: printTimesheet,
+                icon: const Icon(Icons.print_outlined),
+                label: const Text('Print Timesheet'),
               ),
             ],
           ),
