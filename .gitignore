@@ -49,3 +49,43 @@ logs/
 
 # Android build output
 android/build/
+*.bak*
+invoice_import_data*.csv
+.~lock.invoice_import_data*.csv#
+# Local script backup files
+*.bak_*
+*.bak.*
+support_worker_log_backups/
+.local_backups/
+# Local PowerShell backup files
+*.dart.bak*
+
+# Firebase / secrets - never commit
+.env
+.env.*
+*.env
+lib/firebase_options.dart
+firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+firebase-service-account.json
+serviceAccountKey.json
+*.service-account.json
+*.pem
+*.key
+*.p8
+
+# Netlify local/secrets
+.netlify/
+netlify/.env
+
+# Local backup clutter
+*.bak
+*.bak_*
+*.bak.*
+*.dart.bak*
+
+# Local invoice/import data
+invoice_import_data*.csv
+.~lock.*

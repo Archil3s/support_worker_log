@@ -31,14 +31,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     final data = await _storageService.load();
-
     _replaceInMemory(data);
-
-    final seeded = _seedInvoiceDatasetIfMissing();
-    if (seeded) {
-      await _save();
-    }
-
     notifyListeners();
   }
 
@@ -206,39 +199,29 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  bool _seedInvoiceDatasetIfMissing() {
+  int replaceEntriesWithInvoiceDataset() {
     final invoiceEntries = sampleInvoiceEntries();
-    final existingIds = _entries.map((entry) => entry.id).toSet();
 
-    final missingEntries = invoiceEntries
-        .where((entry) => !existingIds.contains(entry.id))
-        .toList();
+    _entries
+      ..clear()
+      ..addAll(invoiceEntries);
 
-    for (final entry in invoiceEntries) {
-      if (!_clients.contains(entry.client)) {
-        _clients.add(entry.client);
-      }
+    _activeVisit = null;
+
+    _clients
+      ..clear()
+      ..addAll(invoiceEntries.map((entry) => entry.client).toSet())
+      ..sort();
+
+    if (_clients.isEmpty) {
+      _clients.add('Client A');
     }
 
-    _clients.sort();
+    _settings = _settings.copyWith(payPeriodAnchorDate: DateTime(2025, 12, 14));
 
-    if (missingEntries.isNotEmpty) {
-      _entries.insertAll(0, missingEntries);
-    }
+    _persistAndNotify();
 
-    final anchor = DateTime(2025, 12, 14);
-    final currentAnchor = _settings.payPeriodAnchorDate;
-    final anchorNeedsUpdate =
-        currentAnchor == null ||
-        currentAnchor.year != anchor.year ||
-        currentAnchor.month != anchor.month ||
-        currentAnchor.day != anchor.day;
-
-    if (anchorNeedsUpdate) {
-      _settings = _settings.copyWith(payPeriodAnchorDate: anchor);
-    }
-
-    return missingEntries.isNotEmpty || anchorNeedsUpdate;
+    return invoiceEntries.length;
   }
 
   void _replaceInMemory(StoredAppData data) {
@@ -252,9 +235,48 @@ class AppState extends ChangeNotifier {
       ..addAll(data.clients.isEmpty ? ['Client A'] : data.clients)
       ..sort();
 
+    final cleanedEntries = _dedupeEntries(data.entries);
     _entries
       ..clear()
-      ..addAll(data.entries);
+      ..addAll(cleanedEntries);
+  }
+
+  List<WorkEntry> _dedupeEntries(List<WorkEntry> entries) {
+    final seenIds = <String>{};
+    final seenContent = <String>{};
+    final result = <WorkEntry>[];
+
+    for (final entry in entries) {
+      final id = entry.id.trim();
+
+      final contentKey = [
+        entry.client,
+        entry.type.name,
+        entry.date.toIso8601String(),
+        entry.startTime.hour,
+        entry.startTime.minute,
+        entry.minutes,
+        entry.kilometres.toStringAsFixed(3),
+        entry.notes.join('|'),
+      ].join('::');
+
+      if (id.isNotEmpty && seenIds.contains(id)) {
+        continue;
+      }
+
+      if (seenContent.contains(contentKey)) {
+        continue;
+      }
+
+      if (id.isNotEmpty) {
+        seenIds.add(id);
+      }
+
+      seenContent.add(contentKey);
+      result.add(entry);
+    }
+
+    return result;
   }
 
   int _boundedIndex(int index) {

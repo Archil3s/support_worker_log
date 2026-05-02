@@ -59,7 +59,9 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
           colorScheme: scheme,
           scaffoldBackgroundColor: bg,
           canvasColor: bg,
-          splashFactory: InkRipple.splashFactory,
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           appBarTheme: const AppBarTheme(
             backgroundColor: bg,
             foregroundColor: Colors.white,

@@ -27,7 +27,10 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
   @override
   void initState() {
     super.initState();
-    selectedRange = currentFortnight();
+    selectedRange = PayPeriodRange(
+      start: DateTime(2025, 12, 14),
+      end: DateTime(2025, 12, 27),
+    );
   }
 
   @override
@@ -36,17 +39,41 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
 
     if (selectedRangeReady) return;
 
-    final settings = context.read<AppState>().settings;
-    selectedRange = currentFortnight(anchorDate: settings.payPeriodAnchorDate);
+    final appState = context.read<AppState>();
+    selectedRange =
+        _latestInvoiceRange(
+          appState.entries,
+          appState.settings.payPeriodAnchorDate,
+        ) ??
+        currentFortnight(anchorDate: appState.settings.payPeriodAnchorDate);
+
     selectedRangeReady = true;
   }
 
-  void showCurrentPeriod() {
-    final settings = context.read<AppState>().settings;
+  PayPeriodRange? _latestInvoiceRange(
+    List<WorkEntry> entries,
+    DateTime? anchorDate,
+  ) {
+    final rows = _invoicePeriodRows(entries, anchorDate);
+    if (rows.isEmpty) return null;
+    return rows.last.range;
+  }
+
+  void selectInvoicePeriod(PayPeriodRange range) {
+    setState(() => selectedRange = range);
+  }
+
+  void showLatestInvoicePeriod() {
+    final appState = context.read<AppState>();
+    final latestRange = _latestInvoiceRange(
+      appState.entries,
+      appState.settings.payPeriodAnchorDate,
+    );
+
     setState(
-      () => selectedRange = currentFortnight(
-        anchorDate: settings.payPeriodAnchorDate,
-      ),
+      () => selectedRange =
+          latestRange ??
+          currentFortnight(anchorDate: appState.settings.payPeriodAnchorDate),
     );
   }
 
@@ -62,6 +89,10 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final settings = appState.settings;
+    final invoiceRows = _invoicePeriodRows(
+      appState.entries,
+      settings.payPeriodAnchorDate,
+    );
 
     final periodEntries = entriesInRange(appState.entries, selectedRange);
     final weekOneEntries = entriesBetween(
@@ -74,7 +105,6 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
       selectedRange.weekTwoStart,
       selectedRange.weekTwoEnd,
     );
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -100,9 +130,9 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
                     label: const Text('Previous'),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed: showCurrentPeriod,
+                    onPressed: showLatestInvoicePeriod,
                     icon: const Icon(Icons.today_outlined),
-                    label: const Text('Current'),
+                    label: const Text('Latest Invoice'),
                   ),
                   OutlinedButton.icon(
                     onPressed: showNextPeriod,
@@ -112,6 +142,15 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
                 ],
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Invoice Periods',
+          child: _InvoicePeriodsTable(
+            rows: invoiceRows,
+            selectedRange: selectedRange,
+            onSelected: selectInvoicePeriod,
           ),
         ),
         const SizedBox(height: 16),
@@ -158,6 +197,435 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
       ],
     );
   }
+}
+
+class _InvoicePeriodRow {
+  const _InvoicePeriodRow({
+    required this.index,
+    required this.range,
+    required this.entries,
+  });
+
+  final int index;
+  final PayPeriodRange range;
+  final List<WorkEntry> entries;
+}
+
+List<_InvoicePeriodRow> _invoicePeriodRows(
+  List<WorkEntry> entries,
+  DateTime? anchorDate,
+) {
+  if (entries.isEmpty) return const [];
+
+  final grouped = <DateTime, List<WorkEntry>>{};
+
+  for (final entry in entries) {
+    final range = fortnightForDate(entry.date, anchorDate: anchorDate);
+    grouped.putIfAbsent(range.start, () => <WorkEntry>[]).add(entry);
+  }
+
+  final starts = grouped.keys.toList()..sort();
+
+  return [
+    for (var index = 0; index < starts.length; index++)
+      _InvoicePeriodRow(
+        index: index + 1,
+        range: PayPeriodRange(
+          start: starts[index],
+          end: starts[index].add(const Duration(days: 13)),
+        ),
+        entries: grouped[starts[index]]!
+          ..sort((a, b) => a.date.compareTo(b.date)),
+      ),
+  ];
+}
+
+class _InvoicePeriodsTable extends StatelessWidget {
+  const _InvoicePeriodsTable({
+    required this.rows,
+    required this.selectedRange,
+    required this.onSelected,
+  });
+
+  final List<_InvoicePeriodRow> rows;
+  final PayPeriodRange selectedRange;
+  final ValueChanged<PayPeriodRange> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return const EmptyState(message: 'No invoice periods yet.');
+    }
+
+    return Column(
+      children: [
+        for (final row in rows) ...[
+          _InvoicePeriodTile(
+            row: row,
+            selectedRange: selectedRange,
+            onSelected: onSelected,
+          ),
+          if (row != rows.last) const Divider(height: 1),
+        ],
+      ],
+    );
+  }
+}
+
+class _InvoicePeriodTile extends StatelessWidget {
+  const _InvoicePeriodTile({
+    required this.row,
+    required this.selectedRange,
+    required this.onSelected,
+  });
+
+  final _InvoicePeriodRow row;
+  final PayPeriodRange selectedRange;
+  final ValueChanged<PayPeriodRange> onSelected;
+
+  void _openBreakdown(BuildContext context) {
+    onSelected(row.range);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _InvoiceBreakdownSheet(row: row),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = _sameRange(row.range, selectedRange);
+    final settings = context.watch<AppState>().settings;
+    final hours = totalHours(row.entries);
+    final km = totalKilometres(row.entries);
+    final hoursText = hours.toStringAsFixed(2);
+    final kmText = km.toStringAsFixed(1);
+    final hoursMoney = money(totalEarnings(row.entries, settings));
+    final travelMoney = money(km * settings.fuelRate);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _openBreakdown(context),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF20283B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF5B8CFF) : Colors.transparent,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              child: Text(
+                '${row.index}',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_formatReadableDate(row.range.start)} - ${_formatReadableDate(row.range.end)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${row.entries.length} entries | $hoursText hrs = $hoursMoney',
+                    style: const TextStyle(color: Color(0xFF8396C7)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$kmText km travel = $travelMoney',
+                    style: const TextStyle(color: Color(0xFF8396C7)),
+                  ),
+                  if (isSelected) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Selected in Fortnight Selector',
+                      style: TextStyle(
+                        color: Color(0xFF5B8CFF),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InvoiceBreakdownSheet extends StatelessWidget {
+  const _InvoiceBreakdownSheet({required this.row});
+
+  final _InvoicePeriodRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<AppState>().settings;
+
+    final entries = row.entries.toList()
+      ..sort((a, b) {
+        final dateCompare = a.date.compareTo(b.date);
+        if (dateCompare != 0) return dateCompare;
+
+        final aMinutes = a.startTime.hour * 60 + a.startTime.minute;
+        final bMinutes = b.startTime.hour * 60 + b.startTime.minute;
+        return aMinutes.compareTo(bMinutes);
+      });
+
+    final weekOneEntries = entriesBetween(
+      entries,
+      row.range.weekOneStart,
+      row.range.weekOneEnd,
+    );
+
+    final weekTwoEntries = entriesBetween(
+      entries,
+      row.range.weekTwoStart,
+      row.range.weekTwoEnd,
+    );
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.92,
+      minChildSize: 0.55,
+      maxChildSize: 0.96,
+      builder: (context, scrollController) {
+        return ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Invoice ${row.index}',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _formatInvoiceDateRange(row.range),
+              style: const TextStyle(
+                color: Color(0xFF8396C7),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            StatGrid(
+              cards: [
+                StatCard(title: 'Entries', value: '${entries.length}'),
+                StatCard(
+                  title: 'Hours',
+                  value: totalHours(entries).toStringAsFixed(2),
+                ),
+                StatCard(
+                  title: 'Earnings',
+                  value: money(totalEarnings(entries, settings)),
+                ),
+                StatCard(
+                  title: 'KM',
+                  value: totalKilometres(entries).toStringAsFixed(1),
+                ),
+                StatCard(
+                  title: 'Travel \$',
+                  value: money(totalKilometres(entries) * settings.fuelRate),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              title: 'Week 1',
+              child: _WeekBreakdown(
+                start: row.range.weekOneStart,
+                end: row.range.weekOneEnd,
+                entries: weekOneEntries,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(
+              title: 'Week 2',
+              child: _WeekBreakdown(
+                start: row.range.weekTwoStart,
+                end: row.range.weekTwoEnd,
+                entries: weekTwoEntries,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(
+              title: 'Client Breakdown',
+              child: _InvoiceClientBreakdown(entries: entries),
+            ),
+            const SizedBox(height: 12),
+            SectionCard(
+              title: 'Daily Breakdown',
+              child: _DailyBreakdown(entries: entries),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InvoiceClientBreakdown extends StatelessWidget {
+  const _InvoiceClientBreakdown({required this.entries});
+
+  final List<WorkEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<AppState>().settings;
+    final totals = _clientTotals(entries, settings);
+
+    if (totals.isEmpty) {
+      return const EmptyState(message: 'No client entries in this invoice.');
+    }
+
+    return Column(
+      children: [
+        for (final total in totals) ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              total.client,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: Text(
+              '${total.entries} entries | ${total.hours.toStringAsFixed(2)} hrs | ${total.kilometres.toStringAsFixed(1)} km',
+            ),
+            trailing: Text(
+              money(total.earnings),
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          if (total != totals.last) const Divider(height: 1),
+        ],
+      ],
+    );
+  }
+
+  List<_InvoiceClientTotal> _clientTotals(
+    List<WorkEntry> entries,
+    dynamic settings,
+  ) {
+    final map = <String, _InvoiceClientTotal>{};
+
+    for (final entry in entries) {
+      final existing =
+          map[entry.client] ??
+          _InvoiceClientTotal(
+            client: entry.client,
+            entries: 0,
+            hours: 0,
+            kilometres: 0,
+            earnings: 0,
+          );
+
+      map[entry.client] = existing.copyWith(
+        entries: existing.entries + 1,
+        hours: existing.hours + entry.hours,
+        kilometres: existing.kilometres + entry.kilometres,
+        earnings: existing.earnings + entry.earnings(settings),
+      );
+    }
+
+    final totals = map.values.toList()
+      ..sort((a, b) => b.earnings.compareTo(a.earnings));
+
+    return totals;
+  }
+}
+
+class _InvoiceClientTotal {
+  const _InvoiceClientTotal({
+    required this.client,
+    required this.entries,
+    required this.hours,
+    required this.kilometres,
+    required this.earnings,
+  });
+
+  final String client;
+  final int entries;
+  final double hours;
+  final double kilometres;
+  final double earnings;
+
+  _InvoiceClientTotal copyWith({
+    int? entries,
+    double? hours,
+    double? kilometres,
+    double? earnings,
+  }) {
+    return _InvoiceClientTotal(
+      client: client,
+      entries: entries ?? this.entries,
+      hours: hours ?? this.hours,
+      kilometres: kilometres ?? this.kilometres,
+      earnings: earnings ?? this.earnings,
+    );
+  }
+}
+
+bool _sameRange(PayPeriodRange a, PayPeriodRange b) {
+  return _sameDate(a.start, b.start) && _sameDate(a.end, b.end);
+}
+
+bool _sameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+String _formatInvoiceDateRange(PayPeriodRange range) {
+  return '${_formatNumericDate(range.start)} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ ${_formatNumericDate(range.end)}';
+}
+
+String _formatNumericDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day/$month/${date.year}';
+}
+
+String _formatReadableDate(DateTime date) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  return '${date.day} ${months[date.month - 1]} ${date.year}';
 }
 
 class _WeekBreakdown extends StatelessWidget {
@@ -223,7 +691,7 @@ class _DailyBreakdown extends StatelessWidget {
               leading: Icon(entry.type.icon),
               title: Text('${entry.client} - ${entry.type.label}'),
               subtitle: Text(
-                '${formatTime(entry.startTime)} - ${entry.minutes} min',
+                '${formatTime(entry.startTime)} - ${entry.baseMinutes} min | time ${entry.hours.toStringAsFixed(2)}h',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),

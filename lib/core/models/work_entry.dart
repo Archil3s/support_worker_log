@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/billing_rules.dart';
 import '../utils/formatters.dart';
 import 'app_settings.dart';
 import 'entry_type.dart';
@@ -27,7 +28,27 @@ class WorkEntry {
   final double? odometerStart;
   final double? odometerEnd;
 
-  double get hours => minutes / 60;
+  int get baseMinutes => minutes.clamp(0, 1440).toInt();
+
+  double get baseHours => baseMinutes / 60;
+
+  BillingTimeBreakdown get billingTime {
+    return calculateBillableTime(
+      type: type,
+      baseMinutes: baseMinutes,
+      notes: notes,
+    );
+  }
+
+  int get noteSeconds => 0;
+
+  double get noteHours => 0;
+
+  double get hours => baseHours;
+
+  String get noteAllowanceText => 'Manual notes only';
+
+  String get billableTimeText => billingTime.totalTimeText;
 
   double get kilometres {
     if (type != EntryType.homeVisit) return 0;
@@ -141,7 +162,7 @@ class WorkEntry {
       ..writeln('$client - ${type.label}')
       ..writeln('Date: ${formatDate(date)}')
       ..writeln('Start: ${formatTime(startTime)}')
-      ..writeln('Time: $minutes min (${hours.toStringAsFixed(2)} hrs)')
+      ..writeln('Time: $baseMinutes min (${hours.toStringAsFixed(2)} hrs)')
       ..writeln('Earnings: ${money(earnings(settings))}');
 
     if (type == EntryType.homeVisit) {

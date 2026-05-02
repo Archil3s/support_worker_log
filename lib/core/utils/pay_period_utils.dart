@@ -1,5 +1,7 @@
 import '../models/work_entry.dart';
 
+final defaultPayPeriodAnchorDate = DateTime(2025, 12, 14);
+
 class PayPeriodRange {
   const PayPeriodRange({required this.start, required this.end});
 
@@ -27,17 +29,25 @@ class PayPeriodRange {
 }
 
 PayPeriodRange currentFortnight({DateTime? anchorDate}) {
-  final today = DateTime.now();
-  final normalizedToday = DateTime(today.year, today.month, today.day);
+  return fortnightForDate(DateTime.now(), anchorDate: anchorDate);
+}
 
-  final rawAnchor = anchorDate ?? DateTime(2024, 1, 1);
+PayPeriodRange fortnightForDate(DateTime date, {DateTime? anchorDate}) {
+  final normalizedDate = DateTime(date.year, date.month, date.day);
+
+  final rawAnchor = anchorDate ?? defaultPayPeriodAnchorDate;
   final anchor = DateTime(rawAnchor.year, rawAnchor.month, rawAnchor.day);
 
-  final daysSinceAnchor = normalizedToday.difference(anchor).inDays;
-  final periodOffset = daysSinceAnchor ~/ 14;
+  final daysSinceAnchor = normalizedDate.difference(anchor).inDays;
+  final periodOffset = _floorDivide(daysSinceAnchor, 14);
   final start = anchor.add(Duration(days: periodOffset * 14));
 
   return PayPeriodRange(start: start, end: start.add(const Duration(days: 13)));
+}
+
+int _floorDivide(int value, int divisor) {
+  if (value >= 0) return value ~/ divisor;
+  return -(((-value) + divisor - 1) ~/ divisor);
 }
 
 List<WorkEntry> entriesInRange(

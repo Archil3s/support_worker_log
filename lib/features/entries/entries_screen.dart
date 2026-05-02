@@ -185,92 +185,110 @@ class _EntriesScreenState extends State<EntriesScreen> {
     );
     final currentPeriodEntries = entriesInRange(entries, currentRange);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        SectionCard(
-          title: 'Import Entries',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FilledButton.icon(
-                onPressed: _showImportSheet,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Import ChatGPT / CSV Rows'),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _ClientAnalyticsSection(entries: currentPeriodEntries),
-        const SizedBox(height: 12),
-        _FilterSection(
-          searchController: searchController,
-          searchQuery: searchQuery,
-          typeFilter: typeFilter,
-          dateFilter: dateFilter,
-          hasActiveFilters: hasActiveFilters,
-          onSearchChanged: (value) => setState(() => searchQuery = value),
-          onClearSearch: () {
-            setState(() {
-              searchController.clear();
-              searchQuery = '';
-            });
-          },
-          onTypeFilterChanged: (value) {
-            setState(() => typeFilter = value ?? _EntryTypeFilter.all);
-          },
-          onDateFilterChanged: (value) {
-            setState(() => dateFilter = value ?? _EntryDateFilter.all);
-          },
-          onClearFilters: _clearFilters,
-        ),
-        const SizedBox(height: 12),
-        StatGrid(
-          cards: [
-            StatCard(
-              title: 'Showing',
-              value: '${filteredEntries.length}/${entries.length}',
+    final headerWidgets = <Widget>[
+      SectionCard(
+        title: 'Import Entries',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: _showImportSheet,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text('Import ChatGPT / CSV Rows'),
             ),
-            StatCard(
-              title: 'Hours',
-              value: totalHours(filteredEntries).toStringAsFixed(2),
-            ),
-            StatCard(
-              title: 'Earnings',
-              value: money(totalEarnings(filteredEntries, settings)),
-            ),
-            StatCard(
-              title: 'KM',
-              value: totalKilometres(filteredEntries).toStringAsFixed(1),
+            const SizedBox(height: 10),
+            const Text(
+              'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (filteredEntries.isEmpty)
-          SectionCard(
+      ),
+      const SizedBox(height: 12),
+      _ClientAnalyticsSection(entries: currentPeriodEntries),
+      const SizedBox(height: 12),
+      _FilterSection(
+        searchController: searchController,
+        searchQuery: searchQuery,
+        typeFilter: typeFilter,
+        dateFilter: dateFilter,
+        hasActiveFilters: hasActiveFilters,
+        onSearchChanged: (value) => setState(() => searchQuery = value),
+        onClearSearch: () {
+          setState(() {
+            searchController.clear();
+            searchQuery = '';
+          });
+        },
+        onTypeFilterChanged: (value) {
+          setState(() => typeFilter = value ?? _EntryTypeFilter.all);
+        },
+        onDateFilterChanged: (value) {
+          setState(() => dateFilter = value ?? _EntryDateFilter.all);
+        },
+        onClearFilters: _clearFilters,
+      ),
+      const SizedBox(height: 12),
+      StatGrid(
+        cards: [
+          StatCard(
+            title: 'Showing',
+            value: '${filteredEntries.length}/${entries.length}',
+          ),
+          StatCard(
+            title: 'Hours',
+            value: totalHours(filteredEntries).toStringAsFixed(2),
+          ),
+          StatCard(
+            title: 'Earnings',
+            value: money(totalEarnings(filteredEntries, settings)),
+          ),
+          StatCard(
+            title: 'KM',
+            value: totalKilometres(filteredEntries).toStringAsFixed(1),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+    ];
+
+    final resultItemCount = filteredEntries.isEmpty
+        ? 1
+        : (filteredEntries.length * 2) - 1;
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: headerWidgets.length + resultItemCount,
+      itemBuilder: (context, index) {
+        if (index < headerWidgets.length) {
+          return headerWidgets[index];
+        }
+
+        final resultIndex = index - headerWidgets.length;
+
+        if (filteredEntries.isEmpty) {
+          return SectionCard(
             title: 'Results',
             child: EmptyState(
               message: entries.isEmpty
                   ? 'No entries yet. Use Quick Entry or Paste Invoice Rows.'
                   : 'No entries match these filters.',
             ),
-          )
-        else
-          for (final entry in filteredEntries) ...[
-            _EntryCard(
-              entry: entry,
-              onEdit: () => _openEditSheet(context: context, entry: entry),
-            ),
-            if (entry != filteredEntries.last) const SizedBox(height: 12),
-          ],
-      ],
+          );
+        }
+
+        if (resultIndex.isOdd) {
+          return const SizedBox(height: 12);
+        }
+
+        final entry = filteredEntries[resultIndex ~/ 2];
+
+        return _EntryCard(
+          entry: entry,
+          onEdit: () => _openEditSheet(context: context, entry: entry),
+        );
+      },
     );
   }
 }
@@ -710,7 +728,7 @@ class _EntryCard extends StatelessWidget {
               leading: CircleAvatar(child: Icon(entry.type.icon)),
               title: Text(entry.client),
               subtitle: Text(
-                '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
+                '${entry.type.label} | ${formatDate(entry.date)} | ${entry.baseMinutes} min | time ${entry.hours.toStringAsFixed(2)}h',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),

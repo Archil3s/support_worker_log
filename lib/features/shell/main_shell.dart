@@ -115,8 +115,6 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final child = KeyedSubtree(key: ValueKey(section), child: _screen());
-
     return Scaffold(
       appBar: AppBar(title: Text(title), centerTitle: false, toolbarHeight: 56),
       body: SafeArea(
@@ -124,15 +122,7 @@ class _MainShellState extends State<MainShell> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 120),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              child: child,
-            ),
+            child: RepaintBoundary(child: _screen()),
           ),
         ),
       ),
@@ -140,41 +130,130 @@ class _MainShellState extends State<MainShell> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: NavigationBar(
-              height: 66,
-              selectedIndex: navIndex,
-              onDestinationSelected: _onNavTap,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.bolt_outlined),
-                  selectedIcon: Icon(Icons.bolt_rounded),
-                  label: 'Quick',
+          child: _FastBottomNav(selectedIndex: navIndex, onTap: _onNavTap),
+        ),
+      ),
+    );
+  }
+}
+
+class _FastBottomNav extends StatelessWidget {
+  const _FastBottomNav({required this.selectedIndex, required this.onTap});
+
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 62,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Row(
+        children: [
+          _FastNavItem(
+            index: 0,
+            selectedIndex: selectedIndex,
+            icon: Icons.bolt_outlined,
+            selectedIcon: Icons.bolt_rounded,
+            label: 'Quick',
+            onTap: onTap,
+          ),
+          _FastNavItem(
+            index: 1,
+            selectedIndex: selectedIndex,
+            icon: Icons.list_alt_outlined,
+            selectedIcon: Icons.list_alt_rounded,
+            label: 'Entries',
+            onTap: onTap,
+          ),
+          _FastNavItem(
+            index: 2,
+            selectedIndex: selectedIndex,
+            icon: Icons.calendar_month_outlined,
+            selectedIcon: Icons.calendar_month_rounded,
+            label: 'Pay',
+            onTap: onTap,
+          ),
+          _FastNavItem(
+            index: 3,
+            selectedIndex: selectedIndex,
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard_rounded,
+            label: 'Home',
+            onTap: onTap,
+          ),
+          _FastNavItem(
+            index: 4,
+            selectedIndex: selectedIndex,
+            icon: Icons.more_horiz_outlined,
+            selectedIcon: Icons.more_horiz_rounded,
+            label: 'More',
+            onTap: onTap,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FastNavItem extends StatelessWidget {
+  const _FastNavItem({
+    required this.index,
+    required this.selectedIndex,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final int index;
+  final int selectedIndex;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = index == selectedIndex;
+
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onTap(index),
+        child: Container(
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF13294D) : Colors.transparent,
+            borderRadius: BorderRadius.circular(17),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? selectedIcon : icon,
+                color: selected
+                    ? const Color(0xFF4F8DF7)
+                    : const Color(0xFF8396C7),
+                size: 22,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xFF8396C7),
+                  fontSize: 10,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.list_alt_outlined),
-                  selectedIcon: Icon(Icons.list_alt_rounded),
-                  label: 'Entries',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  selectedIcon: Icon(Icons.calendar_month_rounded),
-                  label: 'Pay',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard_rounded),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.more_horiz_outlined),
-                  selectedIcon: Icon(Icons.more_horiz_rounded),
-                  label: 'More',
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -238,57 +317,54 @@ class _MoreTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF151B29),
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFF34405F)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF13294D),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF34405F)),
-                ),
-                child: Icon(icon, color: const Color(0xFF4F8DF7)),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF151B29),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFF34405F)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF13294D),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF34405F)),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
+              child: Icon(icon, color: const Color(0xFF4F8DF7)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF8396C7),
-                        height: 1.3,
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      height: 1.3,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF8396C7)),
-            ],
-          ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8396C7)),
+          ],
         ),
       ),
     );

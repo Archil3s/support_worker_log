@@ -1,9 +1,11 @@
+// ignore_for_file: prefer_collection_literals
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/billing_rules.dart';
 import '../../shared/widgets/review_row.dart';
 import '../../shared/widgets/section_card.dart';
 
@@ -117,7 +119,15 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
 
   int get savedMinutes => minutes.clamp(1, 1440);
 
-  double get previewHours => savedMinutes / 60;
+  BillingTimeBreakdown get previewBreakdown {
+    return calculateBillableTime(
+      type: selectedType,
+      baseMinutes: savedMinutes,
+      notes: buildNotes(),
+    );
+  }
+
+  double get previewHours => previewBreakdown.billableHours;
 
   Future<void> pickDate() async {
     final picked = await showDatePicker(
