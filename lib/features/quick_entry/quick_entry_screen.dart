@@ -389,18 +389,18 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             },
             itemBuilder: (context, index) {
               return _StepScaffold(
-                child: _buildStep(
-                  index: index,
-                  clients: clients,
-                  activeClient: activeClient,
-                  previewEarnings: previewEarnings,
-                ),
                 nav: WizardNavButtons(
                   canGoBack: currentStepIndex > 0,
                   isLastStep: currentStepIndex == steps.length - 1,
                   onBack: goBack,
                   onNext: goNext,
                   onSave: saveEntry,
+                ),
+                child: _buildStep(
+                  index: index,
+                  clients: clients,
+                  activeClient: activeClient,
+                  previewEarnings: previewEarnings,
                 ),
               );
             },
@@ -640,7 +640,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             ReviewRow(
               label: 'Odometer',
               value:
-                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} → ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
+                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} â†’ ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
             ),
           if (selectedNotes.isNotEmpty)
             Padding(
