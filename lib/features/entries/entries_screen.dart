@@ -3,12 +3,39 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
+import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
+import 'edit_entry_sheet.dart';
 
 class EntriesScreen extends StatelessWidget {
   const EntriesScreen({super.key});
+
+  Future<void> _openEditSheet({
+    required BuildContext context,
+    required WorkEntry entry,
+  }) async {
+    final appState = context.read<AppState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return EditEntrySheet(
+          entry: entry,
+          clients: appState.clients,
+          onSave: (updatedEntry) {
+            appState.updateEntry(updatedEntry);
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Entry updated')));
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +88,12 @@ class EntriesScreen extends StatelessWidget {
                   ),
                 Row(
                   children: [
+                    TextButton.icon(
+                      onPressed: () =>
+                          _openEditSheet(context: context, entry: entry),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit'),
+                    ),
                     TextButton.icon(
                       onPressed: () {
                         Clipboard.setData(

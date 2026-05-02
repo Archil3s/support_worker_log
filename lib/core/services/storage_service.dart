@@ -55,7 +55,7 @@ class StoredAppData {
           try {
             entries.add(WorkEntry.fromJson(rawEntry));
           } catch (_) {
-            // Strip malformed records during load.
+            // Strip malformed records during load/import.
           }
         }
       }
@@ -79,7 +79,7 @@ class StorageService {
     final primary = prefs.getString(_dataKey);
     if (primary != null && primary.trim().isNotEmpty) {
       try {
-        return _decode(primary);
+        return decode(primary);
       } catch (_) {
         // Try backup below.
       }
@@ -88,7 +88,7 @@ class StorageService {
     final backup = prefs.getString(_backupKey);
     if (backup != null && backup.trim().isNotEmpty) {
       try {
-        return _decode(backup);
+        return decode(backup);
       } catch (_) {
         // Fall through to defaults.
       }
@@ -114,7 +114,7 @@ class StorageService {
     await prefs.remove(_backupKey);
   }
 
-  StoredAppData _decode(String source) {
+  StoredAppData decode(String source) {
     final decoded = jsonDecode(source);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Stored data root is not an object.');

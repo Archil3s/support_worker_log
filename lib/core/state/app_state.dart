@@ -27,17 +27,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     final data = await _storageService.load();
+    _replaceInMemory(data);
+    notifyListeners();
+  }
 
-    _settings = data.settings;
-
-    _clients
-      ..clear()
-      ..addAll(data.clients);
-
-    _entries
-      ..clear()
-      ..addAll(data.entries);
-
+  Future<void> restoreFromBackup(StoredAppData data) async {
+    _replaceInMemory(data);
+    await _save();
     notifyListeners();
   }
 
@@ -63,6 +59,14 @@ class AppState extends ChangeNotifier {
 
   void addEntry(WorkEntry entry) {
     _entries.insert(0, entry);
+    _persistAndNotify();
+  }
+
+  void updateEntry(WorkEntry updatedEntry) {
+    final index = _entries.indexWhere((entry) => entry.id == updatedEntry.id);
+    if (index == -1) return;
+
+    _entries[index] = updatedEntry;
     _persistAndNotify();
   }
 
@@ -109,6 +113,18 @@ class AppState extends ChangeNotifier {
 
     _clients.remove(client);
     _persistAndNotify();
+  }
+
+  void _replaceInMemory(StoredAppData data) {
+    _settings = data.settings;
+
+    _clients
+      ..clear()
+      ..addAll(data.clients.isEmpty ? ['Client A'] : data.clients);
+
+    _entries
+      ..clear()
+      ..addAll(data.entries);
   }
 
   int _boundedIndex(int index) {
