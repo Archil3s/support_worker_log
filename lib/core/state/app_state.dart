@@ -98,21 +98,64 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
-  void addClient(String client) {
+  bool addClient(String client) {
     final trimmed = client.trim();
-    if (trimmed.isEmpty) return;
-    if (_clients.contains(trimmed)) return;
+    if (trimmed.isEmpty) return false;
+    if (_clients.contains(trimmed)) return false;
 
     _clients.add(trimmed);
     _clients.sort();
     _persistAndNotify();
+
+    return true;
   }
 
-  void removeClient(String client) {
-    if (_clients.length <= 1) return;
+  int clientUsageCount(String client) {
+    return _entries.where((entry) => entry.client == client).length;
+  }
+
+  bool isClientUsed(String client) {
+    return clientUsageCount(client) > 0;
+  }
+
+  bool canRemoveClient(String client) {
+    if (_clients.length <= 1) return false;
+    return !isClientUsed(client);
+  }
+
+  bool removeClient(String client) {
+    if (!canRemoveClient(client)) return false;
 
     _clients.remove(client);
     _persistAndNotify();
+
+    return true;
+  }
+
+  bool renameClient({required String oldName, required String newName}) {
+    final trimmed = newName.trim();
+
+    if (trimmed.isEmpty) return false;
+    if (oldName == trimmed) return true;
+    if (_clients.contains(trimmed)) return false;
+
+    final clientIndex = _clients.indexOf(oldName);
+    if (clientIndex == -1) return false;
+
+    _clients[clientIndex] = trimmed;
+    _clients.sort();
+
+    for (var index = 0; index < _entries.length; index++) {
+      final entry = _entries[index];
+
+      if (entry.client == oldName) {
+        _entries[index] = entry.copyWith(client: trimmed);
+      }
+    }
+
+    _persistAndNotify();
+
+    return true;
   }
 
   void _replaceInMemory(StoredAppData data) {
@@ -120,7 +163,8 @@ class AppState extends ChangeNotifier {
 
     _clients
       ..clear()
-      ..addAll(data.clients.isEmpty ? ['Client A'] : data.clients);
+      ..addAll(data.clients.isEmpty ? ['Client A'] : data.clients)
+      ..sort();
 
     _entries
       ..clear()

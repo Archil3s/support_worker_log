@@ -72,6 +72,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).showSnackBar(const SnackBar(content: Text('Rates saved')));
   }
 
+  void addClient() {
+    final added = context.read<AppState>().addClient(clientController.text);
+
+    if (added) {
+      clientController.clear();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Client added')));
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Client name is empty or already exists')),
+    );
+  }
+
+  Future<void> renameClient(String client) async {
+    final controller = TextEditingController(text: client);
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rename Client'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: 'Client name',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(controller.text);
+              },
+              child: const Text('Rename'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (newName == null) return;
+
+    final renamed = context.read<AppState>().renameClient(
+      oldName: client,
+      newName: newName,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          renamed
+              ? 'Client renamed'
+              : 'Could not rename client. The name may already exist.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> confirmRemoveClient(String client) async {
+    final appState = context.read<AppState>();
+    final usageCount = appState.clientUsageCount(client);
+
+    if (usageCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Cannot delete "$client" because it is used by $usageCount entr${usageCount == 1 ? 'y' : 'ies'}. Rename it instead.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (appState.clients.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one client is required')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Client?'),
+          content: Text(
+            'Delete "$client"? This client is not used by any entries.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final removed = context.read<AppState>().removeClient(client);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          removed ? 'Client deleted' : 'Client could not be deleted',
+        ),
+      ),
+    );
+  }
+
   void showCurrentExcelPeriod() {
     setState(() => excelRange = currentFortnight());
   }
@@ -398,7 +523,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 12),
         SectionCard(
-          title: 'Clients',
+          title: 'Client Manager',
           child: Column(
             children: [
               Row(
@@ -413,26 +538,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      context.read<AppState>().addClient(clientController.text);
-                      clientController.clear();
-                    },
-                    child: const Text('Add'),
-                  ),
+                  FilledButton(onPressed: addClient, child: const Text('Add')),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               for (final client in appState.clients)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(client),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () {
-                      context.read<AppState>().removeClient(client);
-                    },
-                  ),
+                _ClientManagerTile(
+                  client: client,
+                  usageCount: appState.clientUsageCount(client),
+                  canDelete: appState.canRemoveClient(client),
+                  onRename: () => renameClient(client),
+                  onDelete: () => confirmRemoveClient(client),
                 ),
             ],
           ),
@@ -550,6 +666,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ClientManagerTile extends StatelessWidget {
+  const _ClientManagerTile({
+    required this.client,
+    required this.usageCount,
+    required this.canDelete,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final String client;
+  final int usageCount;
+  final bool canDelete;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final usageText = usageCount == 0
+        ? 'Unused'
+        : 'Used in $usageCount entr${usageCount == 1 ? 'y' : 'ies'}';
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(client),
+      subtitle: Text(usageText),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Rename client',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: onRename,
+          ),
+          IconButton(
+            tooltip: canDelete
+                ? 'Delete unused client'
+                : 'Cannot delete a client used by entries',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: canDelete ? onDelete : null,
+          ),
+        ],
+      ),
     );
   }
 }
