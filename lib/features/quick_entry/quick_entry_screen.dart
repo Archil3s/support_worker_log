@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/active_visit.dart';
@@ -9,6 +10,14 @@ import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
+
+String _cleanHeaderText(String value) {
+  return value
+      .replaceAll(RegExp(r'[^\x09\x0A\x0D\x20-\x7E]'), '')
+      .replaceAll(RegExp(r'\s+\n'), '\n')
+      .replaceAll(RegExp(r'\n\s+'), '\n')
+      .trim();
+}
 
 class QuickEntryScreen extends StatefulWidget {
   const QuickEntryScreen({super.key});
@@ -25,6 +34,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   String? selectedClient;
   EntryType selectedType = EntryType.homeVisit;
   String? loadedActiveVisitId;
+  WorkEntry? recentlySavedEntry;
 
   final selectedNotes = <String>{};
 
@@ -100,8 +110,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       startOdometerController.clear();
       noteController.clear();
     });
-
-    _snack('Visit started and saved as active.');
+    ScaffoldMessenger.of(context).clearSnackBars();
   }
 
   void _syncActiveVisit(ActiveVisit activeVisit) {
@@ -132,8 +141,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       noteController.clear();
       loadedActiveVisitId = null;
     });
-
-    _snack('Active visit notes saved.');
+    ScaffoldMessenger.of(context).clearSnackBars();
   }
 
   void _finishVisit(AppState appState, ActiveVisit activeVisit) {
@@ -178,16 +186,16 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
           : null,
     );
 
-    appState.completeActiveVisit(entry);
-
     setState(() {
+      recentlySavedEntry = entry;
       loadedActiveVisitId = null;
       selectedNotes.clear();
       finishOdometerController.clear();
       noteController.clear();
     });
 
-    _snack('Visit finished and saved to entries.');
+    appState.completeActiveVisit(entry);
+    ScaffoldMessenger.of(context).clearSnackBars();
   }
 
   Future<void> _confirmCancelVisit(
@@ -216,7 +224,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       },
     );
 
-    if (shouldCancel != true) return;
+    if (!mounted || shouldCancel != true) return;
 
     appState.cancelActiveVisit();
 
@@ -226,14 +234,21 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       finishOdometerController.clear();
       noteController.clear();
     });
-
-    _snack('Active visit cancelled.');
+    ScaffoldMessenger.of(context).clearSnackBars();
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
   }
 
   @override
@@ -246,6 +261,16 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       selectedClient = clients.first;
     }
 
+    if (recentlySavedEntry != null && activeVisit == null) {
+      return _SavedVisitView(
+        entry: recentlySavedEntry!,
+        onNewVisit: () {
+          setState(() {
+            recentlySavedEntry = null;
+          });
+        },
+      );
+    }
     if (activeVisit != null) {
       _syncActiveVisit(activeVisit);
       return _ActiveVisitView(
@@ -297,6 +322,69 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         });
       },
       onStart: () => _startVisit(appState),
+    );
+  }
+}
+
+class _SavedVisitView extends StatelessWidget {
+  const _SavedVisitView({required this.entry, required this.onNewVisit});
+
+  final WorkEntry entry;
+  final VoidCallback onNewVisit;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<AppState>().settings;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        _HeroPanel(
+          title: 'Visit saved',
+          subtitle:
+              '${entry.client} - ${entry.type.label} - ${entry.minutes} min',
+          icon: Icons.check_circle_outline,
+          green: true,
+        ),
+        const SizedBox(height: 12),
+        _Panel(
+          title: 'Saved summary',
+          child: Column(
+            children: [
+              _InfoRow(label: 'Client', value: entry.client),
+              _InfoRow(label: 'Type', value: entry.type.label),
+              _InfoRow(label: 'Date', value: formatDate(entry.date)),
+              _InfoRow(label: 'Minutes', value: '${entry.minutes} min'),
+              _InfoRow(label: 'Hours', value: entry.hours.toStringAsFixed(2)),
+              if (entry.type == EntryType.homeVisit)
+                _InfoRow(
+                  label: 'KM',
+                  value: entry.kilometres.toStringAsFixed(1),
+                ),
+              _InfoRow(label: 'Earned', value: money(entry.earnings(settings))),
+            ],
+          ),
+        ),
+        if (entry.notes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _Panel(
+            title: 'Notes saved',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final note in entry.notes) Chip(label: Text(note)),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: onNewVisit,
+          icon: const Icon(Icons.add_circle_outline),
+          label: const Text('Start New Visit'),
+        ),
+      ],
     );
   }
 }
@@ -381,6 +469,7 @@ class _StartVisitView extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              inputFormatters: const [_OdometerInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Starting odometer',
                 helperText: 'Optional, but recommended for KM tracking',
@@ -445,8 +534,9 @@ class _ActiveVisitView extends StatelessWidget {
       children: [
         _HeroPanel(
           title: 'Active visit running',
-          subtitle:
-              '${activeVisit.client} â€¢ ${activeVisit.type.label} â€¢ Started $startedAtText',
+          subtitle: _cleanHeaderText(
+            '${activeVisit.client}\n${activeVisit.type.label}\nStarted $startedAtText',
+          ),
           icon: Icons.timer_outlined,
           green: true,
         ),
@@ -477,6 +567,7 @@ class _ActiveVisitView extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              inputFormatters: const [_OdometerInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Finishing odometer',
                 helperText: 'Fill this in when the client visit is done',
@@ -831,5 +922,27 @@ class _InfoRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OdometerInputFormatter extends TextInputFormatter {
+  const _OdometerInputFormatter();
+
+  static final RegExp _validPattern = RegExp(r'^\d*\.?\d*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+
+    if (text.isEmpty) return newValue;
+    if (!_validPattern.hasMatch(text)) return oldValue;
+
+    final dotCount = '.'.allMatches(text).length;
+    if (dotCount > 1) return oldValue;
+
+    return newValue;
   }
 }

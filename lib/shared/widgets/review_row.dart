@@ -9,11 +9,11 @@ class ReviewRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       decoration: BoxDecoration(
         color: const Color(0xFF20283B),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF27324B)),
       ),
       child: Row(
@@ -25,12 +25,12 @@ class ReviewRow extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF8396C7),
-                fontWeight: FontWeight.w700,
+                color: Color(0xFF9BADDE),
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Flexible(
             flex: 6,
             child: Text(
@@ -38,10 +38,10 @@ class ReviewRow extends StatelessWidget {
               textAlign: TextAlign.right,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              softWrap: false,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
+                height: 1.25,
               ),
             ),
           ),

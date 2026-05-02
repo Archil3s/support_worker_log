@@ -11,7 +11,6 @@ import '../../core/utils/invoice_import_parser.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../core/utils/totals.dart';
 import '../../shared/widgets/empty_state.dart';
-import '../../shared/widgets/review_row.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
@@ -295,11 +294,7 @@ class _ClientAnalyticsSection extends StatelessWidget {
           : Column(
               children: [
                 for (final summary in summaries)
-                  ReviewRow(
-                    label: summary.client,
-                    value:
-                        '${summary.hours.toStringAsFixed(2)}h Ã¢â‚¬Â¢ ${summary.kilometres.toStringAsFixed(1)}km Ã¢â‚¬Â¢ ${money(summary.earnings)}',
-                  ),
+                  _ClientSummaryTile(summary: summary),
               ],
             ),
     );
@@ -332,6 +327,110 @@ class _ClientAnalyticsSection extends StatelessWidget {
       ..sort((a, b) => b.earnings.compareTo(a.earnings));
 
     return summaries;
+  }
+}
+
+class _ClientSummaryTile extends StatelessWidget {
+  const _ClientSummaryTile({required this.summary});
+
+  final _ClientSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            summary.client,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniMetric(
+                  label: 'Hours',
+                  value: summary.hours.toStringAsFixed(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniMetric(
+                  label: 'KM',
+                  value: summary.kilometres.toStringAsFixed(1),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniMetric(
+                  label: 'Earned',
+                  value: money(summary.earnings),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniMetric extends StatelessWidget {
+  const _MiniMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF8396C7),
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -470,7 +569,7 @@ class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
                       row.client.isEmpty ? 'Unknown client' : row.client,
                     ),
                     subtitle: Text(
-                      '${row.date == null ? 'No date' : formatDate(row.date!)} Ã¢â‚¬Â¢ ${row.minutes} min Ã¢â‚¬Â¢ ${row.kilometres.toStringAsFixed(1)} km',
+                      '${row.date == null ? 'No date' : formatDate(row.date!)} | ${row.minutes} min | ${row.kilometres.toStringAsFixed(1)} km',
                     ),
                     trailing: Icon(
                       row.isValid
@@ -610,7 +709,7 @@ class _EntryCard extends StatelessWidget {
               leading: CircleAvatar(child: Icon(entry.type.icon)),
               title: Text(entry.client),
               subtitle: Text(
-                '${entry.type.label} Ã¢â‚¬Â¢ ${formatDate(entry.date)} Ã¢â‚¬Â¢ ${entry.minutes} min',
+                '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),
