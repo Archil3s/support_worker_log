@@ -7,9 +7,6 @@ class AppSettings {
     this.kiwiSaverEnabled = false,
     this.kiwiSaverRate = 0.03,
     this.noteOptions = defaultNoteOptions,
-    this.payPeriodAnchorDate,
-    this.weeklyHoursGoal = 20,
-    this.weeklyEarningsGoal = 1000,
   });
 
   static const defaultNoteOptions = [
@@ -43,9 +40,6 @@ class AppSettings {
   final bool kiwiSaverEnabled;
   final double kiwiSaverRate;
   final List<String> noteOptions;
-  final DateTime? payPeriodAnchorDate;
-  final double weeklyHoursGoal;
-  final double weeklyEarningsGoal;
 
   AppSettings copyWith({
     double? hourlyRate,
@@ -55,10 +49,6 @@ class AppSettings {
     bool? kiwiSaverEnabled,
     double? kiwiSaverRate,
     List<String>? noteOptions,
-    DateTime? payPeriodAnchorDate,
-    bool clearPayPeriodAnchorDate = false,
-    double? weeklyHoursGoal,
-    double? weeklyEarningsGoal,
   }) {
     return AppSettings(
       hourlyRate: hourlyRate ?? this.hourlyRate,
@@ -68,11 +58,6 @@ class AppSettings {
       kiwiSaverEnabled: kiwiSaverEnabled ?? this.kiwiSaverEnabled,
       kiwiSaverRate: kiwiSaverRate ?? this.kiwiSaverRate,
       noteOptions: noteOptions ?? this.noteOptions,
-      payPeriodAnchorDate: clearPayPeriodAnchorDate
-          ? null
-          : payPeriodAnchorDate ?? this.payPeriodAnchorDate,
-      weeklyHoursGoal: weeklyHoursGoal ?? this.weeklyHoursGoal,
-      weeklyEarningsGoal: weeklyEarningsGoal ?? this.weeklyEarningsGoal,
     );
   }
 
@@ -85,9 +70,6 @@ class AppSettings {
       'kiwiSaverEnabled': kiwiSaverEnabled,
       'kiwiSaverRate': kiwiSaverRate,
       'noteOptions': noteOptions,
-      'payPeriodAnchorDate': payPeriodAnchorDate?.toIso8601String(),
-      'weeklyHoursGoal': weeklyHoursGoal,
-      'weeklyEarningsGoal': weeklyEarningsGoal,
     };
   }
 
@@ -118,12 +100,6 @@ class AppSettings {
       return notes.isEmpty ? defaultNoteOptions : notes;
     }
 
-    DateTime? readDate(String key) {
-      final value = json[key];
-      if (value is! String || value.trim().isEmpty) return null;
-      return DateTime.tryParse(value);
-    }
-
     return AppSettings(
       hourlyRate: readDouble('hourlyRate', 43),
       fuelRate: readDouble('fuelRate', 1.17),
@@ -132,9 +108,6 @@ class AppSettings {
       kiwiSaverEnabled: readBool('kiwiSaverEnabled', false),
       kiwiSaverRate: readDouble('kiwiSaverRate', 0.03),
       noteOptions: readNotes(),
-      payPeriodAnchorDate: readDate('payPeriodAnchorDate'),
-      weeklyHoursGoal: readDouble('weeklyHoursGoal', 20),
-      weeklyEarningsGoal: readDouble('weeklyEarningsGoal', 1000),
     );
   }
 }

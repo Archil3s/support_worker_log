@@ -26,13 +26,12 @@ class PayPeriodRange {
   DateTime get weekTwoEnd => end;
 }
 
-PayPeriodRange currentFortnight({DateTime? anchorDate}) {
+PayPeriodRange currentFortnight() {
   final today = DateTime.now();
   final normalizedToday = DateTime(today.year, today.month, today.day);
 
-  final rawAnchor = anchorDate ?? DateTime(2024, 1, 1);
-  final anchor = DateTime(rawAnchor.year, rawAnchor.month, rawAnchor.day);
-
+  // Fixed anchor Monday. Fortnights repeat every 14 days from here.
+  final anchor = DateTime(2024, 1, 1);
   final daysSinceAnchor = normalizedToday.difference(anchor).inDays;
   final periodOffset = daysSinceAnchor ~/ 14;
   final start = anchor.add(Duration(days: periodOffset * 14));
