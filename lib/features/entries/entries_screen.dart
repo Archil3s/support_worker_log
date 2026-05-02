@@ -317,7 +317,7 @@ class _EntryCard extends StatelessWidget {
               leading: CircleAvatar(child: Icon(entry.type.icon)),
               title: Text(entry.client),
               subtitle: Text(
-                '${entry.type.label} Ã¢â‚¬Â¢ ${formatDate(entry.date)} Ã¢â‚¬Â¢ ${entry.minutes} min',
+                '${entry.type.label} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${formatDate(entry.date)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${entry.minutes} min',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),

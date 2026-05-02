@@ -6,32 +6,7 @@ class AppSettings {
     this.gstRate = 0.15,
     this.kiwiSaverEnabled = false,
     this.kiwiSaverRate = 0.03,
-    this.noteOptions = defaultNoteOptions,
   });
-
-  static const defaultNoteOptions = [
-    'Wellbeing',
-    'Safety Plan',
-    'Distress Support',
-    'Daily Living',
-    'Appointment',
-    'Transport',
-    'Advocacy',
-    'Crisis',
-    'Trauma Support',
-    'Boundaries',
-    'Family/Tamariki',
-    'Community',
-    'Prof. Contact',
-    'No Contact',
-    'Cancelled',
-    'No Show',
-    'Rescheduled',
-    'Client Rescheduled',
-    'Late Cancel',
-    'Cut Short',
-    'Follow-up Needed',
-  ];
 
   final double hourlyRate;
   final double fuelRate;
@@ -39,7 +14,6 @@ class AppSettings {
   final double gstRate;
   final bool kiwiSaverEnabled;
   final double kiwiSaverRate;
-  final List<String> noteOptions;
 
   AppSettings copyWith({
     double? hourlyRate,
@@ -48,7 +22,6 @@ class AppSettings {
     double? gstRate,
     bool? kiwiSaverEnabled,
     double? kiwiSaverRate,
-    List<String>? noteOptions,
   }) {
     return AppSettings(
       hourlyRate: hourlyRate ?? this.hourlyRate,
@@ -57,7 +30,6 @@ class AppSettings {
       gstRate: gstRate ?? this.gstRate,
       kiwiSaverEnabled: kiwiSaverEnabled ?? this.kiwiSaverEnabled,
       kiwiSaverRate: kiwiSaverRate ?? this.kiwiSaverRate,
-      noteOptions: noteOptions ?? this.noteOptions,
     );
   }
 
@@ -69,7 +41,6 @@ class AppSettings {
       'gstRate': gstRate,
       'kiwiSaverEnabled': kiwiSaverEnabled,
       'kiwiSaverRate': kiwiSaverRate,
-      'noteOptions': noteOptions,
     };
   }
 
@@ -86,20 +57,6 @@ class AppSettings {
       return fallback;
     }
 
-    List<String> readNotes() {
-      final value = json['noteOptions'];
-      if (value is! List) return defaultNoteOptions;
-
-      final notes = value
-          .whereType<String>()
-          .map((note) => note.trim())
-          .where((note) => note.isNotEmpty)
-          .toSet()
-          .toList();
-
-      return notes.isEmpty ? defaultNoteOptions : notes;
-    }
-
     return AppSettings(
       hourlyRate: readDouble('hourlyRate', 43),
       fuelRate: readDouble('fuelRate', 1.17),
@@ -107,7 +64,6 @@ class AppSettings {
       gstRate: readDouble('gstRate', 0.15),
       kiwiSaverEnabled: readBool('kiwiSaverEnabled', false),
       kiwiSaverRate: readDouble('kiwiSaverRate', 0.03),
-      noteOptions: readNotes(),
     );
   }
 }

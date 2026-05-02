@@ -22,6 +22,30 @@ class QuickEntryScreen extends StatefulWidget {
 }
 
 class _QuickEntryScreenState extends State<QuickEntryScreen> {
+  static const noteOptions = [
+    'Wellbeing',
+    'Safety Plan',
+    'Distress Support',
+    'Daily Living',
+    'Appointment',
+    'Transport',
+    'Advocacy',
+    'Crisis',
+    'Trauma Support',
+    'Boundaries',
+    'Family/Tamariki',
+    'Community',
+    'Prof. Contact',
+    'No Contact',
+    'Cancelled',
+    'No Show',
+    'Rescheduled',
+    'Client Rescheduled',
+    'Late Cancel',
+    'Cut Short',
+    'Follow-up Needed',
+  ];
+
   static const extraMinutesByChip = {
     'Cancelled': 5,
     'No Show': 5,
@@ -113,31 +137,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   int get totalMinutes {
     final base = selectedType == EntryType.textNote ? textCount : baseMinutes;
     return base + extraMinutes;
-  }
-
-  void applyTemplate(_EntryTemplate template) {
-    _updateDraftState(() {
-      selectedType = template.type;
-      selectedDate = DateTime.now();
-      startTime = TimeOfDay.now();
-      baseMinutes = template.baseMinutes;
-      textCount = template.textCount;
-      selectedNotes
-        ..clear()
-        ..addAll(template.notes);
-      odometerStartController.clear();
-      odometerEndController.clear();
-      currentStepIndex = 0;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_pageController.hasClients) return;
-      _pageController.jumpToPage(0);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${template.label} template applied')),
-    );
   }
 
   Future<void> _loadDraft() async {
@@ -377,19 +376,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final template in _EntryTemplate.defaults)
-                      ActionChip(
-                        avatar: Icon(template.type.icon, size: 18),
-                        label: Text(template.label),
-                        onPressed: () => applyTemplate(template),
-                      ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -619,7 +605,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final note in context.watch<AppState>().settings.noteOptions)
+          for (final note in noteOptions)
             FilterChip(
               label: Text(note),
               selected: selectedNotes.contains(note),
@@ -654,7 +640,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             ReviewRow(
               label: 'Odometer',
               value:
-                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
+                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} Ã¢â€ â€™ ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
             ),
           if (selectedNotes.isNotEmpty)
             Padding(
@@ -672,53 +658,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       ),
     );
   }
-}
-
-class _EntryTemplate {
-  const _EntryTemplate({
-    required this.label,
-    required this.type,
-    required this.baseMinutes,
-    required this.textCount,
-    required this.notes,
-  });
-
-  final String label;
-  final EntryType type;
-  final int baseMinutes;
-  final int textCount;
-  final List<String> notes;
-
-  static const defaults = [
-    _EntryTemplate(
-      label: 'Home Visit 60m',
-      type: EntryType.homeVisit,
-      baseMinutes: 60,
-      textCount: 1,
-      notes: ['Wellbeing'],
-    ),
-    _EntryTemplate(
-      label: 'Phone 15m',
-      type: EntryType.phoneCall,
-      baseMinutes: 15,
-      textCount: 1,
-      notes: ['Follow-up Needed'],
-    ),
-    _EntryTemplate(
-      label: 'Text Note',
-      type: EntryType.textNote,
-      baseMinutes: 5,
-      textCount: 1,
-      notes: ['Text Note'],
-    ),
-    _EntryTemplate(
-      label: 'Prof. Contact 30m',
-      type: EntryType.professionalContact,
-      baseMinutes: 30,
-      textCount: 1,
-      notes: ['Prof. Contact'],
-    ),
-  ];
 }
 
 class _WizardStep {
