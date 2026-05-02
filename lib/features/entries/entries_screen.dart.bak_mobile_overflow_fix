@@ -1,4 +1,3 @@
-// ignore_for_file: prefer_collection_literals
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -298,7 +297,7 @@ class _ClientAnalyticsSection extends StatelessWidget {
                   ReviewRow(
                     label: summary.client,
                     value:
-                        '${summary.hours.toStringAsFixed(2)}h Ã¢â‚¬Â¢ ${summary.kilometres.toStringAsFixed(1)}km Ã¢â‚¬Â¢ ${money(summary.earnings)}',
+                        '${summary.hours.toStringAsFixed(2)}h • ${summary.kilometres.toStringAsFixed(1)}km • ${money(summary.earnings)}',
                   ),
               ],
             ),
@@ -470,7 +469,7 @@ class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
                       row.client.isEmpty ? 'Unknown client' : row.client,
                     ),
                     subtitle: Text(
-                      '${row.date == null ? 'No date' : formatDate(row.date!)} Ã¢â‚¬Â¢ ${row.minutes} min Ã¢â‚¬Â¢ ${row.kilometres.toStringAsFixed(1)} km',
+                      '${row.date == null ? 'No date' : formatDate(row.date!)} • ${row.minutes} min • ${row.kilometres.toStringAsFixed(1)} km',
                     ),
                     trailing: Icon(
                       row.isValid
@@ -546,28 +545,26 @@ class _FilterSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<_EntryTypeFilter>(
-            isExpanded: true,
             initialValue: typeFilter,
             decoration: const InputDecoration(labelText: 'Entry type'),
             items: [
               for (final filter in _EntryTypeFilter.values)
                 DropdownMenuItem<_EntryTypeFilter>(
                   value: filter,
-                  child: Text(filter.label, overflow: TextOverflow.ellipsis),
+                  child: Text(filter.label),
                 ),
             ],
             onChanged: onTypeFilterChanged,
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<_EntryDateFilter>(
-            isExpanded: true,
             initialValue: dateFilter,
             decoration: const InputDecoration(labelText: 'Date range'),
             items: [
               for (final filter in _EntryDateFilter.values)
                 DropdownMenuItem<_EntryDateFilter>(
                   value: filter,
-                  child: Text(filter.label, overflow: TextOverflow.ellipsis),
+                  child: Text(filter.label),
                 ),
             ],
             onChanged: onDateFilterChanged,
@@ -610,7 +607,7 @@ class _EntryCard extends StatelessWidget {
               leading: CircleAvatar(child: Icon(entry.type.icon)),
               title: Text(entry.client),
               subtitle: Text(
-                '${entry.type.label} Ã¢â‚¬Â¢ ${formatDate(entry.date)} Ã¢â‚¬Â¢ ${entry.minutes} min',
+                '${entry.type.label} • ${formatDate(entry.date)} • ${entry.minutes} min',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),

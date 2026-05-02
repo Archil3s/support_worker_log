@@ -53,7 +53,7 @@ class StatCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const Spacer(),
               Text(
                 value,
                 maxLines: 2,

@@ -326,7 +326,7 @@ class _TaxStat extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const Spacer(),
             Text(
               value,
               style: TextStyle(

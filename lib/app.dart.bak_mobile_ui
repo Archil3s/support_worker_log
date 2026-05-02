@@ -1,0 +1,204 @@
+﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'core/state/app_state.dart';
+import 'features/shell/main_shell.dart';
+
+class SupportWorkerLogApp extends StatefulWidget {
+  const SupportWorkerLogApp({super.key});
+
+  @override
+  State<SupportWorkerLogApp> createState() => _SupportWorkerLogAppState();
+}
+
+class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
+  late final AppState _appState;
+  late Future<void> _loadFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _appState = AppState();
+    _loadFuture = _appState.load();
+  }
+
+  @override
+  void dispose() {
+    _appState.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const seed = Color(0xFF0F766E);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: Brightness.light,
+    );
+
+    return ChangeNotifierProvider.value(
+      value: _appState,
+      child: MaterialApp(
+        title: 'Support Worker Log',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: scheme,
+          scaffoldBackgroundColor: const Color(0xFFF3F7F6),
+          visualDensity: VisualDensity.standard,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFFF3F7F6),
+            foregroundColor: Color(0xFF0F172A),
+            elevation: 0,
+            centerTitle: false,
+            titleTextStyle: TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+            ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: seed, width: 1.6),
+            ),
+          ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
+            ),
+          ),
+          chipTheme: ChipThemeData(
+            backgroundColor: Colors.white,
+            selectedColor: const Color(0xFFD9F5EF),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          navigationBarTheme: NavigationBarThemeData(
+            backgroundColor: Colors.white,
+            indicatorColor: const Color(0xFFD9F5EF),
+            surfaceTintColor: Colors.transparent,
+            height: 72,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            iconTheme: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const IconThemeData(color: seed);
+              }
+              return const IconThemeData(color: Color(0xFF64748B));
+            }),
+          ),
+          textTheme: ThemeData().textTheme.apply(
+            bodyColor: const Color(0xFF0F172A),
+            displayColor: const Color(0xFF0F172A),
+          ),
+        ),
+        home: FutureBuilder<void>(
+          future: _loadFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _LoadingScreen();
+            }
+
+            if (snapshot.hasError) {
+              return _LoadErrorScreen(
+                onRetry: () {
+                  setState(() {
+                    _loadFuture = _appState.load();
+                  });
+                },
+              );
+            }
+
+            return const MainShell();
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: CircularProgressIndicator(strokeWidth: 3),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadErrorScreen extends StatelessWidget {
+  const _LoadErrorScreen({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Support Worker Log')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'The app could not load saved data.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,4 +1,3 @@
-// ignore_for_file: prefer_collection_literals
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -446,7 +445,7 @@ class _ActiveVisitView extends StatelessWidget {
         _HeroPanel(
           title: 'Active visit running',
           subtitle:
-              '${activeVisit.client} â€¢ ${activeVisit.type.label} â€¢ Started $startedAtText',
+              '${activeVisit.client} • ${activeVisit.type.label} • Started $startedAtText',
           icon: Icons.timer_outlined,
           green: true,
         ),

@@ -1,0 +1,1505 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/models/entry_type.dart';
+import '../../core/models/work_entry.dart';
+import '../../core/state/app_state.dart';
+import '../../core/utils/formatters.dart';
+import '../../core/utils/pay_period_utils.dart';
+
+class QuickEntryScreen extends StatefulWidget {
+  const QuickEntryScreen({super.key});
+
+  @override
+  State<QuickEntryScreen> createState() => _QuickEntryScreenState();
+}
+
+class _QuickEntryScreenState extends State<QuickEntryScreen> {
+  static const int stepCount = 9;
+
+  final pageController = PageController();
+  final startOdometerController = TextEditingController();
+  final finishOdometerController = TextEditingController();
+  final noteController = TextEditingController();
+
+  int stepIndex = 0;
+  String? selectedClient;
+  EntryType selectedType = EntryType.homeVisit;
+  DateTime selectedDate = DateTime.now();
+
+  DateTime? startedAt;
+  DateTime? finishedAt;
+
+  bool saved = false;
+  final selectedNotes = <String>{};
+
+  @override
+  void dispose() {
+    pageController.dispose();
+    startOdometerController.dispose();
+    finishOdometerController.dispose();
+    noteController.dispose();
+    super.dispose();
+  }
+
+  Duration get elapsed {
+    if (startedAt == null || finishedAt == null) return Duration.zero;
+
+    var end = finishedAt!;
+    if (!end.isAfter(startedAt!)) {
+      end = end.add(const Duration(days: 1));
+    }
+
+    return end.difference(startedAt!);
+  }
+
+  int get billableMinutes {
+    if (elapsed.inSeconds <= 0) return 0;
+    return (elapsed.inSeconds / 60).ceil().clamp(1, 1440).toInt();
+  }
+
+  String get elapsedText {
+    if (elapsed == Duration.zero) return '-';
+
+    final hours = elapsed.inHours;
+    final minutes = elapsed.inMinutes.remainder(60);
+    final seconds = elapsed.inSeconds.remainder(60);
+
+    if (hours > 0) return '${hours}h ${minutes}m ${seconds}s';
+    if (minutes > 0) return '${minutes}m ${seconds}s';
+    return '${seconds}s';
+  }
+
+  double? get startOdometer => _parseOdometer(startOdometerController);
+  double? get finishOdometer => _parseOdometer(finishOdometerController);
+
+  double get kilometres {
+    if (selectedType != EntryType.homeVisit) return 0;
+    if (startOdometer == null || finishOdometer == null) return 0;
+
+    final value = finishOdometer! - startOdometer!;
+    return value < 0 ? 0 : value;
+  }
+
+  double? _parseOdometer(TextEditingController controller) {
+    final text = controller.text.trim();
+    if (text.isEmpty) return null;
+    return double.tryParse(text);
+  }
+
+  void _goTo(int index) {
+    final next = index.clamp(0, stepCount - 1).toInt();
+
+    setState(() => stepIndex = next);
+
+    pageController.animateToPage(
+      next,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _next() {
+    if (stepIndex == 3 && startedAt == null) {
+      _toast('Press Start Right Now first.');
+      return;
+    }
+
+    if (stepIndex == 4 && selectedType != EntryType.homeVisit) {
+      _goTo(5);
+      return;
+    }
+
+    if (stepIndex == 5 && finishedAt == null) {
+      _toast('Press Set Finish Now first.');
+      return;
+    }
+
+    if (stepIndex == 6 && selectedType != EntryType.homeVisit) {
+      _goTo(7);
+      return;
+    }
+
+    _goTo(stepIndex + 1);
+  }
+
+  void _back() {
+    if (stepIndex == 7 && selectedType != EntryType.homeVisit) {
+      _goTo(5);
+      return;
+    }
+
+    if (stepIndex == 5 && selectedType != EntryType.homeVisit) {
+      _goTo(3);
+      return;
+    }
+
+    _goTo(stepIndex - 1);
+  }
+
+  void _setStartNow() {
+    final now = DateTime.now();
+
+    setState(() {
+      selectedDate = DateTime(now.year, now.month, now.day);
+      startedAt = now;
+      finishedAt = null;
+    });
+
+    _toast('Started at ${_formatDateTime(startedAt!)}');
+
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _goTo(selectedType == EntryType.homeVisit ? 4 : 5);
+    });
+  }
+
+  void _setFinishNow() {
+    if (startedAt == null) {
+      _toast('Press Start Right Now first.');
+      _goTo(3);
+      return;
+    }
+
+    final now = DateTime.now();
+
+    setState(() {
+      finishedAt = now;
+    });
+
+    _toast('Finished at ${_formatDateTime(finishedAt!)}');
+
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _goTo(selectedType == EntryType.homeVisit ? 6 : 7);
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      selectedDate = picked;
+
+      if (startedAt != null) {
+        startedAt = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          startedAt!.hour,
+          startedAt!.minute,
+          startedAt!.second,
+        );
+      }
+
+      if (finishedAt != null) {
+        finishedAt = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          finishedAt!.hour,
+          finishedAt!.minute,
+          finishedAt!.second,
+        );
+      }
+    });
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${formatDate(dateTime)} ${TimeOfDay.fromDateTime(dateTime).format(context)}';
+  }
+
+  Future<void> _save() async {
+    final client = selectedClient;
+
+    if (client == null) {
+      _toast('Tap a client first.');
+      _goTo(0);
+      return;
+    }
+
+    if (startedAt == null) {
+      _toast('Press Start Right Now first.');
+      _goTo(3);
+      return;
+    }
+
+    if (finishedAt == null) {
+      _toast('Press Set Finish Now first.');
+      _goTo(5);
+      return;
+    }
+
+    if (billableMinutes <= 0) {
+      _toast('Finish time must be after start time.');
+      _goTo(5);
+      return;
+    }
+
+    if (selectedType == EntryType.homeVisit &&
+        startOdometer != null &&
+        finishOdometer != null &&
+        finishOdometer! < startOdometer!) {
+      _toast('Finish odometer must be higher than start odometer.');
+      _goTo(6);
+      return;
+    }
+
+    final customNote = noteController.text.trim();
+    final notes = {
+      ...selectedNotes,
+      if (customNote.isNotEmpty) customNote,
+    }.toList()..sort();
+
+    final entry = WorkEntry(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      client: client,
+      type: selectedType,
+      date: DateTime(startedAt!.year, startedAt!.month, startedAt!.day),
+      startTime: TimeOfDay.fromDateTime(startedAt!),
+      minutes: billableMinutes,
+      notes: notes,
+      odometerStart: selectedType == EntryType.homeVisit ? startOdometer : null,
+      odometerEnd: selectedType == EntryType.homeVisit ? finishOdometer : null,
+    );
+
+    context.read<AppState>().addEntry(entry);
+
+    setState(() {
+      saved = true;
+      stepIndex = 0;
+      startedAt = null;
+      finishedAt = null;
+      selectedNotes.clear();
+      startOdometerController.clear();
+      finishOdometerController.clear();
+      noteController.clear();
+    });
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _startAnother() {
+    setState(() {
+      saved = false;
+      stepIndex = 0;
+      selectedDate = DateTime.now();
+      startedAt = null;
+      finishedAt = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!pageController.hasClients) return;
+      pageController.jumpToPage(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final clients = appState.clients;
+
+    if (selectedClient == null && clients.isNotEmpty) {
+      selectedClient = clients.first;
+    }
+
+    if (saved) {
+      return _DarkShell(child: _SavedStep(onNewEntry: _startAnother));
+    }
+
+    final range = currentFortnight(
+      anchorDate: appState.settings.payPeriodAnchorDate,
+    );
+
+    return _DarkShell(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+            child: _ProgressHeader(
+              stepIndex: stepIndex,
+              stepCount: stepCount,
+              periodText:
+                  '${formatDate(range.start)} - ${formatDate(range.end)}',
+            ),
+          ),
+          Expanded(
+            child: PageView(
+              controller: pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              onPageChanged: (index) => setState(() => stepIndex = index),
+              children: [
+                _StepFrame(
+                  title: 'Who are you visiting?',
+                  subtitle: 'Tap the client for this entry.',
+                  showBack: false,
+                  onBack: _back,
+                  onNext: _next,
+                  child: _clientStep(clients),
+                ),
+                _StepFrame(
+                  title: 'Contact type?',
+                  subtitle: 'Tap the kind of support.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _typeStep(),
+                ),
+                _StepFrame(
+                  title: 'What date?',
+                  subtitle: 'Usually today. Change only for backdated entries.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _dateStep(),
+                ),
+                _StepFrame(
+                  title: 'Start support',
+                  subtitle: 'Press the button when support starts.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _startTimeStep(),
+                ),
+                _StepFrame(
+                  title: 'Odometer - start',
+                  subtitle: selectedType == EntryType.homeVisit
+                      ? 'Enter the starting odometer.'
+                      : 'Skipped for this contact type.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _startOdometerStep(),
+                ),
+                _StepFrame(
+                  title: 'Finish support',
+                  subtitle: 'Press the button when support ends.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _finishTimeStep(appState.settings.hourlyRate),
+                ),
+                _StepFrame(
+                  title: 'Odometer - finish',
+                  subtitle: selectedType == EntryType.homeVisit
+                      ? 'Enter the finishing odometer.'
+                      : 'Skipped for this contact type.',
+                  onBack: _back,
+                  onNext: _next,
+                  child: _finishOdometerStep(),
+                ),
+                _StepFrame(
+                  title: 'Any notes?',
+                  subtitle: 'Tap support chips and add optional text.',
+                  onBack: _back,
+                  onNext: _next,
+                  trailingTopAction: TextButton(
+                    onPressed: _next,
+                    child: const Text('Skip ->'),
+                  ),
+                  child: _notesStep(appState.settings.noteOptions),
+                ),
+                _StepFrame(
+                  title: 'Ready to save?',
+                  subtitle: 'Check everything before saving.',
+                  onBack: _back,
+                  onNext: _save,
+                  isLast: true,
+                  child: _reviewStep(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientStep(List<String> clients) {
+    if (clients.isEmpty) {
+      return const _InfoPanel(text: 'Add clients in Settings first.');
+    }
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        for (final client in clients)
+          _ClientButton(
+            label: client,
+            selected: selectedClient == client,
+            onTap: () {
+              setState(() => selectedClient = client);
+              _next();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _typeStep() {
+    return Column(
+      children: [
+        _ContactTypeButton(
+          icon: 'ðŸ ',
+          title: EntryType.homeVisit.label,
+          subtitle: 'Visit with travel / odometer',
+          selected: selectedType == EntryType.homeVisit,
+          onTap: () {
+            setState(() => selectedType = EntryType.homeVisit);
+            _next();
+          },
+        ),
+        _ContactTypeButton(
+          icon: 'ðŸ’¼',
+          title: EntryType.professionalContact.label,
+          subtitle: 'Meeting or coordination',
+          selected: selectedType == EntryType.professionalContact,
+          onTap: () {
+            setState(() => selectedType = EntryType.professionalContact);
+            _next();
+          },
+        ),
+        _ContactTypeButton(
+          icon: 'ðŸ“ž',
+          title: EntryType.phoneCall.label,
+          subtitle: 'Phone support',
+          selected: selectedType == EntryType.phoneCall,
+          onTap: () {
+            setState(() => selectedType = EntryType.phoneCall);
+            _next();
+          },
+        ),
+        _ContactTypeButton(
+          icon: 'ðŸ’¬',
+          title: EntryType.textNote.label,
+          subtitle: 'Written note only',
+          selected: selectedType == EntryType.textNote,
+          onTap: () {
+            setState(() => selectedType = EntryType.textNote);
+            _next();
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _dateStep() {
+    final isToday = DateUtils.isSameDay(selectedDate, DateTime.now());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DarkInputButton(
+          text: formatDate(selectedDate),
+          icon: Icons.calendar_month_outlined,
+          onTap: _pickDate,
+        ),
+        const SizedBox(height: 16),
+        _GreenOutlinePanel(
+          text: isToday ? 'âœ“ Today selected' : 'Selected date saved',
+        ),
+      ],
+    );
+  }
+
+  Widget _startTimeStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TimeDisplayPanel(
+          title: 'Start time',
+          value: startedAt == null ? '--:-- --' : _formatDateTime(startedAt!),
+        ),
+        const SizedBox(height: 16),
+        _PrimaryActionButton(
+          label: startedAt == null
+              ? 'â–¶ Start Right Now'
+              : 'âœ“ Restart at current time',
+          onPressed: _setStartNow,
+        ),
+        const SizedBox(height: 12),
+        const _InfoPanel(
+          text: 'This stores the exact current time, including seconds.',
+        ),
+      ],
+    );
+  }
+
+  Widget _startOdometerStep() {
+    if (selectedType != EntryType.homeVisit) {
+      return const _InfoPanel(text: 'No odometer needed. Tap Next.');
+    }
+
+    return _DarkTextField(
+      controller: startOdometerController,
+      label: 'Starting odometer',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    );
+  }
+
+  Widget _finishTimeStep(double hourlyRate) {
+    final gross = (billableMinutes / 60) * hourlyRate;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TimeDisplayPanel(
+          title: 'Finish time',
+          value: finishedAt == null ? '--:-- --' : _formatDateTime(finishedAt!),
+        ),
+        const SizedBox(height: 16),
+        _GreenOutlinePanel(
+          text: finishedAt == null
+              ? 'Set Finish Now'
+              : 'âœ“ Finished at ${_formatDateTime(finishedAt!)}',
+          onTap: _setFinishNow,
+        ),
+        const SizedBox(height: 16),
+        _EarnedPanel(
+          amount: gross,
+          elapsedText: elapsedText,
+          billableMinutes: billableMinutes,
+        ),
+      ],
+    );
+  }
+
+  Widget _finishOdometerStep() {
+    if (selectedType != EntryType.homeVisit) {
+      return const _InfoPanel(text: 'No odometer needed. Tap Next.');
+    }
+
+    final start = startOdometer;
+    final finish = finishOdometer;
+    final km = start == null || finish == null ? null : finish - start;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DarkTextField(
+          controller: finishOdometerController,
+          label: 'Finishing odometer',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 12),
+        if (km != null)
+          _InfoPanel(
+            text: km < 0
+                ? 'Finish odometer must be higher than start.'
+                : 'KM preview: ${km.toStringAsFixed(1)} km',
+          ),
+      ],
+    );
+  }
+
+  Widget _notesStep(List<String> noteOptions) {
+    final visitNotes = noteOptions
+        .where((note) => !_schedulingNotes.contains(note))
+        .toList();
+    final schedulingNotes = noteOptions
+        .where((note) => _schedulingNotes.contains(note))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DarkTextField(
+          controller: noteController,
+          label: 'Visit notes...',
+          minLines: 4,
+          maxLines: 5,
+        ),
+        const SizedBox(height: 18),
+        _ChipGroup(
+          title: 'VISIT',
+          notes: visitNotes,
+          selectedNotes: selectedNotes,
+          onChanged: () => setState(() {}),
+        ),
+        const SizedBox(height: 18),
+        _ChipGroup(
+          title: 'SCHEDULING',
+          notes: schedulingNotes,
+          selectedNotes: selectedNotes,
+          onChanged: () => setState(() {}),
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewStep() {
+    final settings = context.watch<AppState>().settings;
+    final gross = (billableMinutes / 60) * settings.hourlyRate;
+    final taxSetAside =
+        gross *
+        (settings.gstRate +
+            settings.accRate +
+            (settings.kiwiSaverEnabled ? settings.kiwiSaverRate : 0));
+    final net = gross - taxSetAside;
+    final customNote = noteController.text.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ReviewLine(label: 'Client', value: selectedClient ?? '-'),
+        _ReviewLine(label: 'Type', value: selectedType.label),
+        _ReviewLine(label: 'Date', value: formatDate(selectedDate)),
+        _ReviewLine(
+          label: 'Start',
+          value: startedAt == null ? '-' : _formatDateTime(startedAt!),
+        ),
+        _ReviewLine(
+          label: 'Finish',
+          value: finishedAt == null ? '-' : _formatDateTime(finishedAt!),
+        ),
+        _ReviewLine(label: 'Actual elapsed', value: elapsedText),
+        _ReviewLine(label: 'Billable minutes', value: '$billableMinutes min'),
+        if (selectedType == EntryType.homeVisit)
+          _ReviewLine(
+            label: 'Odometer',
+            value:
+                '${startOdometerController.text.trim().isEmpty ? '-' : startOdometerController.text.trim()} -> ${finishOdometerController.text.trim().isEmpty ? '-' : finishOdometerController.text.trim()}',
+          ),
+        if (selectedType == EntryType.homeVisit)
+          _ReviewLine(label: 'KM', value: kilometres.toStringAsFixed(1)),
+        _ReviewLine(
+          label: 'Gross Earned',
+          value: money(gross),
+          highlight: true,
+        ),
+        _ReviewLine(label: 'Tax Set-Aside', value: money(taxSetAside)),
+        _ReviewLine(label: 'Net Pay', value: money(net), highlight: true),
+        if (selectedNotes.isNotEmpty || customNote.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final note in selectedNotes.toList()..sort())
+                _SelectedPill(note),
+              if (customNote.isNotEmpty) _SelectedPill(customNote),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+const _schedulingNotes = {
+  'Cancelled',
+  'No Show',
+  'Rescheduled',
+  'Client Rescheduled',
+  'Late Cancel',
+  'Cut Short',
+  'Follow-up Needed',
+};
+
+class _Ux {
+  static const bg = Color(0xFF090E17);
+  static const panel = Color(0xFF151B29);
+  static const panelStrong = Color(0xFF20283B);
+  static const border = Color(0xFF34405F);
+  static const borderSoft = Color(0xFF27324B);
+  static const text = Colors.white;
+  static const muted = Color(0xFF8396C7);
+  static const blue = Color(0xFF4F8DF7);
+  static const blueSoft = Color(0xFF13294D);
+  static const green = Color(0xFF31E981);
+  static const greenBg = Color(0xFF0D2A1D);
+  static const greenBorder = Color(0xFF128A45);
+
+  static BorderRadius get radius => BorderRadius.circular(18);
+  static BorderRadius get smallRadius => BorderRadius.circular(12);
+
+  static TextStyle titleStyle() {
+    return const TextStyle(
+      color: text,
+      fontSize: 28,
+      fontWeight: FontWeight.w900,
+      letterSpacing: -0.6,
+    );
+  }
+
+  static TextStyle subtitleStyle() {
+    return const TextStyle(color: muted, fontSize: 15, height: 1.35);
+  }
+
+  static TextStyle labelStyle() {
+    return const TextStyle(
+      color: muted,
+      fontSize: 12,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 1.2,
+    );
+  }
+}
+
+class _DarkShell extends StatelessWidget {
+  const _DarkShell({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        scaffoldBackgroundColor: _Ux.bg,
+        canvasColor: _Ux.panel,
+        textTheme: Theme.of(
+          context,
+        ).textTheme.apply(bodyColor: _Ux.text, displayColor: _Ux.text),
+        chipTheme: ChipThemeData(
+          backgroundColor: _Ux.panelStrong,
+          selectedColor: _Ux.blueSoft,
+          disabledColor: _Ux.panel,
+          labelStyle: const TextStyle(
+            color: Color(0xFFD8E2FF),
+            fontWeight: FontWeight.w700,
+          ),
+          secondaryLabelStyle: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
+          side: const BorderSide(color: _Ux.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+      ),
+      child: ColoredBox(color: _Ux.bg, child: child),
+    );
+  }
+}
+
+class _ProgressHeader extends StatelessWidget {
+  const _ProgressHeader({
+    required this.stepIndex,
+    required this.stepCount,
+    required this.periodText,
+  });
+
+  final int stepIndex;
+  final int stepCount;
+  final String periodText;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (stepIndex + 1) / stepCount;
+
+    return _GlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: _Ux.borderSoft,
+              valueColor: const AlwaysStoppedAnimation(_Ux.blue),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Text(
+                'STEP ${stepIndex + 1} OF $stepCount',
+                style: _Ux.labelStyle(),
+              ),
+              const Spacer(),
+              Flexible(
+                child: Text(
+                  periodText,
+                  textAlign: TextAlign.right,
+                  style: _Ux.labelStyle(),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepFrame extends StatelessWidget {
+  const _StepFrame({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+    required this.onBack,
+    required this.onNext,
+    this.showBack = true,
+    this.isLast = false,
+    this.trailingTopAction,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+  final VoidCallback onBack;
+  final VoidCallback onNext;
+  final bool showBack;
+  final bool isLast;
+  final Widget? trailingTopAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 18, 28, 18),
+      children: [
+        if (trailingTopAction != null)
+          Align(alignment: Alignment.centerRight, child: trailingTopAction),
+        Text(title, style: _Ux.titleStyle()),
+        const SizedBox(height: 8),
+        Text(subtitle, style: _Ux.subtitleStyle()),
+        const SizedBox(height: 24),
+        child,
+        const SizedBox(height: 80),
+        Row(
+          children: [
+            if (showBack)
+              Expanded(
+                child: _NavButton(
+                  label: '<- Back',
+                  onPressed: onBack,
+                  filled: false,
+                ),
+              ),
+            if (showBack) const SizedBox(width: 12),
+            Expanded(
+              flex: showBack ? 2 : 1,
+              child: _NavButton(
+                label: isLast ? 'Save Entry' : 'Next ->',
+                onPressed: onNext,
+                filled: true,
+                green: isLast,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ClientButton extends StatelessWidget {
+  const _ClientButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BigTapBox(
+      selected: selected,
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.person_rounded,
+            color: selected ? _Ux.green : const Color(0xFF8B5CF6),
+            size: 36,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _Ux.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactTypeButton extends StatelessWidget {
+  const _ContactTypeButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _GlassPanel(
+        selected: selected,
+        onTap: onTap,
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            _IconBubble(text: icon, selected: selected),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: _Ux.text,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(color: _Ux.muted)),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle_rounded, color: _Ux.green),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BigTapBox extends StatelessWidget {
+  const _BigTapBox({
+    required this.child,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Widget child;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      width: 184,
+      height: 126,
+      selected: selected,
+      onTap: onTap,
+      padding: EdgeInsets.zero,
+      child: child,
+    );
+  }
+}
+
+class _DarkInputButton extends StatelessWidget {
+  const _DarkInputButton({
+    required this.text,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String text;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: _Ux.text,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Icon(icon, color: _Ux.muted),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimeDisplayPanel extends StatelessWidget {
+  const _TimeDisplayPanel({required this.title, required this.value});
+
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title.toUpperCase(), style: _Ux.labelStyle()),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: _Ux.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrimaryActionButton extends StatelessWidget {
+  const _PrimaryActionButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: _Ux.blue,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        shape: RoundedRectangleBorder(borderRadius: _Ux.smallRadius),
+        elevation: 0,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+      ),
+    );
+  }
+}
+
+class _GreenOutlinePanel extends StatelessWidget {
+  const _GreenOutlinePanel({required this.text, this.onTap});
+
+  final String text;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      onTap: onTap,
+      padding: const EdgeInsets.all(18),
+      borderColor: _Ux.greenBorder,
+      backgroundColor: _Ux.greenBg,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: _Ux.green,
+          fontWeight: FontWeight.w900,
+          fontSize: 15,
+        ),
+      ),
+    );
+  }
+}
+
+class _EarnedPanel extends StatelessWidget {
+  const _EarnedPanel({
+    required this.amount,
+    required this.elapsedText,
+    required this.billableMinutes,
+  });
+
+  final double amount;
+  final String elapsedText;
+  final int billableMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(22),
+      borderColor: _Ux.greenBorder,
+      backgroundColor: const Color(0xFF0B301D),
+      child: Column(
+        children: [
+          Text(
+            'EARNED SO FAR',
+            style: _Ux.labelStyle().copyWith(color: _Ux.green),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            money(amount),
+            style: const TextStyle(
+              color: _Ux.green,
+              fontSize: 40,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Actual: $elapsedText - Billable: $billableMinutes min',
+            style: const TextStyle(color: _Ux.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DarkTextField extends StatelessWidget {
+  const _DarkTextField({
+    required this.controller,
+    required this.label,
+    this.keyboardType,
+    this.minLines = 1,
+    this.maxLines = 1,
+    this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final TextInputType? keyboardType;
+  final int minLines;
+  final int maxLines;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      minLines: minLines,
+      maxLines: maxLines,
+      onChanged: onChanged,
+      style: const TextStyle(
+        color: _Ux.text,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+      ),
+      cursorColor: _Ux.blue,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: _Ux.muted),
+        filled: true,
+        fillColor: _Ux.panelStrong,
+        contentPadding: const EdgeInsets.all(18),
+        border: OutlineInputBorder(borderRadius: _Ux.smallRadius),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: _Ux.smallRadius,
+          borderSide: const BorderSide(color: _Ux.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: _Ux.smallRadius,
+          borderSide: const BorderSide(color: _Ux.blue, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipGroup extends StatelessWidget {
+  const _ChipGroup({
+    required this.title,
+    required this.notes,
+    required this.selectedNotes,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<String> notes;
+  final Set<String> selectedNotes;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (notes.isEmpty) return const SizedBox.shrink();
+
+    return _GlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: _Ux.labelStyle()),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final note in notes)
+                FilterChip(
+                  label: Text(note),
+                  selected: selectedNotes.contains(note),
+                  showCheckmark: false,
+                  onSelected: (selected) {
+                    if (selected) {
+                      selectedNotes.add(note);
+                    } else {
+                      selectedNotes.remove(note);
+                    }
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewLine extends StatelessWidget {
+  const _ReviewLine({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFF0B301D) : _Ux.panelStrong,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: highlight ? _Ux.greenBorder : _Ux.borderSoft),
+      ),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(color: _Ux.muted)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: highlight ? _Ux.green : _Ux.text,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectedPill extends StatelessWidget {
+  const _SelectedPill(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(label: Text(text));
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.label,
+    required this.onPressed,
+    required this.filled,
+    this.green = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool filled;
+  final bool green;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!filled) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFFD8E2FF),
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          side: const BorderSide(color: _Ux.border, width: 2),
+          shape: RoundedRectangleBorder(borderRadius: _Ux.smallRadius),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+      );
+    }
+
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: green ? const Color(0xFF16A34A) : _Ux.blue,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: _Ux.smallRadius),
+        elevation: 0,
+      ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+    );
+  }
+}
+
+class _InfoPanel extends StatelessWidget {
+  const _InfoPanel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(18),
+      child: Text(
+        text,
+        style: const TextStyle(color: Color(0xFFD8E2FF), height: 1.35),
+      ),
+    );
+  }
+}
+
+class _SavedStep extends StatelessWidget {
+  const _SavedStep({required this.onNewEntry});
+
+  final VoidCallback onNewEntry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(28),
+      children: [
+        const SizedBox(height: 60),
+        _GlassPanel(
+          padding: const EdgeInsets.all(28),
+          borderColor: _Ux.greenBorder,
+          backgroundColor: const Color(0xFF0B301D),
+          child: Column(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                color: _Ux.green,
+                size: 90,
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Entry saved',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _Ux.text,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: onNewEntry,
+                icon: const Icon(Icons.add),
+                label: const Text('Log Another Entry'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassPanel extends StatelessWidget {
+  const _GlassPanel({
+    required this.child,
+    this.selected = false,
+    this.onTap,
+    this.padding = const EdgeInsets.all(16),
+    this.width,
+    this.height,
+    this.borderColor,
+    this.backgroundColor,
+  });
+
+  final Widget child;
+  final bool selected;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry padding;
+  final double? width;
+  final double? height;
+  final Color? borderColor;
+  final Color? backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: width,
+      height: height,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? (selected ? _Ux.blueSoft : _Ux.panel),
+        borderRadius: _Ux.radius,
+        border: Border.all(
+          color: borderColor ?? (selected ? _Ux.blue : _Ux.border),
+          width: selected ? 2 : 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: child,
+    );
+
+    if (onTap == null) return content;
+
+    return InkWell(borderRadius: _Ux.radius, onTap: onTap, child: content);
+  }
+}
+
+class _IconBubble extends StatelessWidget {
+  const _IconBubble({required this.text, required this.selected});
+
+  final String text;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF173765) : _Ux.panelStrong,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: selected ? _Ux.blue : _Ux.borderSoft),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 22)),
+    );
+  }
+}

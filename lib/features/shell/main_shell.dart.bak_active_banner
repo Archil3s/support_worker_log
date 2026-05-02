@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -294,3 +294,4 @@ class _MoreTile extends StatelessWidget {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -8,7 +8,16 @@ import '../quick_entry/quick_entry_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tax/tax_screen.dart';
 
-enum _Section { quick, entries, pay, home, more, tax, charts, settings }
+enum _AppSection {
+  quick,
+  entries,
+  pay,
+  dashboard,
+  more,
+  tax,
+  charts,
+  settings,
+}
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -18,122 +27,134 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  _Section section = _Section.quick;
+  _AppSection section = _AppSection.quick;
 
-  int get navIndex {
+  int get bottomIndex {
     switch (section) {
-      case _Section.quick:
+      case _AppSection.quick:
         return 0;
-      case _Section.entries:
+      case _AppSection.entries:
         return 1;
-      case _Section.pay:
+      case _AppSection.pay:
         return 2;
-      case _Section.home:
+      case _AppSection.dashboard:
         return 3;
-      case _Section.more:
-      case _Section.tax:
-      case _Section.charts:
-      case _Section.settings:
+      case _AppSection.more:
+      case _AppSection.tax:
+      case _AppSection.charts:
+      case _AppSection.settings:
         return 4;
     }
   }
 
   String get title {
     switch (section) {
-      case _Section.quick:
+      case _AppSection.quick:
         return 'Quick Entry';
-      case _Section.entries:
+      case _AppSection.entries:
         return 'Entries';
-      case _Section.pay:
+      case _AppSection.pay:
         return 'Pay Period';
-      case _Section.home:
+      case _AppSection.dashboard:
         return 'Dashboard';
-      case _Section.more:
+      case _AppSection.more:
         return 'More';
-      case _Section.tax:
+      case _AppSection.tax:
         return 'Tax';
-      case _Section.charts:
+      case _AppSection.charts:
         return 'Charts';
-      case _Section.settings:
+      case _AppSection.settings:
         return 'Settings';
     }
   }
 
-  void _go(_Section next) {
+  void _setSection(_AppSection next) {
     if (section == next) return;
     setState(() => section = next);
   }
 
-  void _onNavTap(int index) {
+  void _onBottomNav(int index) {
     switch (index) {
       case 0:
-        _go(_Section.quick);
+        _setSection(_AppSection.quick);
         break;
       case 1:
-        _go(_Section.entries);
+        _setSection(_AppSection.entries);
         break;
       case 2:
-        _go(_Section.pay);
+        _setSection(_AppSection.pay);
         break;
       case 3:
-        _go(_Section.home);
+        _setSection(_AppSection.dashboard);
         break;
       case 4:
-        _go(_Section.more);
+        _setSection(_AppSection.more);
         break;
     }
   }
 
-  Widget _screen() {
+  Widget _buildScreen() {
     switch (section) {
-      case _Section.quick:
+      case _AppSection.quick:
         return const QuickEntryScreen();
-      case _Section.entries:
+      case _AppSection.entries:
         return const EntriesScreen();
-      case _Section.pay:
+      case _AppSection.pay:
         return const PayPeriodScreen();
-      case _Section.home:
+      case _AppSection.dashboard:
         return DashboardScreen(
-          onQuickEntry: () => _go(_Section.quick),
-          onPayPeriod: () => _go(_Section.pay),
-          onEntries: () => _go(_Section.entries),
+          onQuickEntry: () => _setSection(_AppSection.quick),
+          onPayPeriod: () => _setSection(_AppSection.pay),
+          onEntries: () => _setSection(_AppSection.entries),
         );
-      case _Section.more:
+      case _AppSection.more:
         return _MoreScreen(
-          onTax: () => _go(_Section.tax),
-          onCharts: () => _go(_Section.charts),
-          onSettings: () => _go(_Section.settings),
+          onTax: () => _setSection(_AppSection.tax),
+          onCharts: () => _setSection(_AppSection.charts),
+          onSettings: () => _setSection(_AppSection.settings),
         );
-      case _Section.tax:
+      case _AppSection.tax:
         return const TaxScreen();
-      case _Section.charts:
+      case _AppSection.charts:
         return const ChartsScreen();
-      case _Section.settings:
+      case _AppSection.settings:
         return const SettingsScreen();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final child = KeyedSubtree(key: ValueKey(section), child: _screen());
+    final screen = KeyedSubtree(
+      key: ValueKey(section),
+      child: _buildScreen(),
+    );
 
     return Scaffold(
-      appBar: AppBar(title: Text(title), centerTitle: false, toolbarHeight: 56),
+      appBar: AppBar(
+        title: Text(title),
+        centerTitle: false,
+      ),
       body: SafeArea(
         bottom: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 120),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              child: child,
-            ),
-          ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 140),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            final offsetAnimation = Tween<Offset>(
+              begin: const Offset(0.02, 0),
+              end: Offset.zero,
+            ).animate(animation);
+
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: offsetAnimation,
+                child: child,
+              ),
+            );
+          },
+          child: screen,
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -143,10 +164,8 @@ class _MainShellState extends State<MainShell> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
             child: NavigationBar(
-              height: 66,
-              selectedIndex: navIndex,
-              onDestinationSelected: _onNavTap,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              selectedIndex: bottomIndex,
+              onDestinationSelected: _onBottomNav,
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.bolt_outlined),
@@ -286,7 +305,10 @@ class _MoreTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF8396C7)),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF8396C7),
+              ),
             ],
           ),
         ),

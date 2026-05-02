@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/active_visit.dart';
 import '../models/app_settings.dart';
 import '../models/work_entry.dart';
 import '../services/storage_service.dart';
@@ -18,13 +17,11 @@ class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
 
   AppSettings _settings = const AppSettings();
-  ActiveVisit? _activeVisit;
 
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
 
   AppSettings get settings => _settings;
-  ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
 
@@ -44,7 +41,6 @@ class AppState extends ChangeNotifier {
     await _storageService.clear();
 
     _settings = const AppSettings();
-    _activeVisit = null;
 
     _clients
       ..clear()
@@ -61,40 +57,8 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
-  void startActiveVisit(ActiveVisit visit) {
-    _activeVisit = visit;
-    _persistAndNotify();
-  }
-
-  void updateActiveVisit(ActiveVisit visit) {
-    if (_activeVisit == null) return;
-
-    _activeVisit = visit;
-    _persistAndNotify();
-  }
-
-  void cancelActiveVisit() {
-    if (_activeVisit == null) return;
-
-    _activeVisit = null;
-    _persistAndNotify();
-  }
-
-  void completeActiveVisit(WorkEntry entry) {
-    _entries.insert(0, entry);
-    _activeVisit = null;
-    _persistAndNotify();
-  }
-
   void addEntry(WorkEntry entry) {
     _entries.insert(0, entry);
-    _persistAndNotify();
-  }
-
-  void addEntries(List<WorkEntry> entries) {
-    if (entries.isEmpty) return;
-
-    _entries.insertAll(0, entries);
     _persistAndNotify();
   }
 
@@ -189,20 +153,13 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    if (_activeVisit?.client == oldName) {
-      _activeVisit = _activeVisit!.copyWith(client: trimmed);
-    }
-
     _persistAndNotify();
 
     return true;
   }
 
   void _replaceInMemory(StoredAppData data) {
-    _settings = data.settings.weeklyHoursGoal == 20
-        ? data.settings.copyWith(weeklyHoursGoal: 10)
-        : data.settings;
-    _activeVisit = data.activeVisit;
+    _settings = data.settings;
 
     _clients
       ..clear()
@@ -227,12 +184,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _save() {
     return _storageService.save(
-      StoredAppData(
-        settings: _settings,
-        clients: _clients,
-        entries: _entries,
-        activeVisit: _activeVisit,
-      ),
+      StoredAppData(settings: _settings, clients: _clients, entries: _entries),
     );
   }
 }

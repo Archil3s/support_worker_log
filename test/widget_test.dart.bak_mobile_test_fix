@@ -7,9 +7,7 @@ import 'package:support_worker_log/app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Mobile app shell renders main tabs without crashing', (
-    tester,
-  ) async {
+  testWidgets('Mobile app shell renders without crashing', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -20,7 +18,13 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    for (final tab in ['Quick', 'Entries', 'Pay', 'Home', 'More']) {
+    if (find.text('Quick').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Quick').last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    for (final tab in ['Entries', 'Pay', 'Home', 'More']) {
       if (find.text(tab).evaluate().isEmpty) continue;
 
       await tester.tap(find.text(tab).last);

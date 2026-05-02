@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,9 +45,9 @@ class StoredAppData {
     final rawClients = json['clients'];
     final clients = rawClients is List
         ? rawClients
-              .whereType<String>()
-              .where((client) => client.trim().isNotEmpty)
-              .toList()
+            .whereType<String>()
+            .where((client) => client.trim().isNotEmpty)
+            .toList()
         : <String>[];
 
     final rawEntries = json['entries'];

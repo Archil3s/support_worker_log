@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,9 +6,7 @@ import 'package:support_worker_log/app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Mobile app shell renders main tabs without crashing', (
-    tester,
-  ) async {
+  testWidgets('All main tabs render on mobile', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -20,14 +17,26 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    for (final tab in ['Quick', 'Entries', 'Pay', 'Home', 'More']) {
-      if (find.text(tab).evaluate().isEmpty) continue;
+    final tabs = [
+      'Home',
+      'Quick',
+      'Pay',
+      'Entries',
+      'Tax',
+      'Charts',
+      'Settings',
+    ];
 
+    for (final tab in tabs) {
       await tester.tap(find.text(tab).last);
       await tester.pumpAndSettle();
 
       final exception = tester.takeException();
-      expect(exception, isNull, reason: '$tab failed: $exception');
+      expect(
+        exception,
+        isNull,
+        reason: 'Tab "$tab" threw an exception: $exception',
+      );
     }
   });
 }

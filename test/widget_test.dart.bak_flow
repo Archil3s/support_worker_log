@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:support_worker_log/app.dart';
@@ -7,9 +6,7 @@ import 'package:support_worker_log/app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Mobile app shell renders main tabs without crashing', (
-    tester,
-  ) async {
+  testWidgets('Quick Entry supports active visit draft flow', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -20,14 +17,12 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    for (final tab in ['Quick', 'Entries', 'Pay', 'Home', 'More']) {
-      if (find.text(tab).evaluate().isEmpty) continue;
-
-      await tester.tap(find.text(tab).last);
+    if (find.text('Quick').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Quick').last);
       await tester.pumpAndSettle();
-
-      final exception = tester.takeException();
-      expect(exception, isNull, reason: '$tab failed: $exception');
     }
+
+    expect(find.text('Quick Entry'), findsOneWidget);
+    expect(find.text('Start visit'), findsOneWidget);
   });
 }

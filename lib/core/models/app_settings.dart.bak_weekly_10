@@ -8,7 +8,7 @@ class AppSettings {
     this.kiwiSaverRate = 0.03,
     this.noteOptions = defaultNoteOptions,
     this.payPeriodAnchorDate,
-    this.weeklyHoursGoal = 10,
+    this.weeklyHoursGoal = 20,
     this.weeklyEarningsGoal = 1000,
   });
 
@@ -133,7 +133,7 @@ class AppSettings {
       kiwiSaverRate: readDouble('kiwiSaverRate', 0.03),
       noteOptions: readNotes(),
       payPeriodAnchorDate: readDate('payPeriodAnchorDate'),
-      weeklyHoursGoal: readDouble('weeklyHoursGoal', 10),
+      weeklyHoursGoal: readDouble('weeklyHoursGoal', 20),
       weeklyEarningsGoal: readDouble('weeklyEarningsGoal', 1000),
     );
   }

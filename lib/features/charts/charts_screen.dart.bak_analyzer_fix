@@ -177,13 +177,13 @@ class _ChartsScreenState extends State<ChartsScreen> {
                 label: 'Best day',
                 value: bestDay == null
                     ? '-'
-                    : '${formatDate(bestDay.date)} â€¢ ${bestDay.hours.toStringAsFixed(2)}h',
+                    : '${formatDate(bestDay.date)} • ${bestDay.hours.toStringAsFixed(2)}h',
               ),
               ReviewRow(
                 label: 'Top client',
                 value: clientSummaries.isEmpty
                     ? '-'
-                    : '${clientSummaries.first.client} â€¢ ${clientSummaries.first.hours.toStringAsFixed(2)}h',
+                    : '${clientSummaries.first.client} • ${clientSummaries.first.hours.toStringAsFixed(2)}h',
               ),
               ReviewRow(
                 label: 'Average hours / entry',
@@ -442,12 +442,14 @@ class _DailyBarChart extends StatelessWidget {
     required this.valueSelector,
     required this.valueLabel,
     required this.barColor,
+    this.formatValue,
   });
 
   final List<DailyChartPoint> points;
   final double Function(DailyChartPoint point) valueSelector;
   final String valueLabel;
   final Color barColor;
+  final String Function(double value)? formatValue;
 
   @override
   Widget build(BuildContext context) {
@@ -535,7 +537,9 @@ class _DailyBarChart extends StatelessWidget {
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                     final point = points[group.x.toInt()];
                     final rawValue = valueSelector(point);
-                    final displayValue = rawValue.toStringAsFixed(2);
+                    final displayValue = formatValue == null
+                        ? rawValue.toStringAsFixed(2)
+                        : formatValue!(rawValue);
 
                     return BarTooltipItem(
                       '${formatDate(point.date)}\n$displayValue',
@@ -713,7 +717,7 @@ class _ClientBar extends StatelessWidget {
               ),
             ),
             Text(
-              '${summary.hours.toStringAsFixed(2)}h â€¢ ${summary.kilometres.toStringAsFixed(1)}km',
+              '${summary.hours.toStringAsFixed(2)}h • ${summary.kilometres.toStringAsFixed(1)}km',
               style: const TextStyle(
                 color: Color(0xFFD8E2FF),
                 fontWeight: FontWeight.w800,

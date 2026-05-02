@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/active_visit.dart';
 import '../models/app_settings.dart';
 import '../models/work_entry.dart';
 
@@ -11,13 +10,11 @@ class StoredAppData {
     required this.settings,
     required this.clients,
     required this.entries,
-    this.activeVisit,
   });
 
   final AppSettings settings;
   final List<String> clients;
   final List<WorkEntry> entries;
-  final ActiveVisit? activeVisit;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -32,7 +29,6 @@ class StoredAppData {
       'settings': settings.toJson(),
       'clients': clients,
       'entries': entries.map((entry) => entry.toJson()).toList(),
-      'activeVisit': activeVisit?.toJson(),
     };
   }
 
@@ -65,22 +61,10 @@ class StoredAppData {
       }
     }
 
-    ActiveVisit? activeVisit;
-    final rawActiveVisit = json['activeVisit'];
-
-    if (rawActiveVisit is Map<String, dynamic>) {
-      try {
-        activeVisit = ActiveVisit.fromJson(rawActiveVisit);
-      } catch (_) {
-        activeVisit = null;
-      }
-    }
-
     return StoredAppData(
       settings: settings,
       clients: clients.isEmpty ? ['Client A'] : clients,
       entries: entries,
-      activeVisit: activeVisit,
     );
   }
 }

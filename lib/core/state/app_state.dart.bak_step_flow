@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -199,9 +199,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _replaceInMemory(StoredAppData data) {
-    _settings = data.settings.weeklyHoursGoal == 20
-        ? data.settings.copyWith(weeklyHoursGoal: 10)
-        : data.settings;
+    _settings = data.settings;
     _activeVisit = data.activeVisit;
 
     _clients

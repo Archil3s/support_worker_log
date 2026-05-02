@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,9 +6,7 @@ import 'package:support_worker_log/app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Mobile app shell renders main tabs without crashing', (
-    tester,
-  ) async {
+  testWidgets('iPhone 13 mobile layout renders main sections', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -19,15 +16,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    expect(find.text('Quick Entry'), findsOneWidget);
 
-    for (final tab in ['Quick', 'Entries', 'Pay', 'Home', 'More']) {
-      if (find.text(tab).evaluate().isEmpty) continue;
-
+    for (final tab in ['Entries', 'Pay', 'Home', 'More']) {
       await tester.tap(find.text(tab).last);
       await tester.pumpAndSettle();
 
       final exception = tester.takeException();
       expect(exception, isNull, reason: '$tab failed: $exception');
+    }
+
+    for (final item in ['Tax', 'Charts', 'Settings']) {
+      await tester.tap(find.text('More').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(item));
+      await tester.pumpAndSettle();
+
+      final exception = tester.takeException();
+      expect(exception, isNull, reason: '$item failed: $exception');
     }
   });
 }

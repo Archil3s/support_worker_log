@@ -1,4 +1,3 @@
-// ignore_for_file: prefer_collection_literals
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,11 +6,9 @@ import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/utils/invoice_import_parser.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../core/utils/totals.dart';
 import '../../shared/widgets/empty_state.dart';
-import '../../shared/widgets/review_row.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
@@ -41,57 +38,6 @@ class _EntriesScreenState extends State<EntriesScreen> {
     return searchQuery.trim().isNotEmpty ||
         typeFilter != _EntryTypeFilter.all ||
         dateFilter != _EntryDateFilter.all;
-  }
-
-  Future<void> _showImportSheet() async {
-    final appState = context.read<AppState>();
-
-    final rows = await showModalBottomSheet<List<ParsedInvoiceRow>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => const _InvoiceImportSheet(),
-    );
-
-    if (rows == null || rows.isEmpty) return;
-
-    for (final row in rows) {
-      if (!appState.clients.contains(row.client)) {
-        appState.addClient(row.client);
-      }
-    }
-
-    final entries = rows.map((row) {
-      final notes = [
-        'Imported invoice row',
-        ...row.notes,
-        if (row.warnings.isNotEmpty) 'Review imported time',
-      ].toSet().toList()..sort();
-
-      return WorkEntry(
-        id:
-            DateTime.now().microsecondsSinceEpoch.toString() +
-            rows.indexOf(row).toString(),
-        client: row.client,
-        type: row.kilometres > 0
-            ? EntryType.homeVisit
-            : EntryType.professionalContact,
-        date: row.date!,
-        startTime: row.startTime,
-        minutes: row.minutes,
-        notes: notes,
-        odometerStart: row.kilometres > 0 ? 0 : null,
-        odometerEnd: row.kilometres > 0 ? row.kilometres : null,
-      );
-    }).toList();
-
-    appState.addEntries(entries);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Imported ${entries.length} invoice rows')),
-    );
   }
 
   Future<void> _openEditSheet({
@@ -144,13 +90,9 @@ class _EntriesScreenState extends State<EntriesScreen> {
       case _EntryDateFilter.all:
         return true;
       case _EntryDateFilter.currentFortnight:
-        return currentFortnight(
-          anchorDate: context.read<AppState>().settings.payPeriodAnchorDate,
-        ).contains(entry.date);
+        return currentFortnight().contains(entry.date);
       case _EntryDateFilter.previousFortnight:
-        return currentFortnight(
-          anchorDate: context.read<AppState>().settings.payPeriodAnchorDate,
-        ).previous.contains(entry.date);
+        return currentFortnight().previous.contains(entry.date);
       case _EntryDateFilter.last30Days:
         final today = DateTime.now();
         final end = DateTime(today.year, today.month, today.day);
@@ -179,38 +121,18 @@ class _EntriesScreenState extends State<EntriesScreen> {
     final appState = context.watch<AppState>();
     final entries = appState.entries;
     final settings = appState.settings;
+
+    if (entries.isEmpty) {
+      return const EmptyState(
+        message: 'No entries yet. Use Quick Entry to save your first log.',
+      );
+    }
+
     final filteredEntries = _filteredEntries(entries);
 
-    final currentRange = currentFortnight(
-      anchorDate: settings.payPeriodAnchorDate,
-    );
-    final currentPeriodEntries = entriesInRange(entries, currentRange);
-
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.all(16),
       children: [
-        SectionCard(
-          title: 'Invoice Tools',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FilledButton.icon(
-                onPressed: _showImportSheet,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Paste Invoice Rows'),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Paste client, date, time/duration, and KM rows. The entry date places each row into the correct fortnight/invoice period.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _ClientAnalyticsSection(entries: currentPeriodEntries),
-        const SizedBox(height: 12),
         _FilterSection(
           searchController: searchController,
           searchQuery: searchQuery,
@@ -258,9 +180,9 @@ class _EntriesScreenState extends State<EntriesScreen> {
           SectionCard(
             title: 'Results',
             child: EmptyState(
-              message: entries.isEmpty
-                  ? 'No entries yet. Use Quick Entry or Paste Invoice Rows.'
-                  : 'No entries match these filters.',
+              message: hasActiveFilters
+                  ? 'No entries match these filters.'
+                  : 'No entries to show.',
             ),
           )
         else
@@ -272,226 +194,6 @@ class _EntriesScreenState extends State<EntriesScreen> {
             if (entry != filteredEntries.last) const SizedBox(height: 12),
           ],
       ],
-    );
-  }
-}
-
-class _ClientAnalyticsSection extends StatelessWidget {
-  const _ClientAnalyticsSection({required this.entries});
-
-  final List<WorkEntry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = context.watch<AppState>().settings;
-    final summaries = _clientSummaries(entries, settings);
-
-    return SectionCard(
-      title: 'Current Fortnight Client Analytics',
-      child: summaries.isEmpty
-          ? const EmptyState(
-              message: 'Client analytics appear after entries are saved.',
-            )
-          : Column(
-              children: [
-                for (final summary in summaries)
-                  ReviewRow(
-                    label: summary.client,
-                    value:
-                        '${summary.hours.toStringAsFixed(2)}h Ã¢â‚¬Â¢ ${summary.kilometres.toStringAsFixed(1)}km Ã¢â‚¬Â¢ ${money(summary.earnings)}',
-                  ),
-              ],
-            ),
-    );
-  }
-
-  List<_ClientSummary> _clientSummaries(
-    List<WorkEntry> entries,
-    dynamic settings,
-  ) {
-    final map = <String, _ClientSummary>{};
-
-    for (final entry in entries) {
-      final current =
-          map[entry.client] ??
-          _ClientSummary(
-            client: entry.client,
-            hours: 0,
-            kilometres: 0,
-            earnings: 0,
-          );
-
-      map[entry.client] = current.copyWith(
-        hours: current.hours + entry.hours,
-        kilometres: current.kilometres + entry.kilometres,
-        earnings: current.earnings + entry.earnings(settings),
-      );
-    }
-
-    final summaries = map.values.toList()
-      ..sort((a, b) => b.earnings.compareTo(a.earnings));
-
-    return summaries;
-  }
-}
-
-class _ClientSummary {
-  const _ClientSummary({
-    required this.client,
-    required this.hours,
-    required this.kilometres,
-    required this.earnings,
-  });
-
-  final String client;
-  final double hours;
-  final double kilometres;
-  final double earnings;
-
-  _ClientSummary copyWith({
-    double? hours,
-    double? kilometres,
-    double? earnings,
-  }) {
-    return _ClientSummary(
-      client: client,
-      hours: hours ?? this.hours,
-      kilometres: kilometres ?? this.kilometres,
-      earnings: earnings ?? this.earnings,
-    );
-  }
-}
-
-class _InvoiceImportSheet extends StatefulWidget {
-  const _InvoiceImportSheet();
-
-  @override
-  State<_InvoiceImportSheet> createState() => _InvoiceImportSheetState();
-}
-
-class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
-  final controller = TextEditingController();
-
-  List<ParsedInvoiceRow> rows = const [];
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  List<ParsedInvoiceRow> get validRows {
-    return rows.where((row) => row.isValid).toList();
-  }
-
-  int get warningCount {
-    return rows.fold<int>(0, (sum, row) => sum + row.warnings.length);
-  }
-
-  void parse() {
-    setState(() {
-      rows = parseInvoiceRows(controller.text);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totalMinutes = validRows.fold<int>(
-      0,
-      (sum, row) => sum + row.minutes,
-    );
-    final totalKm = validRows.fold<double>(
-      0,
-      (sum, row) => sum + row.kilometres,
-    );
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.92,
-      minChildSize: 0.55,
-      maxChildSize: 0.96,
-      builder: (context, scrollController) {
-        return ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              'Paste Invoice Rows',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'One row per support entry. Use comma, pipe, or tab-separated text.',
-              style: TextStyle(color: Color(0xFF8396C7)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              minLines: 8,
-              maxLines: 12,
-              decoration: const InputDecoration(
-                labelText: 'Paste rows here',
-                hintText:
-                    'Client A, 02/05/2026, 9:00-11:30, 24km, Wellbeing support',
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: parse,
-              icon: const Icon(Icons.auto_fix_high_outlined),
-              label: const Text('Preview Import'),
-            ),
-            if (rows.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              StatGrid(
-                cards: [
-                  StatCard(title: 'Rows', value: '${rows.length}'),
-                  StatCard(title: 'Valid', value: '${validRows.length}'),
-                  StatCard(
-                    title: 'Hours',
-                    value: (totalMinutes / 60).toStringAsFixed(2),
-                  ),
-                  StatCard(title: 'KM', value: totalKm.toStringAsFixed(1)),
-                ],
-              ),
-              if (warningCount > 0) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '$warningCount warning(s). Rows with defaulted time are marked for review.',
-                  style: const TextStyle(color: Color(0xFFF59E0B)),
-                ),
-              ],
-              const SizedBox(height: 12),
-              for (final row in rows.take(10))
-                Card(
-                  child: ListTile(
-                    title: Text(
-                      row.client.isEmpty ? 'Unknown client' : row.client,
-                    ),
-                    subtitle: Text(
-                      '${row.date == null ? 'No date' : formatDate(row.date!)} Ã¢â‚¬Â¢ ${row.minutes} min Ã¢â‚¬Â¢ ${row.kilometres.toStringAsFixed(1)} km',
-                    ),
-                    trailing: Icon(
-                      row.isValid
-                          ? Icons.check_circle_outline
-                          : Icons.error_outline,
-                      color: row.isValid ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: validRows.isEmpty
-                    ? null
-                    : () => Navigator.of(context).pop(validRows),
-                icon: const Icon(Icons.save_alt_outlined),
-                label: Text('Import ${validRows.length} Rows'),
-              ),
-            ],
-          ],
-        );
-      },
     );
   }
 }
@@ -532,6 +234,7 @@ class _FilterSection extends StatelessWidget {
             controller: searchController,
             onChanged: onSearchChanged,
             decoration: InputDecoration(
+              border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.search_outlined),
               labelText: 'Search entries',
               helperText: 'Search by client, note, or entry type',
@@ -546,28 +249,32 @@ class _FilterSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<_EntryTypeFilter>(
-            isExpanded: true,
             initialValue: typeFilter,
-            decoration: const InputDecoration(labelText: 'Entry type'),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: 'Entry type',
+            ),
             items: [
               for (final filter in _EntryTypeFilter.values)
                 DropdownMenuItem<_EntryTypeFilter>(
                   value: filter,
-                  child: Text(filter.label, overflow: TextOverflow.ellipsis),
+                  child: Text(filter.label),
                 ),
             ],
             onChanged: onTypeFilterChanged,
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<_EntryDateFilter>(
-            isExpanded: true,
             initialValue: dateFilter,
-            decoration: const InputDecoration(labelText: 'Date range'),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: 'Date range',
+            ),
             items: [
               for (final filter in _EntryDateFilter.values)
                 DropdownMenuItem<_EntryDateFilter>(
                   value: filter,
-                  child: Text(filter.label, overflow: TextOverflow.ellipsis),
+                  child: Text(filter.label),
                 ),
             ],
             onChanged: onDateFilterChanged,
@@ -610,7 +317,7 @@ class _EntryCard extends StatelessWidget {
               leading: CircleAvatar(child: Icon(entry.type.icon)),
               title: Text(entry.client),
               subtitle: Text(
-                '${entry.type.label} Ã¢â‚¬Â¢ ${formatDate(entry.date)} Ã¢â‚¬Â¢ ${entry.minutes} min',
+                '${entry.type.label} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${formatDate(entry.date)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${entry.minutes} min',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),
@@ -632,6 +339,7 @@ class _EntryCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton.icon(
                   onPressed: onEdit,

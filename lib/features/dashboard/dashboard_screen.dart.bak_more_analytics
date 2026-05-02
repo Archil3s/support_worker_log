@@ -1,0 +1,326 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/models/entry_type.dart';
+import '../../core/models/work_entry.dart';
+import '../../core/state/app_state.dart';
+import '../../core/utils/formatters.dart';
+import '../../core/utils/pay_period_utils.dart';
+import '../../core/utils/totals.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/review_row.dart';
+import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/stat_card.dart';
+import '../../shared/widgets/stat_grid.dart';
+
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({
+    super.key,
+    required this.onQuickEntry,
+    required this.onPayPeriod,
+    required this.onEntries,
+  });
+
+  final VoidCallback onQuickEntry;
+  final VoidCallback onPayPeriod;
+  final VoidCallback onEntries;
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final settings = appState.settings;
+    final entries = appState.entries;
+
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final todayEntries = entriesBetween(entries, todayOnly, todayOnly);
+
+    final currentRange = currentFortnight(
+      anchorDate: settings.payPeriodAnchorDate,
+    );
+    final previousRange = currentRange.previous;
+
+    final periodEntries = entriesInRange(entries, currentRange);
+    final previousEntries = entriesInRange(entries, previousRange);
+
+    final weekOneEntries = entriesBetween(
+      entries,
+      currentRange.weekOneStart,
+      currentRange.weekOneEnd,
+    );
+    final weekTwoEntries = entriesBetween(
+      entries,
+      currentRange.weekTwoStart,
+      currentRange.weekTwoEnd,
+    );
+
+    final lastEntry = _latestEntry(entries);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SectionCard(
+          title: 'Today',
+          child: StatGrid(
+            cards: [
+              StatCard(title: 'Entries', value: '${todayEntries.length}'),
+              StatCard(
+                title: 'Hours',
+                value: totalHours(todayEntries).toStringAsFixed(2),
+              ),
+              StatCard(
+                title: 'Earned',
+                value: money(totalEarnings(todayEntries, settings)),
+              ),
+              StatCard(
+                title: 'KM',
+                value: totalKilometres(todayEntries).toStringAsFixed(1),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Current Fortnight',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${formatDate(currentRange.start)} - ${formatDate(currentRange.end)}',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              StatGrid(
+                cards: [
+                  StatCard(title: 'Entries', value: '${periodEntries.length}'),
+                  StatCard(
+                    title: 'Hours',
+                    value: totalHours(periodEntries).toStringAsFixed(2),
+                  ),
+                  StatCard(
+                    title: 'Earned',
+                    value: money(totalEarnings(periodEntries, settings)),
+                  ),
+                  StatCard(
+                    title: 'KM',
+                    value: totalKilometres(periodEntries).toStringAsFixed(1),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Fortnight Trend',
+          child: Column(
+            children: [
+              ReviewRow(
+                label: 'Entries vs previous',
+                value: _signedNumber(
+                  periodEntries.length - previousEntries.length,
+                ),
+              ),
+              ReviewRow(
+                label: 'Hours vs previous',
+                value: _signedDecimal(
+                  totalHours(periodEntries) - totalHours(previousEntries),
+                  suffix: 'h',
+                ),
+              ),
+              ReviewRow(
+                label: 'Earnings vs previous',
+                value: _signedMoney(
+                  totalEarnings(periodEntries, settings) -
+                      totalEarnings(previousEntries, settings),
+                ),
+              ),
+              ReviewRow(
+                label: 'KM vs previous',
+                value: _signedDecimal(
+                  totalKilometres(periodEntries) -
+                      totalKilometres(previousEntries),
+                  suffix: 'km',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Weekly Goals',
+          child: Column(
+            children: [
+              _GoalProgress(
+                label: 'Week 1 hours',
+                current: totalHours(weekOneEntries),
+                goal: settings.weeklyHoursGoal,
+                suffix: 'h',
+              ),
+              const SizedBox(height: 12),
+              _GoalProgress(
+                label: 'Week 2 hours',
+                current: totalHours(weekTwoEntries),
+                goal: settings.weeklyHoursGoal,
+                suffix: 'h',
+              ),
+              const SizedBox(height: 12),
+              _GoalProgress(
+                label: 'Week 1 earnings',
+                current: totalEarnings(weekOneEntries, settings),
+                goal: settings.weeklyEarningsGoal,
+                moneyValue: true,
+              ),
+              const SizedBox(height: 12),
+              _GoalProgress(
+                label: 'Week 2 earnings',
+                current: totalEarnings(weekTwoEntries, settings),
+                goal: settings.weeklyEarningsGoal,
+                moneyValue: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Quick Actions',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton.icon(
+                onPressed: onQuickEntry,
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Log New Entry'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: onPayPeriod,
+                icon: const Icon(Icons.calendar_month_outlined),
+                label: const Text('View Pay Period'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: onEntries,
+                icon: const Icon(Icons.list_alt_outlined),
+                label: const Text('View Entries'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Last Entry',
+          child: lastEntry == null
+              ? const EmptyState(
+                  message: 'No entries yet. Use Quick Entry to start logging.',
+                )
+              : _LastEntryCard(entry: lastEntry),
+        ),
+      ],
+    );
+  }
+
+  WorkEntry? _latestEntry(List<WorkEntry> entries) {
+    if (entries.isEmpty) return null;
+
+    final sorted = entries.toList()
+      ..sort((a, b) {
+        final dateCompare = b.date.compareTo(a.date);
+        if (dateCompare != 0) return dateCompare;
+
+        final aMinutes = a.startTime.hour * 60 + a.startTime.minute;
+        final bMinutes = b.startTime.hour * 60 + b.startTime.minute;
+        return bMinutes.compareTo(aMinutes);
+      });
+
+    return sorted.first;
+  }
+
+  String _signedNumber(int value) {
+    if (value > 0) return '+$value';
+    return value.toString();
+  }
+
+  String _signedDecimal(double value, {required String suffix}) {
+    final text = value.toStringAsFixed(2);
+    if (value > 0) return '+$text $suffix';
+    return '$text $suffix';
+  }
+
+  String _signedMoney(double value) {
+    if (value > 0) return '+${money(value)}';
+    return value < 0 ? '-${money(value.abs())}' : money(value);
+  }
+}
+
+class _GoalProgress extends StatelessWidget {
+  const _GoalProgress({
+    required this.label,
+    required this.current,
+    required this.goal,
+    this.suffix = '',
+    this.moneyValue = false,
+  });
+
+  final String label;
+  final double current;
+  final double goal;
+  final String suffix;
+  final bool moneyValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeGoal = goal <= 0 ? 1.0 : goal;
+    final progress = (current / safeGoal).clamp(0.0, 1.0);
+    final currentText = moneyValue
+        ? money(current)
+        : '${current.toStringAsFixed(2)}$suffix';
+    final goalText = moneyValue
+        ? money(goal)
+        : '${goal.toStringAsFixed(2)}$suffix';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ReviewRow(label: label, value: '$currentText / $goalText'),
+        LinearProgressIndicator(value: progress),
+      ],
+    );
+  }
+}
+
+class _LastEntryCard extends StatelessWidget {
+  const _LastEntryCard({required this.entry});
+
+  final WorkEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<AppState>().settings;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(child: Icon(entry.type.icon)),
+          title: Text(entry.client),
+          subtitle: Text(
+            '${entry.type.label} - ${formatDate(entry.date)} - ${formatTime(entry.startTime)} - ${entry.minutes} min',
+          ),
+          trailing: Text(money(entry.earnings(settings))),
+        ),
+        if (entry.notes.isNotEmpty)
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final note in entry.notes)
+                Chip(label: Text(note), visualDensity: VisualDensity.compact),
+            ],
+          ),
+      ],
+    );
+  }
+}

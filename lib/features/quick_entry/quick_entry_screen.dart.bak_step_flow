@@ -1,5 +1,4 @@
-// ignore_for_file: prefer_collection_literals
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -121,7 +120,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final notes = [
       ...selectedNotes,
       if (typedNote.isNotEmpty) typedNote,
-    ].toSet().toList()..sort();
+    ].toSet().toList()
+      ..sort();
 
     appState.updateActiveVisit(activeVisit.copyWith(notes: notes));
 
@@ -156,7 +156,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       ...activeVisit.notes,
       ...selectedNotes,
       if (typedNote.isNotEmpty) typedNote,
-    ].toSet().toList()..sort();
+    ].toSet().toList()
+      ..sort();
 
     final entry = WorkEntry(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -231,9 +232,9 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -446,7 +447,7 @@ class _ActiveVisitView extends StatelessWidget {
         _HeroPanel(
           title: 'Active visit running',
           subtitle:
-              '${activeVisit.client} â€¢ ${activeVisit.type.label} â€¢ Started $startedAtText',
+              '${activeVisit.client} • ${activeVisit.type.label} • Started $startedAtText',
           icon: Icons.timer_outlined,
           green: true,
         ),
@@ -590,7 +591,10 @@ class _HeroPanel extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: const TextStyle(color: Color(0xFFD8E2FF), height: 1.3),
+                  style: const TextStyle(
+                    color: Color(0xFFD8E2FF),
+                    height: 1.3,
+                  ),
                 ),
               ],
             ),
