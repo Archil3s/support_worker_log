@@ -167,7 +167,7 @@ class _LastEntryCard extends StatelessWidget {
           leading: CircleAvatar(child: Icon(entry.type.icon)),
           title: Text(entry.client),
           subtitle: Text(
-            '${entry.type.label} • ${formatDate(entry.date)} • ${formatTime(entry.startTime)} • ${entry.minutes} min',
+            '${entry.type.label} - ${formatDate(entry.date)} - ${formatTime(entry.startTime)} - ${entry.minutes} min',
           ),
           trailing: Text(money(entry.earnings(settings))),
         ),

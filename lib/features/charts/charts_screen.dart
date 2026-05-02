@@ -119,7 +119,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
               title: 'Best Day',
               value: bestDay == null
                   ? '-'
-                  : '${formatDate(bestDay.date)} • ${bestDay.hours.toStringAsFixed(2)}h',
+                  : '${formatDate(bestDay.date)} - ${bestDay.hours.toStringAsFixed(2)}h',
             ),
             StatCard(title: 'Avg / Entry', value: money(average)),
           ],

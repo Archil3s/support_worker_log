@@ -361,7 +361,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                       ReviewRow(
                         label: 'Odometer',
                         value:
-                            '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} → ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
+                            '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} -> ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
                       ),
                     const SizedBox(height: 12),
                     SizedBox(

@@ -640,7 +640,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
             ReviewRow(
               label: 'Odometer',
               value:
-                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} â†’ ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
+                  '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} Ã¢â€ â€™ ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
             ),
           if (selectedNotes.isNotEmpty)
             Padding(

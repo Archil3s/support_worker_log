@@ -206,7 +206,7 @@ class _DailyBreakdown extends StatelessWidget {
               leading: Icon(entry.type.icon),
               title: Text('${entry.client} - ${entry.type.label}'),
               subtitle: Text(
-                '${formatTime(entry.startTime)} • ${entry.minutes} min',
+                '${formatTime(entry.startTime)} - ${entry.minutes} min',
               ),
               trailing: Text(money(entry.earnings(settings))),
             ),
@@ -238,7 +238,7 @@ class _DayHeader extends StatelessWidget {
             ),
           ),
           Text(
-            '${totalHours(entries).toStringAsFixed(2)} hrs • ${money(totalEarnings(entries, settings))}',
+            '${totalHours(entries).toStringAsFixed(2)} hrs - ${money(totalEarnings(entries, settings))}',
             style: Theme.of(context).textTheme.labelLarge,
           ),
         ],
