@@ -11,21 +11,67 @@ class CloudStorageService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
-  String? get userId => _auth.currentUser?.uid;
-  bool get isSignedIn => _auth.currentUser != null;
+  User? get currentUser => _auth.currentUser;
 
-  Future<User> signInAnonymouslyIfNeeded() async {
-    final existing = _auth.currentUser;
-    if (existing != null) return existing;
+  String? get userId => currentUser?.uid;
 
-    final credential = await _auth.signInAnonymously();
+  String? get email => currentUser?.email;
+
+  bool get isSignedIn {
+    final user = currentUser;
+    return user != null && !user.isAnonymous;
+  }
+
+  Future<void> signOutAnonymousUserIfNeeded() async {
+    final user = currentUser;
+
+    if (user != null && user.isAnonymous) {
+      await _auth.signOut();
+    }
+  }
+
+  Future<User> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
     final user = credential.user;
 
     if (user == null) {
-      throw StateError('Firebase anonymous sign-in returned no user.');
+      throw StateError('Firebase sign-in returned no user.');
     }
 
     return user;
+  }
+
+  Future<User> registerWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
+    final user = credential.user;
+
+    if (user == null) {
+      throw StateError('Firebase registration returned no user.');
+    }
+
+    return user;
+  }
+
+  Future<void> sendPasswordResetEmail(String email) {
+    return _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  Future<void> signOut() {
+    return _auth.signOut();
   }
 
   DocumentReference<Map<String, dynamic>> get _appDataDoc {
@@ -43,6 +89,8 @@ class CloudStorageService {
   }
 
   Future<StoredAppData?> load() async {
+    if (!isSignedIn) return null;
+
     final snapshot = await _appDataDoc.get();
     final data = snapshot.data();
 
@@ -54,6 +102,8 @@ class CloudStorageService {
   }
 
   Future<void> save(StoredAppData data) async {
+    if (!isSignedIn) return;
+
     await _appDataDoc.set({
       ...data.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),

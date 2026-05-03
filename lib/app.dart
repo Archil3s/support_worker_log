@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/state/app_state.dart';
-import 'features/shell/main_shell.dart';
+import 'features/auth/auth_gate.dart';
 
 class SupportWorkerLogApp extends StatefulWidget {
   const SupportWorkerLogApp({super.key});
@@ -221,7 +221,7 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
               );
             }
 
-            return const MainShell();
+            return const AuthGate();
           },
         ),
       ),

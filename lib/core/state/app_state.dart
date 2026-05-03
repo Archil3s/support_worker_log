@@ -28,47 +28,77 @@ class AppState extends ChangeNotifier {
 
   bool _cloudSyncReady = false;
   String? _cloudSyncError;
-  String? _cloudUserId;
 
   AppSettings get settings => _settings;
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
 
+  bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get cloudSyncReady => _cloudSyncReady;
   String? get cloudSyncError => _cloudSyncError;
-  String? get cloudUserId => _cloudUserId;
+  String? get cloudUserId => _cloudStorageService.userId;
+  String? get cloudEmail => _cloudStorageService.email;
 
   Future<void> load() async {
     final localData = await _storageService.load();
     _replaceInMemory(localData);
 
     try {
-      await _cloudStorageService.signInAnonymouslyIfNeeded();
-      _cloudUserId = _cloudStorageService.userId;
+      await _cloudStorageService.signOutAnonymousUserIfNeeded();
 
-      final cloudData = await _cloudStorageService.load();
-
-      if (cloudData == null) {
-        await _cloudStorageService.save(localData);
+      if (_cloudStorageService.isSignedIn) {
+        await _syncLocalAndCloud();
       } else {
-        final mergedData = _mergeStoredData(
-          localData: localData,
-          cloudData: cloudData,
-        );
-
-        _replaceInMemory(mergedData);
-        await _storageService.save(mergedData);
-        await _cloudStorageService.save(mergedData);
+        _cloudSyncReady = false;
+        _cloudSyncError = null;
       }
-
-      _cloudSyncReady = true;
-      _cloudSyncError = null;
     } catch (error) {
       _cloudSyncReady = false;
       _cloudSyncError = error.toString();
     }
 
+    notifyListeners();
+  }
+
+  Future<void> signIn({required String email, required String password}) async {
+    await _cloudStorageService.signInWithEmailPassword(
+      email: email,
+      password: password,
+    );
+
+    await _syncLocalAndCloud();
+    notifyListeners();
+  }
+
+  Future<void> register({
+    required String email,
+    required String password,
+  }) async {
+    await _cloudStorageService.registerWithEmailPassword(
+      email: email,
+      password: password,
+    );
+
+    await _syncLocalAndCloud();
+    notifyListeners();
+  }
+
+  Future<void> sendPasswordResetEmail(String email) {
+    return _cloudStorageService.sendPasswordResetEmail(email);
+  }
+
+  Future<void> signOut() async {
+    await _cloudStorageService.signOut();
+    _cloudSyncReady = false;
+    _cloudSyncError = null;
+    notifyListeners();
+  }
+
+  Future<void> syncNow() async {
+    if (!_cloudStorageService.isSignedIn) return;
+
+    await _syncLocalAndCloud();
     notifyListeners();
   }
 
@@ -259,6 +289,31 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
 
     return invoiceEntries.length;
+  }
+
+  Future<void> _syncLocalAndCloud() async {
+    final localData = _currentStoredData();
+    final cloudData = await _cloudStorageService.load();
+
+    if (cloudData == null) {
+      await _cloudStorageService.save(localData);
+      _cloudSyncReady = true;
+      _cloudSyncError = null;
+      return;
+    }
+
+    final mergedData = _mergeStoredData(
+      localData: localData,
+      cloudData: cloudData,
+    );
+
+    _replaceInMemory(mergedData);
+
+    await _storageService.save(mergedData);
+    await _cloudStorageService.save(mergedData);
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
   }
 
   void _replaceInMemory(StoredAppData data) {
