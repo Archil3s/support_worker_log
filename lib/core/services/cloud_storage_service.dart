@@ -30,15 +30,6 @@ class CloudStorageService {
     }
   }
 
-  Future<void> completeRedirectSignInIfNeeded() async {
-    try {
-      await _auth.getRedirectResult();
-    } on FirebaseAuthException catch (error) {
-      if (error.code == 'no-auth-event') return;
-      rethrow;
-    }
-  }
-
   Future<User> signInWithEmailPassword({
     required String email,
     required String password,
@@ -75,11 +66,18 @@ class CloudStorageService {
     return user;
   }
 
-  Future<void> signInWithGoogle() async {
+  Future<User> signInWithGoogle() async {
     final provider = GoogleAuthProvider()
       ..setCustomParameters({'prompt': 'select_account'});
 
-    await _auth.signInWithRedirect(provider);
+    final credential = await _auth.signInWithPopup(provider);
+    final user = credential.user;
+
+    if (user == null) {
+      throw StateError('Google sign-in returned no user.');
+    }
+
+    return user;
   }
 
   Future<void> sendPasswordResetEmail(String email) {

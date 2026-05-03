@@ -46,7 +46,6 @@ class AppState extends ChangeNotifier {
 
     try {
       await _cloudStorageService.signOutAnonymousUserIfNeeded();
-      await _cloudStorageService.completeRedirectSignInIfNeeded();
 
       if (_cloudStorageService.isSignedIn) {
         await _syncLocalAndCloud();
@@ -88,10 +87,7 @@ class AppState extends ChangeNotifier {
   Future<void> signInWithGoogle() async {
     await _cloudStorageService.signInWithGoogle();
 
-    if (_cloudStorageService.isSignedIn) {
-      await _syncLocalAndCloud();
-    }
-
+    await _syncLocalAndCloud();
     notifyListeners();
   }
 
