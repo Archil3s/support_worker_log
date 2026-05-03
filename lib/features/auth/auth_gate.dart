@@ -69,6 +69,24 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      busy = true;
+      errorText = null;
+      successText = null;
+    });
+
+    try {
+      await context.read<AppState>().signInWithGoogle();
+    } catch (error) {
+      setState(() => errorText = _friendlyError(error));
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
+
   Future<void> _resetPassword() async {
     final email = emailController.text.trim();
 
@@ -99,15 +117,25 @@ class _AuthScreenState extends State<AuthScreen> {
     final text = error.toString();
 
     if (text.contains('invalid-email')) return 'Enter a valid email address.';
-    if (text.contains('user-not-found'))
+    if (text.contains('user-not-found')) {
       return 'No account found for this email.';
+    }
     if (text.contains('wrong-password')) return 'Incorrect password.';
-    if (text.contains('email-already-in-use'))
+    if (text.contains('email-already-in-use')) {
       return 'An account already exists for this email.';
-    if (text.contains('weak-password'))
+    }
+    if (text.contains('weak-password')) {
       return 'Use a stronger password, at least 6 characters.';
-    if (text.contains('network-request-failed'))
+    }
+    if (text.contains('network-request-failed')) {
       return 'Network error. Check your connection.';
+    }
+    if (text.contains('popup-closed-by-user')) {
+      return 'Google sign-in was cancelled.';
+    }
+    if (text.contains('account-exists-with-different-credential')) {
+      return 'An account already exists with a different sign-in method.';
+    }
 
     return text.replaceFirst('Exception: ', '');
   }
@@ -229,6 +257,11 @@ class _AuthScreenState extends State<AuthScreen> {
                             ? 'Create Account & Sync'
                             : 'Sign In & Sync',
                       ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: busy ? null : _signInWithGoogle,
+                      icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+                      label: const Text('Sign in with Google'),
                     ),
                     const SizedBox(height: 8),
                     TextButton(

@@ -84,6 +84,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> signInWithGoogle() async {
+    await _cloudStorageService.signInWithGoogle();
+
+    await _syncLocalAndCloud();
+    notifyListeners();
+  }
+
   Future<void> sendPasswordResetEmail(String email) {
     return _cloudStorageService.sendPasswordResetEmail(email);
   }

@@ -66,6 +66,20 @@ class CloudStorageService {
     return user;
   }
 
+  Future<User> signInWithGoogle() async {
+    final provider = GoogleAuthProvider()
+      ..setCustomParameters({'prompt': 'select_account'});
+
+    final credential = await _auth.signInWithPopup(provider);
+    final user = credential.user;
+
+    if (user == null) {
+      throw StateError('Google sign-in returned no user.');
+    }
+
+    return user;
+  }
+
   Future<void> sendPasswordResetEmail(String email) {
     return _auth.sendPasswordResetEmail(email: email.trim());
   }
