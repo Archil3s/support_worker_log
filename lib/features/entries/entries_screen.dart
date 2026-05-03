@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/calendar_export_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/invoice_import_parser.dart';
@@ -713,6 +714,56 @@ class _EntryCard extends StatelessWidget {
   final WorkEntry entry;
   final VoidCallback onEdit;
 
+  Future<void> _exportIcs(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    try {
+      await CalendarExportService.saveIcsFileForEntry(entry);
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('${entry.client} ICS file exported'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('ICS export failed: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openGoogleCalendar(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    try {
+      final opened = await CalendarExportService.openGoogleCalendarForEntry(
+        entry,
+      );
+
+      if (!opened) {
+        throw Exception('Could not open Google Calendar.');
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Google Calendar opened. Press Save there.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Google Calendar export failed: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
@@ -774,6 +825,16 @@ class _EntryCard extends StatelessWidget {
                   },
                   icon: const Icon(Icons.copy_all_outlined),
                   label: const Text('Duplicate'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _openGoogleCalendar(context),
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Google Cal'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _exportIcs(context),
+                  icon: const Icon(Icons.event_available_outlined),
+                  label: const Text('ICS'),
                 ),
                 IconButton(
                   onPressed: () {
