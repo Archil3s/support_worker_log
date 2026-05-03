@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/active_visit.dart';
 import '../models/app_settings.dart';
 import '../models/work_entry.dart';
+import '../services/cloud_storage_service.dart';
 import '../services/storage_service.dart';
 import '../utils/sample_invoice_data.dart';
 
@@ -17,6 +18,7 @@ class RemovedEntry {
 
 class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
+  final CloudStorageService _cloudStorageService = CloudStorageService();
 
   AppSettings _settings = const AppSettings();
   ActiveVisit? _activeVisit;
@@ -24,14 +26,49 @@ class AppState extends ChangeNotifier {
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
 
+  bool _cloudSyncReady = false;
+  String? _cloudSyncError;
+  String? _cloudUserId;
+
   AppSettings get settings => _settings;
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
 
+  bool get cloudSyncReady => _cloudSyncReady;
+  String? get cloudSyncError => _cloudSyncError;
+  String? get cloudUserId => _cloudUserId;
+
   Future<void> load() async {
-    final data = await _storageService.load();
-    _replaceInMemory(data);
+    final localData = await _storageService.load();
+    _replaceInMemory(localData);
+
+    try {
+      await _cloudStorageService.signInAnonymouslyIfNeeded();
+      _cloudUserId = _cloudStorageService.userId;
+
+      final cloudData = await _cloudStorageService.load();
+
+      if (cloudData == null) {
+        await _cloudStorageService.save(localData);
+      } else {
+        final mergedData = _mergeStoredData(
+          localData: localData,
+          cloudData: cloudData,
+        );
+
+        _replaceInMemory(mergedData);
+        await _storageService.save(mergedData);
+        await _cloudStorageService.save(mergedData);
+      }
+
+      _cloudSyncReady = true;
+      _cloudSyncError = null;
+    } catch (error) {
+      _cloudSyncReady = false;
+      _cloudSyncError = error.toString();
+    }
+
     notifyListeners();
   }
 
@@ -241,6 +278,37 @@ class AppState extends ChangeNotifier {
       ..addAll(cleanedEntries);
   }
 
+  StoredAppData _mergeStoredData({
+    required StoredAppData localData,
+    required StoredAppData cloudData,
+  }) {
+    final mergedClients = {
+      ...cloudData.clients,
+      ...localData.clients,
+    }.where((client) => client.trim().isNotEmpty).toList()..sort();
+
+    final mergedEntries = _dedupeEntries([
+      ...cloudData.entries,
+      ...localData.entries,
+    ]);
+
+    return StoredAppData(
+      settings: cloudData.settings,
+      clients: mergedClients.isEmpty ? ['Client A'] : mergedClients,
+      entries: mergedEntries,
+      activeVisit: cloudData.activeVisit ?? localData.activeVisit,
+    );
+  }
+
+  StoredAppData _currentStoredData() {
+    return StoredAppData(
+      settings: _settings,
+      clients: _clients,
+      entries: _entries,
+      activeVisit: _activeVisit,
+    );
+  }
+
   List<WorkEntry> _dedupeEntries(List<WorkEntry> entries) {
     final seenIds = <String>{};
     final seenContent = <String>{};
@@ -290,14 +358,20 @@ class AppState extends ChangeNotifier {
     unawaited(_save());
   }
 
-  Future<void> _save() {
-    return _storageService.save(
-      StoredAppData(
-        settings: _settings,
-        clients: _clients,
-        entries: _entries,
-        activeVisit: _activeVisit,
-      ),
-    );
+  Future<void> _save() async {
+    final data = _currentStoredData();
+
+    await _storageService.save(data);
+
+    if (!_cloudStorageService.isSignedIn) return;
+
+    try {
+      await _cloudStorageService.save(data);
+      _cloudSyncReady = true;
+      _cloudSyncError = null;
+    } catch (error) {
+      _cloudSyncReady = false;
+      _cloudSyncError = error.toString();
+    }
   }
 }
