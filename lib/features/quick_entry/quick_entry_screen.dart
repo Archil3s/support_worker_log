@@ -9,6 +9,7 @@ import '../../core/models/active_visit.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
+import '../../core/services/calendar_export_service.dart';
 import '../../core/utils/formatters.dart';
 
 String _cleanHeaderText(String value) {
@@ -332,6 +333,56 @@ class _SavedVisitView extends StatelessWidget {
   final WorkEntry entry;
   final VoidCallback onNewVisit;
 
+  Future<void> _exportToGoogleCalendar(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Opening Google Calendar...'),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+
+    try {
+      final opened = await CalendarExportService.openGoogleCalendarForEntry(
+        entry,
+      );
+
+      messenger.clearSnackBars();
+
+      if (!opened) {
+        throw Exception('Could not open Google Calendar.');
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Google Calendar opened. Press Save there to upload the visit.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Calendar export failed: '),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
@@ -379,6 +430,12 @@ class _SavedVisitView extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: () => _exportToGoogleCalendar(context),
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: const Text('Export to Google Calendar'),
+        ),
+        const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: onNewVisit,
           icon: const Icon(Icons.add_circle_outline),

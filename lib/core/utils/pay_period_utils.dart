@@ -2,6 +2,8 @@ import '../models/work_entry.dart';
 
 final defaultPayPeriodAnchorDate = DateTime(2025, 12, 14);
 
+const int invoicePeriodDays = 14;
+
 class PayPeriodRange {
   const PayPeriodRange({required this.start, required this.end});
 
@@ -14,7 +16,7 @@ class PayPeriodRange {
   }
 
   PayPeriodRange shiftFortnights(int count) {
-    final offset = Duration(days: 14 * count);
+    final offset = Duration(days: invoicePeriodDays * count);
 
     return PayPeriodRange(start: start.add(offset), end: end.add(offset));
   }
@@ -26,6 +28,10 @@ class PayPeriodRange {
   DateTime get weekOneEnd => start.add(const Duration(days: 6));
   DateTime get weekTwoStart => start.add(const Duration(days: 7));
   DateTime get weekTwoEnd => end;
+
+  int get daysInclusive {
+    return end.difference(start).inDays + 1;
+  }
 }
 
 PayPeriodRange currentFortnight({DateTime? anchorDate}) {
@@ -39,10 +45,13 @@ PayPeriodRange fortnightForDate(DateTime date, {DateTime? anchorDate}) {
   final anchor = DateTime(rawAnchor.year, rawAnchor.month, rawAnchor.day);
 
   final daysSinceAnchor = normalizedDate.difference(anchor).inDays;
-  final periodOffset = _floorDivide(daysSinceAnchor, 14);
-  final start = anchor.add(Duration(days: periodOffset * 14));
+  final periodOffset = _floorDivide(daysSinceAnchor, invoicePeriodDays);
+  final start = anchor.add(Duration(days: periodOffset * invoicePeriodDays));
 
-  return PayPeriodRange(start: start, end: start.add(const Duration(days: 13)));
+  return PayPeriodRange(
+    start: start,
+    end: start.add(const Duration(days: invoicePeriodDays - 1)),
+  );
 }
 
 int _floorDivide(int value, int divisor) {

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/state/app_state.dart';
 import 'features/auth/auth_gate.dart';
+import 'widgets/firebase_status_overlay.dart';
 
 class SupportWorkerLogApp extends StatefulWidget {
   const SupportWorkerLogApp({super.key});
@@ -54,6 +55,9 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
       child: MaterialApp(
         title: 'Support Worker Log',
         debugShowCheckedModeBanner: false,
+        builder: (context, child) {
+          return FirebaseStatusOverlay(child: child ?? const SizedBox.shrink());
+        },
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: scheme,

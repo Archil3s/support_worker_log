@@ -89,3 +89,55 @@ netlify/.env
 # Local invoice/import data
 invoice_import_data*.csv
 .~lock.*
+
+# Private local support notes - never commit
+MR NOTES FOLDER/
+**/MR NOTES FOLDER/
+notes/
+local_notes/
+support_notes/
+*.tmp.docx
+
+# Generated note status documents - never commit
+**/*_incomplete.docx
+**/*_in-progress.docx
+**/*_finished.docx
+**/*_submitted.docx
+
+# Keep only the blank template asset if needed by the app
+!assets/templates/TEMPLATE.docx
+
+# Local-only writer/helper scripts with PC paths
+mr_notes_*.ps1
+mr_notes_*.js
+start_invoice_web.ps1
+start_offline_notes.ps1
+tools/offline_docx_note_writer.ps1
+
+# Local note writer logs
+node_writer.log
+mr_notes_writer.log
+
+# Local dev logs
+flutter_analyze_log.txt
+flutter_run_log.txt
+
+# Local writer/launcher scripts
+run_app_with_notes_writer.ps1
+start_invoice_app.ps1
+start_invoice_web.ps1
+start_offline_notes.ps1
+mr_notes_*.ps1
+mr_notes_*.js
+web/local_support_notes.js
+
+# Private generated notes
+MR NOTES FOLDER/
+**/MR NOTES FOLDER/
+**/*_incomplete.docx
+**/*_in-progress.docx
+**/*_finished.docx
+**/*_submitted.docx
+
+# Keep only blank app template asset
+!assets/templates/TEMPLATE.docx

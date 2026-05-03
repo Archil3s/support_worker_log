@@ -105,7 +105,10 @@ class CloudStorageService {
   Future<StoredAppData?> load() async {
     if (!isSignedIn) return null;
 
-    final snapshot = await _appDataDoc.get();
+    final snapshot = await _appDataDoc.get(
+      const GetOptions(source: Source.server),
+    );
+
     final data = snapshot.data();
 
     if (!snapshot.exists || data == null) {
@@ -122,5 +125,7 @@ class CloudStorageService {
       ...data.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    await _firestore.waitForPendingWrites();
   }
 }

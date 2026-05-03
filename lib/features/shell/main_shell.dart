@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../entries/entries_screen.dart';
+import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
 import '../quick_entry/quick_entry_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tax/tax_screen.dart';
 
-enum _Section { quick, entries, pay, home, more, tax, charts, settings }
+enum _Section { quick, entries, notes, pay, home, more, tax, charts, settings }
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -26,10 +27,11 @@ class _MainShellState extends State<MainShell> {
         return 0;
       case _Section.entries:
         return 1;
-      case _Section.pay:
+      case _Section.notes:
         return 2;
-      case _Section.home:
+      case _Section.pay:
         return 3;
+      case _Section.home:
       case _Section.more:
       case _Section.tax:
       case _Section.charts:
@@ -44,6 +46,8 @@ class _MainShellState extends State<MainShell> {
         return 'Quick Entry';
       case _Section.entries:
         return 'Entries';
+      case _Section.notes:
+        return 'Notes';
       case _Section.pay:
         return 'Pay Period';
       case _Section.home:
@@ -73,10 +77,10 @@ class _MainShellState extends State<MainShell> {
         _go(_Section.entries);
         break;
       case 2:
-        _go(_Section.pay);
+        _go(_Section.notes);
         break;
       case 3:
-        _go(_Section.home);
+        _go(_Section.pay);
         break;
       case 4:
         _go(_Section.more);
@@ -90,6 +94,8 @@ class _MainShellState extends State<MainShell> {
         return const QuickEntryScreen();
       case _Section.entries:
         return const EntriesScreen();
+      case _Section.notes:
+        return const NotesScreen();
       case _Section.pay:
         return const PayPeriodScreen();
       case _Section.home:
@@ -100,6 +106,7 @@ class _MainShellState extends State<MainShell> {
         );
       case _Section.more:
         return _MoreScreen(
+          onHome: () => _go(_Section.home),
           onTax: () => _go(_Section.tax),
           onCharts: () => _go(_Section.charts),
           onSettings: () => _go(_Section.settings),
@@ -174,17 +181,17 @@ class _FastBottomNav extends StatelessWidget {
           _FastNavItem(
             index: 2,
             selectedIndex: selectedIndex,
-            icon: Icons.calendar_month_outlined,
-            selectedIcon: Icons.calendar_month_rounded,
-            label: 'Pay',
+            icon: Icons.note_alt_outlined,
+            selectedIcon: Icons.note_alt_rounded,
+            label: 'Notes',
             onTap: onTap,
           ),
           _FastNavItem(
             index: 3,
             selectedIndex: selectedIndex,
-            icon: Icons.dashboard_outlined,
-            selectedIcon: Icons.dashboard_rounded,
-            label: 'Home',
+            icon: Icons.calendar_month_outlined,
+            selectedIcon: Icons.calendar_month_rounded,
+            label: 'Pay',
             onTap: onTap,
           ),
           _FastNavItem(
@@ -263,11 +270,13 @@ class _FastNavItem extends StatelessWidget {
 
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
+    required this.onHome,
     required this.onTax,
     required this.onCharts,
     required this.onSettings,
   });
 
+  final VoidCallback onHome;
   final VoidCallback onTax;
   final VoidCallback onCharts;
   final VoidCallback onSettings;
@@ -277,6 +286,13 @@ class _MoreScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
+        _MoreTile(
+          icon: Icons.dashboard_outlined,
+          title: 'Dashboard',
+          subtitle: 'Home overview, totals, and shortcuts',
+          onTap: onHome,
+        ),
+        const SizedBox(height: 12),
         _MoreTile(
           icon: Icons.receipt_long_outlined,
           title: 'Tax',
