@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/active_visit.dart';
 import '../models/app_settings.dart';
+import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
 import '../services/cloud_storage_service.dart';
 import '../services/storage_service.dart';
@@ -25,6 +26,7 @@ class AppState extends ChangeNotifier {
 
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
+  final Map<String, InvoiceStatus> _invoiceStatuses = {};
 
   bool _cloudSyncReady = false;
   String? _cloudSyncError;
@@ -33,6 +35,8 @@ class AppState extends ChangeNotifier {
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
+  Map<String, InvoiceStatus> get invoiceStatuses =>
+      Map.unmodifiable(_invoiceStatuses);
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get cloudSyncReady => _cloudSyncReady;
@@ -109,6 +113,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  InvoiceStatus invoiceStatusForKey(String key) {
+    return _invoiceStatuses[key] ?? InvoiceStatus.notSubmitted;
+  }
+
+  void updateInvoiceStatus(String key, InvoiceStatus status) {
+    if (key.trim().isEmpty) return;
+
+    final current = _invoiceStatuses[key] ?? InvoiceStatus.notSubmitted;
+    if (current == status) return;
+
+    if (status == InvoiceStatus.notSubmitted) {
+      _invoiceStatuses.remove(key);
+    } else {
+      _invoiceStatuses[key] = status;
+    }
+
+    _persistAndNotify();
+  }
+
   Future<void> restoreFromBackup(StoredAppData data) async {
     _replaceInMemory(data);
     await _save();
@@ -126,6 +149,7 @@ class AppState extends ChangeNotifier {
       ..addAll(['Client A', 'Client B', 'Client C']);
 
     _entries.clear();
+    _invoiceStatuses.clear();
 
     await _save();
     notifyListeners();
@@ -338,6 +362,10 @@ class AppState extends ChangeNotifier {
     _entries
       ..clear()
       ..addAll(cleanedEntries);
+
+    _invoiceStatuses
+      ..clear()
+      ..addAll(data.invoiceStatuses);
   }
 
   StoredAppData _mergeStoredData({
@@ -359,6 +387,10 @@ class AppState extends ChangeNotifier {
       clients: mergedClients.isEmpty ? ['Client A'] : mergedClients,
       entries: mergedEntries,
       activeVisit: cloudData.activeVisit ?? localData.activeVisit,
+      invoiceStatuses: {
+        ...cloudData.invoiceStatuses,
+        ...localData.invoiceStatuses,
+      },
     );
   }
 
@@ -368,6 +400,7 @@ class AppState extends ChangeNotifier {
       clients: _clients,
       entries: _entries,
       activeVisit: _activeVisit,
+      invoiceStatuses: _invoiceStatuses,
     );
   }
 

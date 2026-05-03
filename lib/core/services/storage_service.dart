@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/active_visit.dart';
 import '../models/app_settings.dart';
+import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
 
 class StoredAppData {
@@ -12,12 +13,14 @@ class StoredAppData {
     required this.clients,
     required this.entries,
     this.activeVisit,
+    this.invoiceStatuses = const {},
   });
 
   final AppSettings settings;
   final List<String> clients;
   final List<WorkEntry> entries;
   final ActiveVisit? activeVisit;
+  final Map<String, InvoiceStatus> invoiceStatuses;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -33,6 +36,9 @@ class StoredAppData {
       'clients': clients,
       'entries': entries.map((entry) => entry.toJson()).toList(),
       'activeVisit': activeVisit?.toJson(),
+      'invoiceStatuses': invoiceStatuses.map(
+        (key, status) => MapEntry(key, status.name),
+      ),
     };
   }
 
@@ -65,6 +71,18 @@ class StoredAppData {
       }
     }
 
+    final invoiceStatuses = <String, InvoiceStatus>{};
+    final rawInvoiceStatuses = json['invoiceStatuses'];
+
+    if (rawInvoiceStatuses is Map) {
+      for (final entry in rawInvoiceStatuses.entries) {
+        final key = entry.key?.toString() ?? '';
+        if (key.trim().isEmpty) continue;
+
+        invoiceStatuses[key] = invoiceStatusFromName(entry.value?.toString());
+      }
+    }
+
     ActiveVisit? activeVisit;
     final rawActiveVisit = json['activeVisit'];
 
@@ -81,6 +99,7 @@ class StoredAppData {
       clients: clients.isEmpty ? ['Client A'] : clients,
       entries: entries,
       activeVisit: activeVisit,
+      invoiceStatuses: invoiceStatuses,
     );
   }
 }

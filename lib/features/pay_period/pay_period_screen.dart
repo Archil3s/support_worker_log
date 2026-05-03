@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
+import '../../core/models/invoice_status.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/invoice_pdf_service.dart';
 import '../../core/models/app_settings.dart';
@@ -17,6 +18,8 @@ import '../../shared/widgets/stat_grid.dart';
 
 const int firstDisplayedInvoiceNumber = 10;
 
+enum _InvoiceMoneyView { total, owed }
+
 class PayPeriodScreen extends StatefulWidget {
   const PayPeriodScreen({super.key});
 
@@ -27,6 +30,7 @@ class PayPeriodScreen extends StatefulWidget {
 class _PayPeriodScreenState extends State<PayPeriodScreen> {
   late PayPeriodRange selectedRange;
   bool selectedRangeReady = false;
+  _InvoiceMoneyView moneyView = _InvoiceMoneyView.total;
 
   @override
   void initState() {
@@ -193,6 +197,19 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
       selectedRange.weekTwoEnd,
     );
     final selectedInvoiceNumber = _invoiceNumberForSelectedRange(invoiceRows);
+    final allInvoiceTotal = _invoiceRowsTotal(invoiceRows, settings);
+    final owedInvoiceTotal = _invoiceRowsTotal(
+      invoiceRows.where(
+        (row) => appState.invoiceStatusForKey(_invoiceKey(row.range)).isOwed,
+      ),
+      settings,
+    );
+    final paidInvoiceTotal = _invoiceRowsTotal(
+      invoiceRows.where(
+        (row) => appState.invoiceStatusForKey(_invoiceKey(row.range)).isPaid,
+      ),
+      settings,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -235,9 +252,30 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
         ),
         const SizedBox(height: 16),
         SectionCard(
-          title: '2-Week Invoice Periods',
+          title: 'Invoice Money',
+          child: _InvoiceMoneySummary(
+            selectedView: moneyView,
+            totalMoney: allInvoiceTotal,
+            owedMoney: owedInvoiceTotal,
+            paidMoney: paidInvoiceTotal,
+            onChanged: (next) => setState(() => moneyView = next),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SectionCard(
+          title: moneyView == _InvoiceMoneyView.owed
+              ? 'Money Owed - Submitted Invoices'
+              : '2-Week Invoice Periods',
           child: _InvoicePeriodsTable(
-            rows: invoiceRows,
+            rows: moneyView == _InvoiceMoneyView.owed
+                ? invoiceRows
+                      .where(
+                        (row) => appState
+                            .invoiceStatusForKey(_invoiceKey(row.range))
+                            .isOwed,
+                      )
+                      .toList()
+                : invoiceRows,
             selectedRange: selectedRange,
             onSelected: selectInvoicePeriod,
           ),
@@ -360,6 +398,248 @@ int _invoiceNumberForRange(
   return rows.length + 1;
 }
 
+class _InvoiceMoneySummary extends StatelessWidget {
+  const _InvoiceMoneySummary({
+    required this.selectedView,
+    required this.totalMoney,
+    required this.owedMoney,
+    required this.paidMoney,
+    required this.onChanged,
+  });
+
+  final _InvoiceMoneyView selectedView;
+  final double totalMoney;
+  final double owedMoney;
+  final double paidMoney;
+  final ValueChanged<_InvoiceMoneyView> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedValue = selectedView == _InvoiceMoneyView.total
+        ? totalMoney
+        : owedMoney;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SegmentedButton<_InvoiceMoneyView>(
+          segments: const [
+            ButtonSegment<_InvoiceMoneyView>(
+              value: _InvoiceMoneyView.total,
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              label: Text('Total Money'),
+            ),
+            ButtonSegment<_InvoiceMoneyView>(
+              value: _InvoiceMoneyView.owed,
+              icon: Icon(Icons.pending_actions_outlined),
+              label: Text('Money Owed'),
+            ),
+          ],
+          selected: {selectedView},
+          onSelectionChanged: (values) => onChanged(values.first),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          money(selectedValue),
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          selectedView == _InvoiceMoneyView.total
+              ? 'Total value of all invoice periods'
+              : 'Submitted invoices not marked as paid',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFF8396C7),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _MoneyChip(label: 'Total', value: totalMoney),
+            _MoneyChip(label: 'Owed', value: owedMoney),
+            _MoneyChip(label: 'Paid', value: paidMoney),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MoneyChip extends StatelessWidget {
+  const _MoneyChip({required this.label, required this.value});
+
+  final String label;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      label: Text('$label: ${money(value)}'),
+      side: const BorderSide(color: Color(0xFF34405F)),
+      backgroundColor: const Color(0xFF20283B),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w900),
+    );
+  }
+}
+
+class _InvoiceStatusPill extends StatelessWidget {
+  const _InvoiceStatusPill({required this.status});
+
+  final InvoiceStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _invoiceStatusColor(status);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color),
+        ),
+        child: Text(
+          status.label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InvoiceStatusButtons extends StatelessWidget {
+  const _InvoiceStatusButtons({required this.status, required this.onChanged});
+
+  final InvoiceStatus status;
+  final ValueChanged<InvoiceStatus> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _StatusButton(
+          label: 'Not Submitted',
+          icon: Icons.radio_button_unchecked,
+          selected: status == InvoiceStatus.notSubmitted,
+          color: _invoiceStatusColor(InvoiceStatus.notSubmitted),
+          onTap: () => onChanged(InvoiceStatus.notSubmitted),
+        ),
+        _StatusButton(
+          label: 'Submitted',
+          icon: Icons.upload_file_outlined,
+          selected: status == InvoiceStatus.submitted,
+          color: _invoiceStatusColor(InvoiceStatus.submitted),
+          onTap: () => onChanged(InvoiceStatus.submitted),
+        ),
+        _StatusButton(
+          label: 'Paid',
+          icon: Icons.check_circle_outline,
+          selected: status == InvoiceStatus.paid,
+          color: _invoiceStatusColor(InvoiceStatus.paid),
+          onTap: () => onChanged(InvoiceStatus.paid),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusButton extends StatelessWidget {
+  const _StatusButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(icon, size: 16, color: selected ? color : Colors.white70),
+      label: Text(label),
+      onPressed: onTap,
+      side: BorderSide(color: color),
+      backgroundColor: selected ? color.withOpacity(0.18) : Colors.transparent,
+      labelStyle: TextStyle(
+        color: selected ? color : Colors.white70,
+        fontWeight: FontWeight.w900,
+        fontSize: 12,
+      ),
+    );
+  }
+}
+
+String _invoiceKey(PayPeriodRange range) {
+  return '${_keyDate(range.start)}_${_keyDate(range.end)}';
+}
+
+String _keyDate(DateTime value) {
+  final year = value.year.toString().padLeft(4, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+
+  return '$year-$month-$day';
+}
+
+double _invoiceRowsTotal(
+  Iterable<_InvoicePeriodRow> rows,
+  AppSettings settings,
+) {
+  return rows.fold<double>(
+    0,
+    (total, row) => total + _invoiceTotal(row.entries, settings),
+  );
+}
+
+double _invoiceTotal(List<WorkEntry> entries, AppSettings settings) {
+  return totalEarnings(entries, settings) +
+      (totalKilometres(entries) * settings.fuelRate);
+}
+
+Color _invoiceStatusColor(InvoiceStatus status) {
+  switch (status) {
+    case InvoiceStatus.notSubmitted:
+      return const Color(0xFF8396C7);
+    case InvoiceStatus.submitted:
+      return const Color(0xFFFFC857);
+    case InvoiceStatus.paid:
+      return const Color(0xFF22C55E);
+  }
+}
+
+Color _invoiceStatusBackground(InvoiceStatus status) {
+  switch (status) {
+    case InvoiceStatus.notSubmitted:
+      return Colors.transparent;
+    case InvoiceStatus.submitted:
+      return const Color(0xFF2A2413);
+    case InvoiceStatus.paid:
+      return const Color(0xFF102A1C);
+  }
+}
+
 class _InvoicePeriodsTable extends StatelessWidget {
   const _InvoicePeriodsTable({
     required this.rows,
@@ -480,7 +760,11 @@ class _InvoicePeriodTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = _sameRange(row.range, selectedRange);
-    final settings = context.watch<AppState>().settings;
+    final appState = context.watch<AppState>();
+    final settings = appState.settings;
+    final invoiceKey = _invoiceKey(row.range);
+    final invoiceStatus = appState.invoiceStatusForKey(invoiceKey);
+    final invoiceTotal = _invoiceTotal(row.entries, settings);
     final hours = totalHours(row.entries);
     final km = totalKilometres(row.entries);
     final hoursText = hours.toStringAsFixed(2);
@@ -493,10 +777,14 @@ class _InvoicePeriodTile extends StatelessWidget {
       onTap: () => _openBreakdown(context),
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF20283B) : Colors.transparent,
+          color: isSelected
+              ? const Color(0xFF20283B)
+              : _invoiceStatusBackground(invoiceStatus),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? const Color(0xFF5B8CFF) : Colors.transparent,
+            color: isSelected
+                ? const Color(0xFF5B8CFF)
+                : _invoiceStatusColor(invoiceStatus),
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -570,7 +858,8 @@ class _InvoiceBreakdownSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<AppState>().settings;
+    final appState = context.watch<AppState>();
+    final settings = appState.settings;
 
     final entries = row.entries.toList()
       ..sort((a, b) {
@@ -628,6 +917,14 @@ class _InvoiceBreakdownSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            SectionCard(
+              title: 'Invoice Status',
+              child: _InvoiceStatusEditor(
+                range: row.range,
+                invoiceTotal: _invoiceTotal(entries, settings),
+              ),
+            ),
+            const SizedBox(height: 16),
             StatGrid(
               cards: [
                 StatCard(title: 'Entries', value: '${entries.length}'),
@@ -680,6 +977,41 @@ class _InvoiceBreakdownSheet extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _InvoiceStatusEditor extends StatelessWidget {
+  const _InvoiceStatusEditor({required this.range, required this.invoiceTotal});
+
+  final PayPeriodRange range;
+  final double invoiceTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final invoiceKey = _invoiceKey(range);
+    final status = appState.invoiceStatusForKey(invoiceKey);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InvoiceStatusPill(status: status),
+        const SizedBox(height: 10),
+        Text(
+          'Invoice total: ${money(invoiceTotal)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _InvoiceStatusButtons(
+          status: status,
+          onChanged: (next) =>
+              context.read<AppState>().updateInvoiceStatus(invoiceKey, next),
+        ),
+      ],
     );
   }
 }
@@ -793,7 +1125,7 @@ bool _sameDate(DateTime a, DateTime b) {
 }
 
 String _formatInvoiceDateRange(PayPeriodRange range) {
-  return '${_formatNumericDate(range.start)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ ${_formatNumericDate(range.end)}';
+  return '${_formatNumericDate(range.start)} - ${_formatNumericDate(range.end)}';
 }
 
 String _formatNumericDate(DateTime date) {
