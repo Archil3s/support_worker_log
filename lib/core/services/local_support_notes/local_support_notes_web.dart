@@ -1,6 +1,7 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:convert';
-import 'dart:js_util' as js_util;
+import 'dart:html' as html;
 
 class LocalSupportNotesPlatform {
   static const String _writerUrl = 'http://127.0.0.1:51239';
@@ -42,41 +43,42 @@ class LocalSupportNotesPlatform {
   }
 
   Future<void> _post(String path, Map<String, dynamic> body) async {
-    final response = await js_util
-        .promiseToFuture<dynamic>(
-          js_util.callMethod(js_util.globalThis, 'fetch', [
-            '$_writerUrl$path',
-            js_util.jsify({
-              'method': 'POST',
-              'headers': {'Content-Type': 'text/plain;charset=utf-8'},
-              'body': jsonEncode(body),
-              'cache': 'no-store',
-            }),
-          ]),
-        )
-        .timeout(const Duration(seconds: 25));
+    html.HttpRequest response;
 
-    final statusRaw = js_util.getProperty<dynamic>(response, 'status');
-    final status = statusRaw is num ? statusRaw.toInt() : 0;
-
-    final text = await js_util.promiseToFuture<String>(
-      js_util.callMethod(response, 'text', []),
-    );
-
-    if (status < 200 || status >= 300) {
+    try {
+      response = await html.HttpRequest.request(
+        '$_writerUrl$path',
+        method: 'POST',
+        requestHeaders: const {'Content-Type': 'text/plain;charset=utf-8'},
+        sendData: jsonEncode(body),
+      ).timeout(const Duration(seconds: 20));
+    } on TimeoutException {
       throw StateError(
-        text.trim().isNotEmpty
-            ? text
-            : 'Local Node notes writer failed with HTTP $status.',
+        'Local notes writer timed out. Start the app with start_invoice_web.ps1.',
+      );
+    } catch (error) {
+      throw StateError(
+        'Local notes writer is not reachable. Start the app with start_invoice_web.ps1. Details: $error',
       );
     }
 
-    if (text.trim().isEmpty) return;
+    final status = response.status ?? 0;
+    final raw = response.responseText ?? '';
 
-    final decoded = jsonDecode(text);
+    if (status < 200 || status >= 300) {
+      throw StateError(
+        raw.trim().isNotEmpty
+            ? raw
+            : 'Local notes writer failed with HTTP $status.',
+      );
+    }
+
+    if (raw.trim().isEmpty) return;
+
+    final decoded = jsonDecode(raw);
 
     if (decoded is Map && decoded['ok'] == true) return;
 
-    throw StateError(text);
+    throw StateError(raw);
   }
 }

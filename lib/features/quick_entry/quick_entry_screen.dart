@@ -36,8 +36,15 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   EntryType selectedType = EntryType.homeVisit;
   String? loadedActiveVisitId;
   WorkEntry? recentlySavedEntry;
+  late DateTime selectedVisitDate;
 
   final selectedNotes = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    selectedVisitDate = _dateOnly(DateTime.now());
+  }
 
   @override
   void dispose() {
@@ -45,6 +52,39 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     finishOdometerController.dispose();
     noteController.dispose();
     super.dispose();
+  }
+
+  DateTime _dateOnly(DateTime value) {
+    return DateTime(value.year, value.month, value.day);
+  }
+
+  DateTime _startDateTimeForSelectedDate() {
+    final now = DateTime.now();
+    final date = _dateOnly(selectedVisitDate);
+
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      now.hour,
+      now.minute,
+      now.second,
+      now.millisecond,
+      now.microsecond,
+    );
+  }
+
+  Future<void> _pickVisitDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedVisitDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() => selectedVisitDate = _dateOnly(picked));
   }
 
   double? _readDouble(TextEditingController controller) {
@@ -91,13 +131,14 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     }
 
     final notes = selectedNotes.toList()..sort();
+    final startedAt = _startDateTimeForSelectedDate();
 
     appState.startActiveVisit(
       ActiveVisit(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         client: client,
         type: selectedType,
-        startedAt: DateTime.now(),
+        startedAt: startedAt,
         odometerStart: selectedType == EntryType.homeVisit
             ? _readDouble(startOdometerController)
             : null,
@@ -272,6 +313,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         },
       );
     }
+
     if (activeVisit != null) {
       _syncActiveVisit(activeVisit);
       return _ActiveVisitView(
@@ -301,6 +343,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       selectedClient: selectedClient,
       selectedType: selectedType,
       selectedNotes: selectedNotes,
+      visitDate: selectedVisitDate,
       startOdometerController: startOdometerController,
       onClientSelected: (client) {
         setState(() => selectedClient = client);
@@ -322,6 +365,17 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
           }
         });
       },
+      onUseToday: () {
+        setState(() => selectedVisitDate = _dateOnly(DateTime.now()));
+      },
+      onUsePreviousDay: () {
+        setState(
+          () => selectedVisitDate = _dateOnly(
+            selectedVisitDate.subtract(const Duration(days: 1)),
+          ),
+        );
+      },
+      onPickDate: _pickVisitDate,
       onStart: () => _startVisit(appState),
     );
   }
@@ -452,10 +506,14 @@ class _StartVisitView extends StatelessWidget {
     required this.selectedClient,
     required this.selectedType,
     required this.selectedNotes,
+    required this.visitDate,
     required this.startOdometerController,
     required this.onClientSelected,
     required this.onTypeSelected,
     required this.onNoteToggle,
+    required this.onUseToday,
+    required this.onUsePreviousDay,
+    required this.onPickDate,
     required this.onStart,
   });
 
@@ -463,10 +521,14 @@ class _StartVisitView extends StatelessWidget {
   final String? selectedClient;
   final EntryType selectedType;
   final Set<String> selectedNotes;
+  final DateTime visitDate;
   final TextEditingController startOdometerController;
   final ValueChanged<String> onClientSelected;
   final ValueChanged<EntryType> onTypeSelected;
   final void Function(String note, bool selected) onNoteToggle;
+  final VoidCallback onUseToday;
+  final VoidCallback onUsePreviousDay;
+  final VoidCallback onPickDate;
   final VoidCallback onStart;
 
   @override
@@ -479,8 +541,40 @@ class _StartVisitView extends StatelessWidget {
         _HeroPanel(
           title: 'Start visit',
           subtitle:
-              'Tap client, tap support type, then press Start Now. Finish time and finish odometer can be added later.',
+              'Tap client, tap support type, choose the visit date, then press Start Now.',
           icon: Icons.play_arrow_rounded,
+        ),
+        const SizedBox(height: 12),
+        _Panel(
+          title: 'Visit Date',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _InfoRow(label: 'Selected date', value: formatDate(visitDate)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: onUseToday,
+                    icon: const Icon(Icons.today_outlined),
+                    label: const Text('Today'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onUsePreviousDay,
+                    icon: const Icon(Icons.chevron_left),
+                    label: const Text('Previous Day'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onPickDate,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: const Text('Pick Date'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         _Panel(

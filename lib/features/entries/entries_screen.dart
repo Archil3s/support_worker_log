@@ -15,7 +15,6 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
 import 'edit_entry_sheet.dart';
-import 'local_support_note_button.dart';
 
 class EntriesScreen extends StatefulWidget {
   const EntriesScreen({super.key});

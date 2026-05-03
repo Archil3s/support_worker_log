@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element, deprecated_member_use, unused_local_variable
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,7 @@ import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
 
 const int firstDisplayedInvoiceNumber = 10;
+const int futureInvoicePeriodsToDisplay = 26;
 
 enum _InvoiceMoneyView { total, owed }
 
@@ -48,12 +50,9 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     if (selectedRangeReady) return;
 
     final appState = context.read<AppState>();
-    selectedRange =
-        _latestInvoiceRange(
-          appState.entries,
-          appState.settings.payPeriodAnchorDate,
-        ) ??
-        currentFortnight(anchorDate: appState.settings.payPeriodAnchorDate);
+    selectedRange = currentFortnight(
+      anchorDate: appState.settings.payPeriodAnchorDate,
+    );
 
     selectedRangeReady = true;
   }
@@ -62,9 +61,7 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     List<WorkEntry> entries,
     DateTime? anchorDate,
   ) {
-    final rows = _invoicePeriodRows(entries, anchorDate);
-    if (rows.isEmpty) return null;
-    return rows.last.range;
+    return currentFortnight(anchorDate: anchorDate);
   }
 
   void selectInvoicePeriod(PayPeriodRange range) {
@@ -73,15 +70,11 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
 
   void showLatestInvoicePeriod() {
     final appState = context.read<AppState>();
-    final latestRange = _latestInvoiceRange(
-      appState.entries,
-      appState.settings.payPeriodAnchorDate,
-    );
 
     setState(
-      () => selectedRange =
-          latestRange ??
-          currentFortnight(anchorDate: appState.settings.payPeriodAnchorDate),
+      () => selectedRange = currentFortnight(
+        anchorDate: appState.settings.payPeriodAnchorDate,
+      ),
     );
   }
 
@@ -101,10 +94,14 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     }
 
     if (rows.isEmpty) {
-      return 1;
+      return firstDisplayedInvoiceNumber;
     }
 
-    return rows.length + 1;
+    final periodOffset =
+        selectedRange.start.difference(rows.first.range.start).inDays ~/
+        invoicePeriodDays;
+
+    return rows.first.index + periodOffset;
   }
 
   Future<void> _exportSelectedInvoice({
@@ -196,6 +193,7 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
       selectedRange.weekTwoStart,
       selectedRange.weekTwoEnd,
     );
+
     final selectedInvoiceNumber = _invoiceNumberForSelectedRange(invoiceRows);
     final allInvoiceTotal = _invoiceRowsTotal(invoiceRows, settings);
     final owedInvoiceTotal = _invoiceRowsTotal(
@@ -210,6 +208,15 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
       ),
       settings,
     );
+
+    final visibleInvoiceRows = moneyView == _InvoiceMoneyView.owed
+        ? invoiceRows
+              .where(
+                (row) =>
+                    appState.invoiceStatusForKey(_invoiceKey(row.range)).isOwed,
+              )
+              .toList()
+        : invoiceRows;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -267,15 +274,7 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
               ? 'Money Owed - Submitted Invoices'
               : '2-Week Invoice Periods',
           child: _InvoicePeriodsTable(
-            rows: moneyView == _InvoiceMoneyView.owed
-                ? invoiceRows
-                      .where(
-                        (row) => appState
-                            .invoiceStatusForKey(_invoiceKey(row.range))
-                            .isOwed,
-                      )
-                      .toList()
-                : invoiceRows,
+            rows: visibleInvoiceRows,
             selectedRange: selectedRange,
             onSelected: selectInvoicePeriod,
           ),
@@ -299,7 +298,6 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
           ],
         ),
         const SizedBox(height: 16),
-
         FilledButton.icon(
           onPressed: periodEntries.isEmpty
               ? null
@@ -356,8 +354,12 @@ List<_InvoicePeriodRow> _invoicePeriodRows(
   List<WorkEntry> entries,
   DateTime? anchorDate,
 ) {
-  if (entries.isEmpty) return const [];
+  final anchorRange = fortnightForDate(
+    anchorDate ?? defaultPayPeriodAnchorDate,
+    anchorDate: anchorDate,
+  );
 
+  final currentRange = currentFortnight(anchorDate: anchorDate);
   final grouped = <DateTime, List<WorkEntry>>{};
 
   for (final entry in entries) {
@@ -365,20 +367,63 @@ List<_InvoicePeriodRow> _invoicePeriodRows(
     grouped.putIfAbsent(range.start, () => <WorkEntry>[]).add(entry);
   }
 
-  final starts = grouped.keys.toList()..sort();
+  var firstStart = anchorRange.start;
 
-  return [
-    for (var index = 0; index < starts.length; index++)
+  if (grouped.isNotEmpty) {
+    final firstEntryStart = grouped.keys.reduce(
+      (a, b) => a.isBefore(b) ? a : b,
+    );
+
+    if (firstEntryStart.isBefore(firstStart)) {
+      firstStart = firstEntryStart;
+    }
+  }
+
+  var lastStart = currentRange.start;
+
+  if (grouped.isNotEmpty) {
+    final lastEntryStart = grouped.keys.reduce((a, b) => a.isAfter(b) ? a : b);
+
+    if (lastEntryStart.isAfter(lastStart)) {
+      lastStart = lastEntryStart;
+    }
+  }
+
+  lastStart = lastStart.add(
+    const Duration(days: invoicePeriodDays * futureInvoicePeriodsToDisplay),
+  );
+
+  final rows = <_InvoicePeriodRow>[];
+  var start = firstStart;
+  var invoiceNumber = firstDisplayedInvoiceNumber;
+
+  while (!start.isAfter(lastStart)) {
+    final periodEntries = (grouped[start] ?? <WorkEntry>[]).toList()
+      ..sort((a, b) {
+        final dateCompare = a.date.compareTo(b.date);
+        if (dateCompare != 0) return dateCompare;
+
+        final aMinutes = a.startTime.hour * 60 + a.startTime.minute;
+        final bMinutes = b.startTime.hour * 60 + b.startTime.minute;
+        return aMinutes.compareTo(bMinutes);
+      });
+
+    rows.add(
       _InvoicePeriodRow(
-        index: index + 1,
+        index: invoiceNumber,
         range: PayPeriodRange(
-          start: starts[index],
-          end: starts[index].add(const Duration(days: 13)),
+          start: start,
+          end: start.add(const Duration(days: invoicePeriodDays - 1)),
         ),
-        entries: grouped[starts[index]]!
-          ..sort((a, b) => a.date.compareTo(b.date)),
+        entries: periodEntries,
       ),
-  ];
+    );
+
+    start = start.add(const Duration(days: invoicePeriodDays));
+    invoiceNumber++;
+  }
+
+  return rows;
 }
 
 int _invoiceNumberForRange(
@@ -392,10 +437,14 @@ int _invoiceNumberForRange(
   }
 
   if (rows.isEmpty) {
-    return 1;
+    return firstDisplayedInvoiceNumber;
   }
 
-  return rows.length + 1;
+  final periodOffset =
+      selectedRange.start.difference(rows.first.range.start).inDays ~/
+      invoicePeriodDays;
+
+  return rows.first.index + periodOffset;
 }
 
 class _InvoiceMoneySummary extends StatelessWidget {
