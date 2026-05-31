@@ -19,6 +19,11 @@ String _noteTitleForEntry({
   return '$initials | ${status.label} | ${formatDate(entry.date)}';
 }
 
+String _dateTimeText(BuildContext context, DateTime value) {
+  final time = TimeOfDay.fromDateTime(value).format(context);
+  return '${formatDate(value)} $time';
+}
+
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
 
@@ -74,10 +79,83 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _filtered(context.watch<AppState>().entries);
+    final allEntries = context.watch<AppState>().entries;
+    final entries = _filtered(allEntries);
+    final nextActionEntries =
+        allEntries.where((entry) => entry.nextActions.isNotEmpty).toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
 
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TabBar(
+              tabs: [
+                Tab(icon: Icon(Icons.note_alt_outlined), text: 'Notes'),
+                Tab(
+                  icon: Icon(Icons.checklist_rtl_outlined),
+                  text: 'Next Actions',
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _NotesListTab(
+                  entries: entries,
+                  statusFilter: statusFilter,
+                  searchController: searchController,
+                  search: search,
+                  onSearchChanged: (value) => setState(() => search = value),
+                  onClearSearch: () {
+                    setState(() {
+                      searchController.clear();
+                      search = '';
+                    });
+                  },
+                  onStatusFilterChanged: (value) {
+                    setState(() => statusFilter = value);
+                  },
+                  onChooseFolder: _chooseFolder,
+                ),
+                _NextActionsTab(entries: nextActionEntries),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotesListTab extends StatelessWidget {
+  const _NotesListTab({
+    required this.entries,
+    required this.statusFilter,
+    required this.searchController,
+    required this.search,
+    required this.onSearchChanged,
+    required this.onClearSearch,
+    required this.onStatusFilterChanged,
+    required this.onChooseFolder,
+  });
+
+  final List<WorkEntry> entries;
+  final EntrySupportNoteStatus? statusFilter;
+  final TextEditingController searchController;
+  final String search;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearSearch;
+  final ValueChanged<EntrySupportNoteStatus?> onStatusFilterChanged;
+  final VoidCallback onChooseFolder;
+
+  @override
+  Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
         SectionCard(
           title: 'Local Notes',
@@ -85,7 +163,7 @@ class _NotesScreenState extends State<NotesScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.icon(
-                onPressed: _chooseFolder,
+                onPressed: onChooseFolder,
                 icon: const Icon(Icons.folder_open_outlined),
                 label: const Text('Use Default MR NOTES FOLDER'),
               ),
@@ -105,7 +183,7 @@ class _NotesScreenState extends State<NotesScreen> {
             children: [
               TextField(
                 controller: searchController,
-                onChanged: (value) => setState(() => search = value),
+                onChanged: onSearchChanged,
                 decoration: InputDecoration(
                   labelText: 'Search notes',
                   helperText: 'Search by person, date, or support type',
@@ -113,12 +191,7 @@ class _NotesScreenState extends State<NotesScreen> {
                   suffixIcon: search.trim().isEmpty
                       ? null
                       : IconButton(
-                          onPressed: () {
-                            setState(() {
-                              searchController.clear();
-                              search = '';
-                            });
-                          },
+                          onPressed: onClearSearch,
                           icon: const Icon(Icons.clear),
                         ),
                 ),
@@ -138,7 +211,7 @@ class _NotesScreenState extends State<NotesScreen> {
                       child: Text(item.label),
                     ),
                 ],
-                onChanged: (value) => setState(() => statusFilter = value),
+                onChanged: onStatusFilterChanged,
               ),
             ],
           ),
@@ -155,6 +228,201 @@ class _NotesScreenState extends State<NotesScreen> {
             const SizedBox(height: 12),
           ],
       ],
+    );
+  }
+}
+
+class _NextActionsTab extends StatelessWidget {
+  const _NextActionsTab({required this.entries});
+
+  final List<WorkEntry> entries;
+
+  List<_EntryAction> get _openActions {
+    final actions = <_EntryAction>[];
+
+    for (final entry in entries) {
+      for (final action in entry.nextActions) {
+        if (!action.isCompleted) {
+          actions.add(_EntryAction(entry: entry, action: action));
+        }
+      }
+    }
+
+    return actions;
+  }
+
+  List<_EntryAction> get _completedActions {
+    final actions = <_EntryAction>[];
+
+    for (final entry in entries) {
+      for (final action in entry.nextActions) {
+        if (action.isCompleted) {
+          actions.add(_EntryAction(entry: entry, action: action));
+        }
+      }
+    }
+
+    actions.sort((a, b) {
+      final left =
+          a.action.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final right =
+          b.action.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+      return right.compareTo(left);
+    });
+
+    return actions;
+  }
+
+  void _toggleAction({
+    required BuildContext context,
+    required WorkEntry entry,
+    required NextActionItem action,
+    required bool completed,
+  }) {
+    final updatedActions = entry.nextActions.map((item) {
+      if (item.id != action.id) return item;
+
+      return item.copyWith(
+        completedAt: completed ? DateTime.now() : null,
+        clearCompletedAt: !completed,
+      );
+    }).toList();
+
+    context.read<AppState>().updateEntry(
+      entry.copyWith(nextActions: updatedActions),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final openActions = _openActions;
+    final completedActions = _completedActions;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        SectionCard(
+          title: 'Next Actions',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${openActions.length} open | ${completedActions.length} completed',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Actions come from the Next action(s) section when you finish a visit. Ticking an action logs the completion date and time.',
+                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (openActions.isEmpty && completedActions.isEmpty)
+          const SectionCard(
+            title: 'No Actions',
+            child: EmptyState(
+              message:
+                  'No next actions yet. Add them in the breakdown when you finish a visit.',
+            ),
+          )
+        else ...[
+          SectionCard(
+            title: 'Open',
+            child: openActions.isEmpty
+                ? const EmptyState(message: 'No open actions.')
+                : Column(
+                    children: [
+                      for (final item in openActions)
+                        _NextActionTile(
+                          entry: item.entry,
+                          action: item.action,
+                          onChanged: (completed) => _toggleAction(
+                            context: context,
+                            entry: item.entry,
+                            action: item.action,
+                            completed: completed,
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          if (completedActions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SectionCard(
+              title: 'Completed Log',
+              child: Column(
+                children: [
+                  for (final item in completedActions)
+                    _NextActionTile(
+                      entry: item.entry,
+                      action: item.action,
+                      onChanged: (completed) => _toggleAction(
+                        context: context,
+                        entry: item.entry,
+                        action: item.action,
+                        completed: completed,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+class _EntryAction {
+  const _EntryAction({required this.entry, required this.action});
+
+  final WorkEntry entry;
+  final NextActionItem action;
+}
+
+class _NextActionTile extends StatelessWidget {
+  const _NextActionTile({
+    required this.entry,
+    required this.action,
+    required this.onChanged,
+  });
+
+  final WorkEntry entry;
+  final NextActionItem action;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final completedAt = action.completedAt;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: CheckboxListTile(
+        value: action.isCompleted,
+        onChanged: (value) => onChanged(value ?? false),
+        controlAffinity: ListTileControlAffinity.leading,
+        activeColor: const Color(0xFF31E981),
+        title: Text(
+          action.text,
+          style: TextStyle(
+            decoration: action.isCompleted
+                ? TextDecoration.lineThrough
+                : TextDecoration.none,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          completedAt == null
+              ? '${entry.client} | ${formatDate(entry.date)}'
+              : '${entry.client} | completed ${_dateTimeText(context, completedAt)}',
+        ),
+      ),
     );
   }
 }
@@ -254,6 +522,21 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                 widget.entry.supportNoteBreakdown.trim(),
                 style: const TextStyle(height: 1.35),
               ),
+            ],
+            if (widget.entry.nextActions.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Tracked next actions',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              for (final action in widget.entry.nextActions)
+                Text(
+                  action.completedAt == null
+                      ? '- ${action.text}'
+                      : '- ${action.text} (completed ${_dateTimeText(context, action.completedAt!)})',
+                  style: const TextStyle(height: 1.35),
+                ),
             ],
             const SizedBox(height: 10),
             Wrap(

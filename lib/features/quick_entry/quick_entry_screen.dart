@@ -21,6 +21,49 @@ String _cleanHeaderText(String value) {
       .trim();
 }
 
+List<NextActionItem> _nextActionsFromBreakdown(String value) {
+  final lines = value.split(RegExp(r'\r?\n'));
+  final actions = <NextActionItem>[];
+  final now = DateTime.now();
+  var inNextActions = false;
+
+  for (final line in lines) {
+    final trimmed = line.trim();
+    final normalized = trimmed.toLowerCase();
+
+    if (normalized.startsWith('next action')) {
+      inNextActions = true;
+      continue;
+    }
+
+    if (inNextActions &&
+        (normalized.startsWith('overall impression') ||
+            normalized.startsWith('main topic') ||
+            normalized.startsWith('outcome'))) {
+      break;
+    }
+
+    if (!inNextActions || trimmed.isEmpty) continue;
+
+    final text = trimmed
+        .replaceFirst(RegExp(r'^\d+[\.)]\s*'), '')
+        .replaceFirst(RegExp(r'^[-*]\s*'), '')
+        .trim();
+
+    if (text.isEmpty) continue;
+
+    actions.add(
+      NextActionItem(
+        id: '${now.microsecondsSinceEpoch}-${actions.length}',
+        text: text,
+        createdAt: now,
+      ),
+    );
+  }
+
+  return actions;
+}
+
 class QuickEntryScreen extends StatefulWidget {
   const QuickEntryScreen({super.key});
 
@@ -205,6 +248,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     if (!mounted || supportNoteBreakdown == null) return;
 
+    final trimmedSupportNoteBreakdown = supportNoteBreakdown.trim();
     final typedNote = noteController.text.trim();
 
     final notes = [
@@ -225,7 +269,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       startTime: TimeOfDay.fromDateTime(activeVisit.startedAt),
       minutes: _minutesBetween(activeVisit.startedAt, finishedAt),
       notes: notes,
-      supportNoteBreakdown: supportNoteBreakdown.trim(),
+      supportNoteBreakdown: trimmedSupportNoteBreakdown,
+      nextActions: _nextActionsFromBreakdown(trimmedSupportNoteBreakdown),
       odometerStart: activeVisit.type == EntryType.homeVisit
           ? activeVisit.odometerStart
           : null,

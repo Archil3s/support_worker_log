@@ -202,9 +202,27 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
   }) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
-    if (savedBreakdown.isNotEmpty) return savedBreakdown;
+    final buffer = StringBuffer(
+      savedBreakdown.isNotEmpty ? savedBreakdown : supportNoteBreakdownTemplate,
+    );
 
-    return supportNoteBreakdownTemplate;
+    if (entry.nextActions.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln()
+        ..writeln('Tracked next actions');
+
+      for (final action in entry.nextActions) {
+        final completedText = action.completedAt == null
+            ? 'open'
+            : 'completed ${formatDate(action.completedAt!)} '
+                  '${_clock(action.completedAt!)}';
+
+        buffer.writeln('- ${action.text} ($completedText)');
+      }
+    }
+
+    return buffer.toString().trim();
   }
 
   static String noteTitle({
@@ -349,6 +367,13 @@ class LocalSupportNoteService {
     final day = value.day.toString().padLeft(2, '0');
 
     return '$year-$month-$day';
+  }
+
+  static String _clock(DateTime value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
   }
 
   static String _safeFilePart(String value) {

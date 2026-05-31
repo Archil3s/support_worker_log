@@ -12,9 +12,66 @@ Main topic(s)  (max. 200 words)
 Outcome(s)  (Max. 100 words)
     1. 
 
+Next action(s)
+    1.
+
 Overall impression (Max. 150 words)
     1. 
 ''';
+
+class NextActionItem {
+  const NextActionItem({
+    required this.id,
+    required this.text,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  final String id;
+  final String text;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+
+  bool get isCompleted => completedAt != null;
+
+  NextActionItem copyWith({
+    String? id,
+    String? text,
+    DateTime? createdAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
+  }) {
+    return NextActionItem(
+      id: id ?? this.id,
+      text: text ?? this.text,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'text': text,
+      'createdAt': createdAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+    };
+  }
+
+  factory NextActionItem.fromJson(Map<String, dynamic> json) {
+    final createdAt =
+        DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now();
+
+    return NextActionItem(
+      id:
+          json['id'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      text: json['text'] as String? ?? '',
+      createdAt: createdAt,
+      completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
+    );
+  }
+}
 
 class WorkEntry {
   const WorkEntry({
@@ -26,6 +83,7 @@ class WorkEntry {
     required this.minutes,
     required this.notes,
     this.supportNoteBreakdown = '',
+    this.nextActions = const [],
     this.odometerStart,
     this.odometerEnd,
   });
@@ -38,6 +96,7 @@ class WorkEntry {
   final int minutes;
   final List<String> notes;
   final String supportNoteBreakdown;
+  final List<NextActionItem> nextActions;
   final double? odometerStart;
   final double? odometerEnd;
 
@@ -88,6 +147,7 @@ class WorkEntry {
     int? minutes,
     List<String>? notes,
     String? supportNoteBreakdown,
+    List<NextActionItem>? nextActions,
     double? odometerStart,
     double? odometerEnd,
   }) {
@@ -100,6 +160,7 @@ class WorkEntry {
       minutes: minutes ?? this.minutes,
       notes: notes ?? this.notes,
       supportNoteBreakdown: supportNoteBreakdown ?? this.supportNoteBreakdown,
+      nextActions: nextActions ?? this.nextActions,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
     );
@@ -116,6 +177,7 @@ class WorkEntry {
       'minutes': minutes,
       'notes': notes,
       'supportNoteBreakdown': supportNoteBreakdown,
+      'nextActions': nextActions.map((item) => item.toJson()).toList(),
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
     };
@@ -155,6 +217,16 @@ class WorkEntry {
         ? rawNotes.whereType<String>().toList()
         : <String>[];
 
+    final rawNextActions = json['nextActions'];
+    final nextActions = rawNextActions is List
+        ? rawNextActions
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .map(NextActionItem.fromJson)
+              .where((item) => item.text.trim().isNotEmpty)
+              .toList()
+        : <NextActionItem>[];
+
     return WorkEntry(
       id:
           json['id'] as String? ??
@@ -169,6 +241,7 @@ class WorkEntry {
       minutes: boundInt(readInt('minutes', 0), 0, 1440),
       notes: notes,
       supportNoteBreakdown: json['supportNoteBreakdown'] as String? ?? '',
+      nextActions: nextActions,
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
     );
@@ -196,6 +269,20 @@ class WorkEntry {
       buffer
         ..writeln()
         ..writeln(supportNoteBreakdown.trim());
+    }
+
+    if (nextActions.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('Next actions:');
+
+      for (final item in nextActions) {
+        final status = item.completedAt == null
+            ? 'open'
+            : 'completed ${formatDate(item.completedAt!)}';
+
+        buffer.writeln('- ${item.text} ($status)');
+      }
     }
 
     return buffer.toString().trim();

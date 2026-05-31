@@ -135,6 +135,21 @@ class CalendarExportService {
       }
     }
 
+    if (entry.nextActions.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('Next actions:');
+
+      for (final item in entry.nextActions) {
+        final completed = item.completedAt == null
+            ? ''
+            : ' (completed ${_formatDate(item.completedAt!)} '
+                  '${_formatClock(item.completedAt!)})';
+
+        buffer.writeln('- ${item.text}$completed');
+      }
+    }
+
     return buffer.toString().trim();
   }
 

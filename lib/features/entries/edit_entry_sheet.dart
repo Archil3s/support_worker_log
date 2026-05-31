@@ -204,6 +204,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       minutes: savedMinutes,
       notes: buildNotes(),
       supportNoteBreakdown: widget.entry.supportNoteBreakdown,
+      nextActions: widget.entry.nextActions,
       odometerStart: odometerStart,
       odometerEnd: odometerEnd,
     );
