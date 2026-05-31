@@ -57,6 +57,10 @@ class _ChartsScreenState extends State<ChartsScreen> {
     final settings = appState.settings;
 
     final periodEntries = entriesInRange(appState.entries, selectedRange);
+    final previousEntries = entriesInRange(
+      appState.entries,
+      selectedRange.previous,
+    );
     final dailyPoints = buildDailyChartPoints(
       entries: periodEntries,
       settings: settings,
@@ -151,6 +155,25 @@ class _ChartsScreenState extends State<ChartsScreen> {
         ),
         const SizedBox(height: 12),
         SectionCard(
+          title: 'Trend vs Previous Fortnight',
+          child: _TrendSummary(
+            currentEntries: periodEntries,
+            previousEntries: previousEntries,
+            settings: settings,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Workflow Health',
+          child: _WorkflowHealth(entries: periodEntries),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Billable Time Mix',
+          child: _BillableTimeMix(entries: periodEntries),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
           title: 'Weekly Goal Visual',
           child: Column(
             children: [
@@ -177,13 +200,13 @@ class _ChartsScreenState extends State<ChartsScreen> {
                 label: 'Best day',
                 value: bestDay == null
                     ? '-'
-                    : '${formatDate(bestDay.date)} â€¢ ${bestDay.hours.toStringAsFixed(2)}h',
+                    : '${formatDate(bestDay.date)} | ${bestDay.hours.toStringAsFixed(2)}h',
               ),
               ReviewRow(
                 label: 'Top client',
                 value: clientSummaries.isEmpty
                     ? '-'
-                    : '${clientSummaries.first.client} â€¢ ${clientSummaries.first.hours.toStringAsFixed(2)}h',
+                    : '${clientSummaries.first.client} | ${clientSummaries.first.hours.toStringAsFixed(2)}h',
               ),
               ReviewRow(
                 label: 'Average hours / entry',
@@ -285,6 +308,451 @@ class _ChartsScreenState extends State<ChartsScreen> {
       ..sort((a, b) => b.hours.compareTo(a.hours));
 
     return summaries;
+  }
+}
+
+class _BillableTimeMix extends StatelessWidget {
+  const _BillableTimeMix({required this.entries});
+
+  final List<WorkEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final visitHours = entries.fold<double>(
+      0,
+      (sum, entry) => sum + entry.baseHours,
+    );
+    final noteHours = entries.fold<double>(
+      0,
+      (sum, entry) => sum + entry.noteHours,
+    );
+    final totalHours = visitHours + noteHours;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _TimeMixStat(
+                label: 'Visit',
+                value: '${visitHours.toStringAsFixed(2)}h',
+                color: const Color(0xFF4F8DF7),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _TimeMixStat(
+                label: 'Notes',
+                value: '${noteHours.toStringAsFixed(2)}h',
+                color: const Color(0xFFFFC857),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _TimeMixBar(
+          label: 'Visit time',
+          value: visitHours,
+          total: totalHours,
+          color: const Color(0xFF4F8DF7),
+        ),
+        const SizedBox(height: 10),
+        _TimeMixBar(
+          label: 'Note allowance',
+          value: noteHours,
+          total: totalHours,
+          color: const Color(0xFFFFC857),
+        ),
+      ],
+    );
+  }
+}
+
+class _TimeMixStat extends StatelessWidget {
+  const _TimeMixStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimeMixBar extends StatelessWidget {
+  const _TimeMixBar({
+    required this.label,
+    required this.value,
+    required this.total,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final double total;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total <= 0 ? 0.0 : value / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Text(
+              '${(ratio * 100).round()}%',
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0),
+            minHeight: 14,
+            backgroundColor: const Color(0xFF20283B),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendSummary extends StatelessWidget {
+  const _TrendSummary({
+    required this.currentEntries,
+    required this.previousEntries,
+    required this.settings,
+  });
+
+  final List<WorkEntry> currentEntries;
+  final List<WorkEntry> previousEntries;
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentHours = totalHours(currentEntries);
+    final previousHours = totalHours(previousEntries);
+    final currentEarnings = totalEarnings(currentEntries, settings);
+    final previousEarnings = totalEarnings(previousEntries, settings);
+    final currentKm = totalKilometres(currentEntries);
+    final previousKm = totalKilometres(previousEntries);
+
+    return Column(
+      children: [
+        _TrendMetric(
+          icon: Icons.schedule_outlined,
+          label: 'Hours',
+          current: currentHours.toStringAsFixed(2),
+          delta: currentHours - previousHours,
+          deltaSuffix: 'h',
+        ),
+        _TrendMetric(
+          icon: Icons.payments_outlined,
+          label: 'Earnings',
+          current: money(currentEarnings),
+          delta: currentEarnings - previousEarnings,
+          moneyDelta: true,
+        ),
+        _TrendMetric(
+          icon: Icons.route_outlined,
+          label: 'Kilometres',
+          current: currentKm.toStringAsFixed(1),
+          delta: currentKm - previousKm,
+          deltaSuffix: 'km',
+        ),
+        _TrendMetric(
+          icon: Icons.event_note_outlined,
+          label: 'Visits',
+          current: '${currentEntries.length}',
+          delta: (currentEntries.length - previousEntries.length).toDouble(),
+          wholeNumberDelta: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendMetric extends StatelessWidget {
+  const _TrendMetric({
+    required this.icon,
+    required this.label,
+    required this.current,
+    required this.delta,
+    this.deltaSuffix = '',
+    this.moneyDelta = false,
+    this.wholeNumberDelta = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String current;
+  final double delta;
+  final String deltaSuffix;
+  final bool moneyDelta;
+  final bool wholeNumberDelta;
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = delta >= 0;
+    final color = positive ? const Color(0xFF31E981) : const Color(0xFFFF6B6B);
+    final deltaText = _deltaText();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFF13294D),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF34405F)),
+            ),
+            child: Icon(icon, color: const Color(0xFF4F8DF7), size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  current,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: color),
+            ),
+            child: Text(
+              deltaText,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _deltaText() {
+    final sign = delta >= 0 ? '+' : '-';
+    final absolute = delta.abs();
+
+    if (moneyDelta) {
+      return '$sign${money(absolute)}';
+    }
+
+    if (wholeNumberDelta) {
+      return '$sign${absolute.toStringAsFixed(0)}';
+    }
+
+    return '$sign${absolute.toStringAsFixed(1)}$deltaSuffix';
+  }
+}
+
+class _WorkflowHealth extends StatelessWidget {
+  const _WorkflowHealth({required this.entries});
+
+  final List<WorkEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalEntries = entries.length;
+    final notesReady = entries
+        .where((entry) => entry.supportNoteBreakdown.trim().isNotEmpty)
+        .length;
+    final calendarEntered = entries
+        .where((entry) => entry.googleCalendarEntered)
+        .length;
+    final actions = entries
+        .expand((entry) => entry.nextActions)
+        .toList(growable: false);
+    final completedActions = actions
+        .where((action) => action.isCompleted)
+        .length;
+
+    return Column(
+      children: [
+        _HealthBar(
+          icon: Icons.edit_note_outlined,
+          label: 'Support notes ready',
+          done: notesReady,
+          total: totalEntries,
+          color: const Color(0xFF31E981),
+        ),
+        const SizedBox(height: 12),
+        _HealthBar(
+          icon: Icons.calendar_month_outlined,
+          label: 'Calendar entered',
+          done: calendarEntered,
+          total: totalEntries,
+          color: const Color(0xFF8B5CF6),
+        ),
+        const SizedBox(height: 12),
+        _HealthBar(
+          icon: Icons.checklist_rtl_outlined,
+          label: 'Next actions complete',
+          done: completedActions,
+          total: actions.length,
+          color: const Color(0xFFFFC857),
+        ),
+      ],
+    );
+  }
+}
+
+class _HealthBar extends StatelessWidget {
+  const _HealthBar({
+    required this.icon,
+    required this.label,
+    required this.done,
+    required this.total,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final int done;
+  final int total;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total <= 0 ? 1.0 : done / total;
+    final percent = (progress * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '$done/$total',
+                style: TextStyle(color: color, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              minHeight: 13,
+              backgroundColor: const Color(0xFF151B29),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '$percent% complete',
+              style: const TextStyle(
+                color: Color(0xFF8396C7),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -713,7 +1181,7 @@ class _ClientBar extends StatelessWidget {
               ),
             ),
             Text(
-              '${summary.hours.toStringAsFixed(2)}h â€¢ ${summary.kilometres.toStringAsFixed(1)}km',
+              '${summary.hours.toStringAsFixed(2)}h | ${summary.kilometres.toStringAsFixed(1)}km',
               style: const TextStyle(
                 color: Color(0xFFD8E2FF),
                 fontWeight: FontWeight.w800,

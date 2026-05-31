@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../calendar/calendar_screen.dart';
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../entries/entries_screen.dart';
@@ -9,7 +10,18 @@ import '../quick_entry/quick_entry_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tax/tax_screen.dart';
 
-enum _Section { quick, entries, notes, pay, home, more, tax, charts, settings }
+enum _Section {
+  quick,
+  notes,
+  calendar,
+  charts,
+  more,
+  home,
+  entries,
+  pay,
+  tax,
+  settings,
+}
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -25,16 +37,17 @@ class _MainShellState extends State<MainShell> {
     switch (section) {
       case _Section.quick:
         return 0;
-      case _Section.entries:
-        return 1;
       case _Section.notes:
+        return 1;
+      case _Section.calendar:
         return 2;
-      case _Section.pay:
-        return 3;
-      case _Section.home:
-      case _Section.more:
-      case _Section.tax:
       case _Section.charts:
+        return 3;
+      case _Section.more:
+      case _Section.home:
+      case _Section.entries:
+      case _Section.pay:
+      case _Section.tax:
       case _Section.settings:
         return 4;
     }
@@ -44,20 +57,22 @@ class _MainShellState extends State<MainShell> {
     switch (section) {
       case _Section.quick:
         return 'Quick Entry';
-      case _Section.entries:
-        return 'Entries';
       case _Section.notes:
         return 'Notes';
-      case _Section.pay:
-        return 'Pay Period';
+      case _Section.calendar:
+        return 'Calendar';
+      case _Section.charts:
+        return 'Charts';
       case _Section.home:
         return 'Dashboard';
+      case _Section.entries:
+        return 'Entries';
+      case _Section.pay:
+        return 'Pay Period';
       case _Section.more:
         return 'More';
       case _Section.tax:
         return 'Tax';
-      case _Section.charts:
-        return 'Charts';
       case _Section.settings:
         return 'Settings';
     }
@@ -74,13 +89,13 @@ class _MainShellState extends State<MainShell> {
         _go(_Section.quick);
         break;
       case 1:
-        _go(_Section.entries);
-        break;
-      case 2:
         _go(_Section.notes);
         break;
+      case 2:
+        _go(_Section.calendar);
+        break;
       case 3:
-        _go(_Section.pay);
+        _go(_Section.charts);
         break;
       case 4:
         _go(_Section.more);
@@ -91,30 +106,33 @@ class _MainShellState extends State<MainShell> {
   Widget _screen() {
     switch (section) {
       case _Section.quick:
-        return const QuickEntryScreen();
-      case _Section.entries:
-        return const EntriesScreen();
+        return QuickEntryScreen(onCalendar: () => _go(_Section.calendar));
       case _Section.notes:
         return const NotesScreen();
-      case _Section.pay:
-        return const PayPeriodScreen();
+      case _Section.calendar:
+        return const CalendarScreen();
+      case _Section.charts:
+        return const ChartsScreen();
       case _Section.home:
         return DashboardScreen(
           onQuickEntry: () => _go(_Section.quick),
           onPayPeriod: () => _go(_Section.pay),
           onEntries: () => _go(_Section.entries),
         );
+      case _Section.entries:
+        return const EntriesScreen();
+      case _Section.pay:
+        return const PayPeriodScreen();
       case _Section.more:
         return _MoreScreen(
           onHome: () => _go(_Section.home),
+          onEntries: () => _go(_Section.entries),
+          onPay: () => _go(_Section.pay),
           onTax: () => _go(_Section.tax),
-          onCharts: () => _go(_Section.charts),
           onSettings: () => _go(_Section.settings),
         );
       case _Section.tax:
         return const TaxScreen();
-      case _Section.charts:
-        return const ChartsScreen();
       case _Section.settings:
         return const SettingsScreen();
     }
@@ -173,25 +191,25 @@ class _FastBottomNav extends StatelessWidget {
           _FastNavItem(
             index: 1,
             selectedIndex: selectedIndex,
-            icon: Icons.list_alt_outlined,
-            selectedIcon: Icons.list_alt_rounded,
-            label: 'Entries',
-            onTap: onTap,
-          ),
-          _FastNavItem(
-            index: 2,
-            selectedIndex: selectedIndex,
             icon: Icons.note_alt_outlined,
             selectedIcon: Icons.note_alt_rounded,
             label: 'Notes',
             onTap: onTap,
           ),
           _FastNavItem(
-            index: 3,
+            index: 2,
             selectedIndex: selectedIndex,
             icon: Icons.calendar_month_outlined,
             selectedIcon: Icons.calendar_month_rounded,
-            label: 'Pay',
+            label: 'Calendar',
+            onTap: onTap,
+          ),
+          _FastNavItem(
+            index: 3,
+            selectedIndex: selectedIndex,
+            icon: Icons.bar_chart_outlined,
+            selectedIcon: Icons.bar_chart_rounded,
+            label: 'Charts',
             onTap: onTap,
           ),
           _FastNavItem(
@@ -271,14 +289,16 @@ class _FastNavItem extends StatelessWidget {
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
     required this.onHome,
+    required this.onEntries,
+    required this.onPay,
     required this.onTax,
-    required this.onCharts,
     required this.onSettings,
   });
 
   final VoidCallback onHome;
+  final VoidCallback onEntries;
+  final VoidCallback onPay;
   final VoidCallback onTax;
-  final VoidCallback onCharts;
   final VoidCallback onSettings;
 
   @override
@@ -294,17 +314,24 @@ class _MoreScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _MoreTile(
-          icon: Icons.receipt_long_outlined,
-          title: 'Tax',
-          subtitle: 'GST, ACC, KiwiSaver, and net estimate',
-          onTap: onTax,
+          icon: Icons.list_alt_outlined,
+          title: 'Entries',
+          subtitle: 'Search, import, edit, and export saved visits',
+          onTap: onEntries,
         ),
         const SizedBox(height: 12),
         _MoreTile(
-          icon: Icons.bar_chart_outlined,
-          title: 'Charts',
-          subtitle: 'Hours, earnings, KM, and support trends',
-          onTap: onCharts,
+          icon: Icons.receipt_long_outlined,
+          title: 'Pay Period',
+          subtitle: 'Invoices, owed money, PDF build, and breakdowns',
+          onTap: onPay,
+        ),
+        const SizedBox(height: 12),
+        _MoreTile(
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'Tax',
+          subtitle: 'GST, ACC, KiwiSaver, and net estimate',
+          onTap: onTax,
         ),
         const SizedBox(height: 12),
         _MoreTile(

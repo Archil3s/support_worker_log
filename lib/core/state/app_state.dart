@@ -46,6 +46,18 @@ class AppState extends ChangeNotifier {
   String? get googleCalendarAccessToken =>
       _cloudStorageService.googleCalendarAccessToken;
 
+  String get existingGoogleCalendarAccessToken {
+    final token = _cloudStorageService.googleCalendarAccessToken;
+
+    if (token == null || token.isEmpty) {
+      throw StateError(
+        'Google Calendar is not connected. Use Continue with Google or connect Calendar before creating events.',
+      );
+    }
+
+    return token;
+  }
+
   Future<void> load() async {
     final localData = await _storageService.load();
     _replaceInMemory(localData);
@@ -109,6 +121,12 @@ class AppState extends ChangeNotifier {
 
   Future<String> requireGoogleCalendarAccessToken() {
     return _cloudStorageService.requireGoogleCalendarAccessToken();
+  }
+
+  Future<String> connectGoogleCalendar() async {
+    final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
+    notifyListeners();
+    return token;
   }
 
   Future<void> signOut() async {

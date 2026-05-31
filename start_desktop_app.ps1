@@ -79,7 +79,7 @@ if (-not (Test-Writer)) {
         -FilePath "node" `
         -ArgumentList "`"$WriterPath`"" `
         -WorkingDirectory "C:\Users\Danie\support_worker_log" `
-        -WindowStyle Minimized
+        -WindowStyle Hidden
 
     Start-Sleep -Seconds 2
 }
@@ -120,7 +120,7 @@ if (-not (Test-WebServer)) {
         -FilePath "node" `
         -ArgumentList "`"$ServerPath`"" `
         -WorkingDirectory "C:\Users\Danie\support_worker_log" `
-        -WindowStyle Minimized
+        -WindowStyle Hidden
 
     for ($Index = 0; $Index -lt 40; $Index++) {
         if (Test-WebServer) {

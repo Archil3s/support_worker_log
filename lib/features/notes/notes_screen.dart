@@ -10,6 +10,8 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/stat_card.dart';
+import '../../shared/widgets/stat_grid.dart';
 
 String _noteTitleForEntry({
   required WorkEntry entry,
@@ -39,6 +41,7 @@ class _NotesScreenState extends State<NotesScreen> {
   final searchController = TextEditingController();
 
   String search = '';
+  String? clientFilter;
   EntrySupportNoteStatus? statusFilter;
 
   @override
@@ -49,8 +52,13 @@ class _NotesScreenState extends State<NotesScreen> {
 
   List<WorkEntry> _filtered(List<WorkEntry> entries) {
     final query = search.trim().toLowerCase();
+    final selectedClient = clientFilter;
 
     final filtered = entries.where((entry) {
+      if (selectedClient != null && entry.client != selectedClient) {
+        return false;
+      }
+
       if (query.isEmpty) return true;
 
       return entry.client.toLowerCase().contains(query) ||
@@ -83,7 +91,12 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allEntries = context.watch<AppState>().entries;
+    final appState = context.watch<AppState>();
+    final allEntries = appState.entries;
+    final clients = {
+      ...appState.clients,
+      ...allEntries.map((entry) => entry.client),
+    }.where((client) => client.trim().isNotEmpty).toList()..sort();
     final entries = _filtered(allEntries);
     final nextActionEntries =
         allEntries.where((entry) => entry.nextActions.isNotEmpty).toList()
@@ -113,12 +126,17 @@ class _NotesScreenState extends State<NotesScreen> {
                   statusFilter: statusFilter,
                   searchController: searchController,
                   search: search,
+                  clients: clients,
+                  clientFilter: clientFilter,
                   onSearchChanged: (value) => setState(() => search = value),
                   onClearSearch: () {
                     setState(() {
                       searchController.clear();
                       search = '';
                     });
+                  },
+                  onClientFilterChanged: (value) {
+                    setState(() => clientFilter = value);
                   },
                   onStatusFilterChanged: (value) {
                     setState(() => statusFilter = value);
@@ -141,8 +159,11 @@ class _NotesListTab extends StatelessWidget {
     required this.statusFilter,
     required this.searchController,
     required this.search,
+    required this.clients,
+    required this.clientFilter,
     required this.onSearchChanged,
     required this.onClearSearch,
+    required this.onClientFilterChanged,
     required this.onStatusFilterChanged,
     required this.onChooseFolder,
   });
@@ -151,8 +172,11 @@ class _NotesListTab extends StatelessWidget {
   final EntrySupportNoteStatus? statusFilter;
   final TextEditingController searchController;
   final String search;
+  final List<String> clients;
+  final String? clientFilter;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onClearSearch;
+  final ValueChanged<String?> onClientFilterChanged;
   final ValueChanged<EntrySupportNoteStatus?> onStatusFilterChanged;
   final VoidCallback onChooseFolder;
 
@@ -161,6 +185,8 @@ class _NotesListTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
+        _NotesOverview(entries: entries),
+        const SizedBox(height: 12),
         SectionCard(
           title: 'Local Notes',
           child: Column(
@@ -201,6 +227,24 @@ class _NotesListTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                isExpanded: true,
+                initialValue: clientFilter,
+                decoration: const InputDecoration(labelText: 'Client filter'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('All clients'),
+                  ),
+                  for (final client in clients)
+                    DropdownMenuItem<String?>(
+                      value: client,
+                      child: Text(client, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: onClientFilterChanged,
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<EntrySupportNoteStatus?>(
                 initialValue: statusFilter,
                 decoration: const InputDecoration(labelText: 'Status filter'),
@@ -232,6 +276,45 @@ class _NotesListTab extends StatelessWidget {
             const SizedBox(height: 12),
           ],
       ],
+    );
+  }
+}
+
+class _NotesOverview extends StatelessWidget {
+  const _NotesOverview({required this.entries});
+
+  final List<WorkEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final todayEntries = entries.where((entry) {
+      return entry.date.year == today.year &&
+          entry.date.month == today.month &&
+          entry.date.day == today.day;
+    }).length;
+    final missingNotes = entries
+        .where((entry) => entry.supportNoteBreakdown.trim().isEmpty)
+        .length;
+    final openActions = entries.fold<int>(
+      0,
+      (count, entry) =>
+          count + entry.nextActions.where((item) => !item.isCompleted).length,
+    );
+    final calendarGaps = entries
+        .where((entry) => !entry.googleCalendarEntered)
+        .length;
+
+    return SectionCard(
+      title: 'Notes Overview',
+      child: StatGrid(
+        cards: [
+          StatCard(title: 'Today', value: '$todayEntries'),
+          StatCard(title: 'Missing', value: '$missingNotes'),
+          StatCard(title: 'Actions', value: '$openActions'),
+          StatCard(title: 'Calendar', value: '$calendarGaps'),
+        ],
+      ),
     );
   }
 }

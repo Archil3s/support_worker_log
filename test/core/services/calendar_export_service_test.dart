@@ -44,4 +44,22 @@ void main() {
     expect(ics, contains(r'UID:entry\,2@support-worker-log'));
     expect(ics, contains(r'LOCATION:A\;B'));
   });
+
+  test('important text notes export with important color and title', () {
+    final entry = WorkEntry(
+      id: 'entry-3',
+      client: 'CD',
+      type: EntryType.textNote,
+      date: DateTime(2026, 5, 31),
+      startTime: const TimeOfDay(hour: 15, minute: 0),
+      minutes: 20,
+      notes: const ['Text update'],
+      importantText: true,
+    );
+
+    final ics = CalendarExportService.buildIcsForEntry(entry);
+
+    expect(ics, contains('SUMMARY:IMPORTANT TEXT CD'));
+    expect(ics, contains('COLOR:#D50000'));
+  });
 }

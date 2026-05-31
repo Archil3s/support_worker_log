@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'dart:html' as html;
 
+import '../../models/google_calendar_event.dart';
+
 const _desktopCalendarProxyPort = 51243;
 
 class GoogleCalendarApiPlatform {
@@ -12,6 +14,7 @@ class GoogleCalendarApiPlatform {
     required String location,
     required DateTime start,
     required DateTime end,
+    String? colorId,
   }) async {
     final event = <String, Object?>{
       'summary': summary,
@@ -26,10 +29,12 @@ class GoogleCalendarApiPlatform {
       },
     };
 
-    if (_isDesktopLocalApp) {
-      _submitDesktopCalendarForm(accessToken: accessToken, event: event);
+    if (colorId != null && colorId.trim().isNotEmpty) {
+      event['colorId'] = colorId;
+    }
 
-      return '';
+    if (_isDesktopLocalApp) {
+      return _insertViaDesktopProxy(accessToken: accessToken, event: event);
     }
 
     return _insertDirectGoogleCalendarEvent(
@@ -37,6 +42,29 @@ class GoogleCalendarApiPlatform {
       event: event,
       start: start,
     );
+  }
+
+  Future<List<GoogleCalendarEvent>> listPrimaryEvents({
+    required String accessToken,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final decoded = await _listEventsDirectly(
+      accessToken: accessToken,
+      start: start,
+      end: end,
+    );
+
+    final items = decoded['items'];
+    if (items is! List) return const [];
+
+    return items
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .map(_eventFromJson)
+        .whereType<GoogleCalendarEvent>()
+        .toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
   }
 
   Future<String> _insertDirectGoogleCalendarEvent({
@@ -72,49 +100,57 @@ class GoogleCalendarApiPlatform {
     }
   }
 
-  void _submitDesktopCalendarForm({
+  Future<String> _insertViaDesktopProxy({
     required String accessToken,
     required Map<String, Object?> event,
-  }) {
-    final form = html.FormElement()
-      ..method = 'POST'
-      ..action = _desktopCalendarProxyUrl
-      ..target = '_blank'
-      ..style.display = 'none';
-
-    form.children.add(
-      html.InputElement(type: 'hidden')
-        ..name = 'accessToken'
-        ..value = accessToken,
-    );
-    form.children.add(
-      html.InputElement(type: 'hidden')
-        ..name = 'event'
-        ..value = jsonEncode(event),
+  }) async {
+    final response = await html.HttpRequest.request(
+      _desktopCalendarProxyUrl,
+      method: 'POST',
+      requestHeaders: {'Content-Type': 'application/json; charset=utf-8'},
+      sendData: jsonEncode({'accessToken': accessToken, 'event': event}),
     );
 
-    html.document.body?.children.add(form);
-    form.submit();
-    form.remove();
+    final decoded = _decodeSuccessfulResponse(response);
+    final htmlLink = decoded['htmlLink'];
+
+    return htmlLink is String ? htmlLink : '';
+  }
+
+  Future<Map<String, dynamic>> _listEventsDirectly({
+    required String accessToken,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final params = {
+      'singleEvents': 'true',
+      'orderBy': 'startTime',
+      'timeMin': start.toUtc().toIso8601String(),
+      'timeMax': end.toUtc().toIso8601String(),
+    };
+    final uri = Uri.https(
+      'www.googleapis.com',
+      '/calendar/v3/calendars/primary/events',
+      params,
+    );
+
+    final response = await html.HttpRequest.request(
+      uri.toString(),
+      method: 'GET',
+      requestHeaders: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    return _decodeJsonResponse(
+      response,
+      failureMessage: 'Google Calendar events fetch failed',
+    );
   }
 
   Map<String, dynamic> _decodeSuccessfulResponse(html.HttpRequest response) {
-    final raw = response.responseText ?? '';
-    final status = response.status ?? 0;
-
-    if (status < 200 || status >= 300) {
-      throw StateError(
-        raw.trim().isEmpty
-            ? 'Google Calendar private event creation failed with HTTP $status.'
-            : raw,
-      );
-    }
-
-    final decoded = jsonDecode(raw);
-
-    if (decoded is! Map<String, dynamic>) {
-      throw StateError('Google Calendar returned an invalid event response.');
-    }
+    final decoded = _decodeJsonResponse(
+      response,
+      failureMessage: 'Google Calendar private event creation failed',
+    );
 
     final visibility = decoded['visibility'];
 
@@ -123,6 +159,64 @@ class GoogleCalendarApiPlatform {
     }
 
     return decoded;
+  }
+
+  Map<String, dynamic> _decodeJsonResponse(
+    html.HttpRequest response, {
+    required String failureMessage,
+  }) {
+    final raw = response.responseText ?? '';
+    final status = response.status ?? 0;
+
+    if (status < 200 || status >= 300) {
+      throw StateError(
+        raw.trim().isEmpty ? '$failureMessage with HTTP $status.' : raw,
+      );
+    }
+
+    final decoded = jsonDecode(raw);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('Google Calendar returned invalid JSON.');
+    }
+
+    return decoded;
+  }
+
+  GoogleCalendarEvent? _eventFromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String? ?? '';
+    final summary = json['summary'] as String? ?? '(No title)';
+    final start = _dateTimeFromEventEndpoint(json['start']);
+    final end = _dateTimeFromEventEndpoint(json['end']);
+
+    if (id.trim().isEmpty || start == null || end == null) {
+      return null;
+    }
+
+    return GoogleCalendarEvent(
+      id: id,
+      title: summary,
+      start: start.toLocal(),
+      end: end.toLocal(),
+      colorId: json['colorId'] as String?,
+      htmlLink: json['htmlLink'] as String?,
+    );
+  }
+
+  DateTime? _dateTimeFromEventEndpoint(Object? value) {
+    if (value is! Map) return null;
+
+    final map = Map<String, dynamic>.from(value);
+    final dateTime = map['dateTime'] as String?;
+
+    if (dateTime != null && dateTime.trim().isNotEmpty) {
+      return DateTime.tryParse(dateTime);
+    }
+
+    final date = map['date'] as String?;
+    if (date == null || date.trim().isEmpty) return null;
+
+    return DateTime.tryParse(date);
   }
 
   bool get _isDesktopLocalApp {

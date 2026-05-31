@@ -742,7 +742,7 @@ class _EntryCard extends StatelessWidget {
     final appState = context.read<AppState>();
 
     try {
-      final token = await appState.requireGoogleCalendarAccessToken();
+      final token = appState.existingGoogleCalendarAccessToken;
       final opened =
           await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
             entry,
@@ -750,9 +750,7 @@ class _EntryCard extends StatelessWidget {
           );
 
       if (!opened) {
-        throw Exception(
-          'Private calendar event was created, but could not open Google Calendar.',
-        );
+        throw Exception('Private calendar event was not confirmed.');
       }
 
       appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
@@ -840,7 +838,7 @@ class _EntryCard extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    '${entry.type.label} Ã‚Â· ${formatDate(entry.date)} Ã‚Â· ${entry.hours.toStringAsFixed(2)}h',
+                    '${entry.type.label} | ${formatDate(entry.date)} | ${entry.hours.toStringAsFixed(2)}h',
                     style: const TextStyle(color: Color(0xFF8396C7)),
                   ),
                 ),
@@ -925,7 +923,7 @@ class _EntryCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               subtitle: Text(
-                '${entry.type.label} Ã‚Â· ${formatDate(entry.date)} Ã‚Â· ${entry.baseMinutes} min Ã‚Â· ${entry.hours.toStringAsFixed(2)}h',
+                '${entry.type.label} | ${formatDate(entry.date)} | ${entry.baseMinutes} min | ${entry.hours.toStringAsFixed(2)}h',
               ),
               trailing: Text(
                 money(entry.earnings(settings)),
@@ -951,6 +949,24 @@ class _EntryCard extends StatelessWidget {
               const Chip(
                 avatar: Icon(Icons.event_available_outlined, size: 18),
                 label: Text('Calendar entered'),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (entry.type == EntryType.textNote) ...[
+              Chip(
+                avatar: Icon(
+                  entry.importantText
+                      ? Icons.priority_high_rounded
+                      : Icons.label_outline,
+                  size: 18,
+                  color: entry.importantText
+                      ? const Color(0xFFD50000)
+                      : const Color(0xFF039BE5),
+                ),
+                label: Text(
+                  entry.importantText ? 'Important text' : 'Normal text',
+                ),
                 visualDensity: VisualDensity.compact,
               ),
               const SizedBox(height: 10),

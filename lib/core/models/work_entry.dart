@@ -17,6 +17,12 @@ Next action(s)
 
 Overall impression (Max. 150 words)
     1. 
+
+Local referral tracking
+    No referrals discussed or made this visit.
+
+Safety concerns for sexual harm survivors and mental health
+    No safety concerns noted.
 ''';
 
 class NextActionItem {
@@ -85,6 +91,7 @@ class WorkEntry {
     this.supportNoteBreakdown = '',
     this.nextActions = const [],
     this.googleCalendarEntered = false,
+    this.importantText = false,
     this.odometerStart,
     this.odometerEnd,
   });
@@ -99,6 +106,7 @@ class WorkEntry {
   final String supportNoteBreakdown;
   final List<NextActionItem> nextActions;
   final bool googleCalendarEntered;
+  final bool importantText;
   final double? odometerStart;
   final double? odometerEnd;
 
@@ -114,13 +122,13 @@ class WorkEntry {
     );
   }
 
-  int get noteSeconds => 0;
+  int get noteSeconds => billingTime.noteSeconds;
 
-  double get noteHours => 0;
+  double get noteHours => billingTime.noteHours;
 
-  double get hours => baseHours;
+  double get hours => billingTime.billableHours;
 
-  String get noteAllowanceText => 'Manual notes only';
+  String get noteAllowanceText => billingTime.noteAllowanceText;
 
   String get billableTimeText => billingTime.totalTimeText;
 
@@ -151,6 +159,7 @@ class WorkEntry {
     String? supportNoteBreakdown,
     List<NextActionItem>? nextActions,
     bool? googleCalendarEntered,
+    bool? importantText,
     double? odometerStart,
     double? odometerEnd,
   }) {
@@ -166,6 +175,7 @@ class WorkEntry {
       nextActions: nextActions ?? this.nextActions,
       googleCalendarEntered:
           googleCalendarEntered ?? this.googleCalendarEntered,
+      importantText: importantText ?? this.importantText,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
     );
@@ -184,6 +194,7 @@ class WorkEntry {
       'supportNoteBreakdown': supportNoteBreakdown,
       'nextActions': nextActions.map((item) => item.toJson()).toList(),
       'googleCalendarEntered': googleCalendarEntered,
+      'importantText': importantText,
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
     };
@@ -249,6 +260,7 @@ class WorkEntry {
       supportNoteBreakdown: json['supportNoteBreakdown'] as String? ?? '',
       nextActions: nextActions,
       googleCalendarEntered: json['googleCalendarEntered'] == true,
+      importantText: json['importantText'] == true,
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
     );
@@ -259,7 +271,9 @@ class WorkEntry {
       ..writeln('$client - ${type.label}')
       ..writeln('Date: ${formatDate(date)}')
       ..writeln('Start: ${formatTime(startTime)}')
-      ..writeln('Time: $baseMinutes min (${hours.toStringAsFixed(2)} hrs)')
+      ..writeln('Visit time: $baseMinutes min')
+      ..writeln('Note time: ${billingTime.noteTimeText}')
+      ..writeln('Billable time: ${hours.toStringAsFixed(2)} hrs')
       ..writeln('Earnings: ${money(earnings(settings))}');
 
     if (type == EntryType.homeVisit) {
@@ -282,6 +296,12 @@ class WorkEntry {
       buffer
         ..writeln()
         ..writeln('Google Calendar: entered');
+    }
+
+    if (type == EntryType.textNote) {
+      buffer
+        ..writeln()
+        ..writeln('Text importance: ${importantText ? 'important' : 'normal'}');
     }
 
     if (nextActions.isNotEmpty) {

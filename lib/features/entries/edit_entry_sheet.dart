@@ -55,6 +55,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   late DateTime selectedDate;
   late TimeOfDay startTime;
   late int minutes;
+  late bool importantText;
 
   late final TextEditingController odometerStartController;
   late final TextEditingController odometerEndController;
@@ -76,6 +77,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     selectedDate = widget.entry.date;
     startTime = widget.entry.startTime;
     minutes = widget.entry.minutes <= 0 ? 5 : widget.entry.minutes;
+    importantText = widget.entry.importantText;
 
     final knownNotes = noteOptions.toSet();
     final customNotes = <String>[];
@@ -205,6 +207,8 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       notes: buildNotes(),
       supportNoteBreakdown: widget.entry.supportNoteBreakdown,
       nextActions: widget.entry.nextActions,
+      googleCalendarEntered: widget.entry.googleCalendarEntered,
+      importantText: selectedType == EntryType.textNote && importantText,
       odometerStart: odometerStart,
       odometerEnd: odometerEnd,
     );
@@ -343,6 +347,27 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                   ),
                 ),
               ],
+              if (selectedType == EntryType.textNote) ...[
+                const SizedBox(height: 12),
+                SectionCard(
+                  title: 'Text Importance',
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: importantText,
+                    onChanged: (value) {
+                      setState(() => importantText = value);
+                    },
+                    title: const Text(
+                      'Important text',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    subtitle: const Text(
+                      'Important texts export to Google Calendar in red.',
+                      style: TextStyle(color: Color(0xFF8396C7)),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               SectionCard(
                 title: 'Notes',
@@ -401,6 +426,11 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                         label: 'Odometer',
                         value:
                             '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} -> ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
+                      ),
+                    if (selectedType == EntryType.textNote)
+                      ReviewRow(
+                        label: 'Importance',
+                        value: importantText ? 'Important' : 'Normal',
                       ),
                   ],
                 ),

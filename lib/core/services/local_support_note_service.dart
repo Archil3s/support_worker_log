@@ -152,7 +152,7 @@ class LocalSupportNoteService {
           contents: contents,
         );
       } else {
-        // Do not overwrite an existing DOCX. The user may have edited it in Word.
+        await _platform.writeFile(fileName: fileName, contents: contents);
       }
     } else {
       await _platform.writeFile(fileName: fileName, contents: contents);
@@ -207,27 +207,9 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
   }) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
-    final buffer = StringBuffer(
-      savedBreakdown.isNotEmpty ? savedBreakdown : supportNoteBreakdownTemplate,
-    );
-
-    if (entry.nextActions.isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln()
-        ..writeln('Tracked next actions');
-
-      for (final action in entry.nextActions) {
-        final completedText = action.completedAt == null
-            ? 'open'
-            : 'completed ${formatDate(action.completedAt!)} '
-                  '${_clock(action.completedAt!)}';
-
-        buffer.writeln('- ${action.text} ($completedText)');
-      }
-    }
-
-    return buffer.toString().trim();
+    return savedBreakdown.isNotEmpty
+        ? savedBreakdown
+        : supportNoteBreakdownTemplate;
   }
 
   static String noteTitle({
@@ -256,90 +238,50 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
     required String noteText,
   }) async {
-    final paragraphs = _templateParagraphs(
-      entry: entry,
-      initials: initials,
-      status: status,
-      noteText: noteText,
-    );
-
     try {
       final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
       final bytes = data.buffer.asUint8List(
         data.offsetInBytes,
         data.lengthInBytes,
       );
-      return _docxFromTemplate(bytes: bytes, paragraphs: paragraphs);
-    } catch (_) {
-      return _minimalDocx(paragraphs);
+      return _docxFromTemplate(
+        bytes: bytes,
+        entry: entry,
+        initials: initials,
+        status: status,
+        noteText: noteText,
+      );
+    } catch (error) {
+      throw StateError(
+        'Gold-standard support note template could not be loaded: $error',
+      );
     }
   }
 
-  static List<_DocxParagraph> _templateParagraphs({
+  static List<int> _docxFromTemplate({
+    required Uint8List bytes,
     required WorkEntry entry,
     required String initials,
     required EntrySupportNoteStatus status,
     required String noteText,
   }) {
-    final visitDate = formatDate(entry.date);
-    final cleanInitials = initials.trim().toUpperCase();
-    final cleanNote = noteText.trim().isEmpty
-        ? defaultNoteTextForEntry(entry: entry, status: status)
-        : noteText.trim();
-
-    final paragraphs = <_DocxParagraph>[
-      _DocxParagraph(
-        noteTitle(entry: entry, initials: cleanInitials, status: status),
-        bold: true,
-        center: true,
-        size: 28,
-      ),
-      const _DocxParagraph(''),
-      const _DocxParagraph(
-        'Template for reporting of interactions with survivors.',
-        bold: true,
-        center: true,
-      ),
-      const _DocxParagraph(''),
-      const _DocxParagraph(
-        'This template is aimed at providing information in a format that meets the requirements of the Ministry of Social Development.',
-      ),
-      const _DocxParagraph(''),
-      const _DocxParagraph('Geographical area. Blenheim'),
-      _DocxParagraph('Date: $visitDate'),
-      _DocxParagraph('Name of client: $cleanInitials'),
-      _DocxParagraph('Status: ${status.label}'),
-      _DocxParagraph('Initials: $cleanInitials'),
-      _DocxParagraph(
-        'Date/time/length of interaction: $visitDate / '
-        '${formatTime(entry.startTime)} / ${entry.baseMinutes} minutes '
-        '(${entry.hours.toStringAsFixed(2)} hours). Type: '
-        '${entry.type.label}.${_kilometresText(entry)}',
-      ),
-      const _DocxParagraph(''),
-      ..._noteTextParagraphs(cleanNote),
-      const _DocxParagraph(''),
-      const _DocxParagraph(
-        'Local only: this document was generated locally and is not uploaded by this notes feature.',
-        size: 18,
-      ),
-    ];
-
-    return paragraphs;
-  }
-
-  static List<int> _docxFromTemplate({
-    required Uint8List bytes,
-    required List<_DocxParagraph> paragraphs,
-  }) {
     final source = ZipDecoder().decodeBytes(bytes);
     final archive = Archive();
-    final documentBytes = utf8.encode(_documentXml(paragraphs));
 
     for (final file in source.files) {
       if (!file.isFile) continue;
 
       if (file.name == 'word/document.xml') {
+        final xml = utf8.decode(file.content as List<int>);
+        final documentBytes = utf8.encode(
+          _filledTemplateDocumentXml(
+            xml: xml,
+            entry: entry,
+            initials: initials,
+            status: status,
+            noteText: noteText,
+          ),
+        );
         archive.addFile(
           ArchiveFile(file.name, documentBytes.length, documentBytes),
         );
@@ -352,93 +294,100 @@ class LocalSupportNoteService {
     return ZipEncoder().encode(archive) ?? <int>[];
   }
 
-  static List<int> _minimalDocx(List<_DocxParagraph> paragraphs) {
-    final archive = Archive();
+  static String _filledTemplateDocumentXml({
+    required String xml,
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
+  }) {
+    final sections = _SupportNoteSections.fromNoteText(
+      noteText.trim().isEmpty
+          ? defaultNoteTextForEntry(entry: entry, status: status)
+          : noteText,
+    );
+    final clientInitials = initials.trim().toUpperCase();
+    final interactionText =
+        '${formatDate(entry.date)} / ${formatTime(entry.startTime)} / '
+        '${entry.baseMinutes} minutes '
+        '(${entry.hours.toStringAsFixed(2)} hours). '
+        '${entry.type.label}.${_kilometresText(entry)}';
 
-    void addTextFile(String name, String content) {
-      final bytes = utf8.encode(content);
-      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    final paragraphPattern = RegExp(r'<w:p[\s\S]*?<\/w:p>');
+    final buffer = StringBuffer();
+    var cursor = 0;
+    var pendingBlankFill = '';
+
+    for (final match in paragraphPattern.allMatches(xml)) {
+      buffer.write(xml.substring(cursor, match.start));
+      var paragraph = match.group(0)!;
+      final text = _paragraphText(paragraph).trim();
+
+      if (text.startsWith('Name of client.')) {
+        paragraph = _appendTextToParagraph(paragraph, clientInitials);
+      } else if (text == 'Date:') {
+        paragraph = _appendTextToParagraph(
+          paragraph,
+          ' ${formatDate(entry.date)}',
+        );
+      } else if (text.startsWith('Date/time/length of interaction.')) {
+        pendingBlankFill = interactionText;
+      } else if (text.startsWith('Main topic')) {
+        pendingBlankFill = sections.mainTopic;
+      } else if (text.startsWith('Outcome')) {
+        pendingBlankFill = sections.outcomesWithActions;
+      } else if (text.startsWith('Overall impression')) {
+        pendingBlankFill = sections.overallImpression;
+      } else if (pendingBlankFill.isNotEmpty && text.isEmpty) {
+        paragraph = _fillBlankParagraph(paragraph, pendingBlankFill);
+        pendingBlankFill = '';
+      }
+
+      buffer.write(paragraph);
+      cursor = match.end;
     }
 
-    addTextFile('[Content_Types].xml', _contentTypesXml);
-    addTextFile('_rels/.rels', _relsXml);
-    addTextFile('word/document.xml', _documentXml(paragraphs));
-    addTextFile('word/styles.xml', _stylesXml);
-    addTextFile('word/settings.xml', _settingsXml);
-    addTextFile('word/_rels/document.xml.rels', _documentRelsXml);
+    buffer.write(xml.substring(cursor));
+    return buffer.toString();
+  }
 
-    return ZipEncoder().encode(archive) ?? <int>[];
+  static String _paragraphText(String paragraphXml) {
+    return RegExp(
+      r'<w:t[^>]*>(.*?)<\/w:t>',
+    ).allMatches(paragraphXml).map((match) => _unxml(match.group(1)!)).join();
+  }
+
+  static String _appendTextToParagraph(String paragraphXml, String text) {
+    return paragraphXml.replaceFirst(
+      '</w:p>',
+      '${_runXml(text, bold: true)}</w:p>',
+    );
+  }
+
+  static String _fillBlankParagraph(String paragraphXml, String text) {
+    final withoutEmptyRun = paragraphXml.replaceFirst(
+      RegExp(r'<w:r><w:rPr>[\s\S]*?<\/w:rPr><\/w:r>'),
+      '',
+    );
+
+    return withoutEmptyRun.replaceFirst('</w:p>', '${_runXml(text)}</w:p>');
+  }
+
+  static String _runXml(String text, {bool bold = false}) {
+    final runProps = bold
+        ? '<w:b/><w:bCs/><w:sz w:val="24"/><w:szCs w:val="24"/>'
+        : '<w:sz w:val="24"/><w:szCs w:val="24"/>';
+    final textParts = text
+        .split('\n')
+        .map((line) => '<w:t xml:space="preserve">${_xml(line)}</w:t>')
+        .join('<w:br/>');
+
+    return '<w:r><w:rPr>$runProps</w:rPr>$textParts</w:r>';
   }
 
   static String _kilometresText(WorkEntry entry) {
     if (entry.type != EntryType.homeVisit) return '';
     return ' Kilometres: ${entry.kilometres.toStringAsFixed(1)}.';
-  }
-
-  static List<_DocxParagraph> _noteTextParagraphs(String noteText) {
-    return noteText.split(RegExp(r'\r?\n')).map((line) {
-      final trimmedRight = line.replaceFirst(RegExp(r'\s+$'), '');
-      final trimmed = trimmedRight.trimLeft();
-      final isIndented = RegExp(r'^(\d+[\.)]|[-*])\s*').hasMatch(trimmed);
-
-      return _DocxParagraph(
-        trimmedRight.trim().isEmpty ? '' : trimmedRight,
-        leftIndentTwips: isIndented ? 720 : null,
-      );
-    }).toList();
-  }
-
-  static String _documentXml(List<_DocxParagraph> paragraphs) {
-    final body = paragraphs.map(_paragraphXml).join();
-
-    return '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    $body
-    <w:sectPr>
-      <w:pgSz w:w="11906" w:h="16838"/>
-      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
-    </w:sectPr>
-  </w:body>
-</w:document>''';
-  }
-
-  static String _paragraphXml(_DocxParagraph paragraph) {
-    final paragraphProps = StringBuffer();
-
-    if (paragraph.center) {
-      paragraphProps.write('<w:jc w:val="center"/>');
-    }
-
-    if (paragraph.leftIndentTwips != null) {
-      paragraphProps.write('<w:ind w:left="${paragraph.leftIndentTwips}"/>');
-    }
-
-    final runProps = StringBuffer();
-
-    if (paragraph.bold) {
-      runProps.write('<w:b/>');
-    }
-
-    if (paragraph.size != null) {
-      runProps.write('<w:sz w:val="${paragraph.size}"/>');
-    }
-
-    final lines = paragraph.text.split('\n');
-
-    final textXml = lines
-        .map((line) => '<w:t xml:space="preserve">${_xml(line)}</w:t>')
-        .join('<w:br/>');
-
-    return '''
-<w:p>
-  <w:pPr>$paragraphProps</w:pPr>
-  <w:r>
-    <w:rPr>$runProps</w:rPr>
-    $textXml
-  </w:r>
-</w:p>
-''';
   }
 
   static String _xml(String value) {
@@ -450,19 +399,21 @@ class LocalSupportNoteService {
         .replaceAll("'", '&apos;');
   }
 
+  static String _unxml(String value) {
+    return value
+        .replaceAll('&apos;', "'")
+        .replaceAll('&quot;', '"')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&amp;', '&');
+  }
+
   static String _fileDate(DateTime value) {
     final year = value.year.toString().padLeft(4, '0');
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
 
     return '$year-$month-$day';
-  }
-
-  static String _clock(DateTime value) {
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-
-    return '$hour:$minute';
   }
 
   static String _safeFilePart(String value) {
@@ -477,57 +428,98 @@ class LocalSupportNoteService {
   }
 }
 
-class _DocxParagraph {
-  const _DocxParagraph(
-    this.text, {
-    this.bold = false,
-    this.center = false,
-    this.size,
-    this.leftIndentTwips,
+class _SupportNoteSections {
+  const _SupportNoteSections({
+    required this.mainTopic,
+    required this.outcomes,
+    required this.nextActions,
+    required this.overallImpression,
   });
 
-  final String text;
-  final bool bold;
-  final bool center;
-  final int? size;
-  final int? leftIndentTwips;
+  final String mainTopic;
+  final String outcomes;
+  final String nextActions;
+  final String overallImpression;
+
+  String get outcomesWithActions {
+    if (nextActions.isEmpty) return outcomes;
+    if (outcomes.isEmpty) return 'Next action(s)\n$nextActions';
+
+    return '$outcomes\n\nNext action(s)\n$nextActions';
+  }
+
+  factory _SupportNoteSections.fromNoteText(String value) {
+    final main = <String>[];
+    final outcomes = <String>[];
+    final nextActions = <String>[];
+    final overall = <String>[];
+    var section = _SupportNoteSection.main;
+
+    for (final rawLine in value.split(RegExp(r'\r?\n'))) {
+      final line = rawLine.trimRight();
+      final normalized = line.trimLeft().toLowerCase();
+
+      if (normalized.startsWith('main topic')) {
+        section = _SupportNoteSection.main;
+        continue;
+      }
+
+      if (normalized.startsWith('outcome')) {
+        section = _SupportNoteSection.outcomes;
+        continue;
+      }
+
+      if (normalized.startsWith('next action') ||
+          normalized.startsWith('tracked next action')) {
+        section = _SupportNoteSection.nextActions;
+        continue;
+      }
+
+      if (normalized.startsWith('overall impression')) {
+        section = _SupportNoteSection.overall;
+        continue;
+      }
+
+      switch (section) {
+        case _SupportNoteSection.main:
+          main.add(line);
+          break;
+        case _SupportNoteSection.outcomes:
+          outcomes.add(line);
+          break;
+        case _SupportNoteSection.nextActions:
+          nextActions.add(line);
+          break;
+        case _SupportNoteSection.overall:
+          overall.add(line);
+          break;
+      }
+    }
+
+    final cleanMain = _cleanLines(main);
+    final cleanOutcomes = _cleanLines(outcomes);
+    final cleanNextActions = _cleanLines(nextActions);
+    final cleanOverall = _cleanLines(overall);
+
+    return _SupportNoteSections(
+      mainTopic: cleanMain,
+      outcomes: cleanOutcomes,
+      nextActions: cleanNextActions,
+      overallImpression: cleanOverall,
+    );
+  }
+
+  static String _cleanLines(Iterable<String> lines) {
+    return lines
+        .map((line) => line.trimRight())
+        .where((line) {
+          final trimmed = line.trim();
+          return trimmed.isNotEmpty &&
+              !RegExp(r'^(\d+[\.)]?|[-*])\s*$').hasMatch(trimmed);
+        })
+        .join('\n')
+        .trim();
+  }
 }
 
-const String _contentTypesXml =
-    '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
-</Types>''';
-
-const String _relsXml =
-    '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>''';
-
-const String _documentRelsXml =
-    '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>''';
-
-const String _stylesXml =
-    '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-    <w:name w:val="Normal"/>
-    <w:qFormat/>
-    <w:rPr>
-      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
-      <w:sz w:val="22"/>
-    </w:rPr>
-  </w:style>
-</w:styles>''';
-
-const String _settingsXml =
-    '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:zoom w:percent="100"/>
-</w:settings>''';
+enum _SupportNoteSection { main, outcomes, nextActions, overall }

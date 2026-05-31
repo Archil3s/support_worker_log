@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/entry_type.dart';
+import '../models/google_calendar_event.dart';
 import '../models/work_entry.dart';
 import 'google_calendar/google_calendar_api_platform.dart';
 
 const _defaultCalendarColor = '#FF0000';
+const _normalTextCalendarColor = '#039BE5';
+const _importantTextCalendarColor = '#D50000';
 
 class CalendarExportService {
   const CalendarExportService._();
@@ -22,20 +24,29 @@ class CalendarExportService {
   }) async {
     final start = _entryStart(entry);
     final end = _entryEnd(entry);
-    final link = await _googleCalendarApi.insertPrivateEvent(
+    await _googleCalendarApi.insertPrivateEvent(
       accessToken: accessToken,
-      summary: '${entry.client} ${entry.type.label}',
+      summary: _calendarTitle(entry),
       description: _detailsForEntry(entry, start, end),
       location: entry.client,
       start: start,
       end: end,
+      colorId: _googleCalendarColorId(entry),
     );
 
-    if (link.trim().isEmpty) {
-      return true;
-    }
+    return true;
+  }
 
-    return launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+  static Future<List<GoogleCalendarEvent>> listPrimaryEvents({
+    required String accessToken,
+    required DateTime start,
+    required DateTime end,
+  }) {
+    return _googleCalendarApi.listPrimaryEvents(
+      accessToken: accessToken,
+      start: start,
+      end: end,
+    );
   }
 
   static Future<void> saveIcsFileForEntry(WorkEntry entry) async {
@@ -60,7 +71,7 @@ class CalendarExportService {
     final end = _entryEnd(entry);
     final now = DateTime.now().toUtc();
 
-    final title = '${entry.client} ${entry.type.label}';
+    final title = _calendarTitle(entry);
     final details = _detailsForEntry(entry, start, end);
 
     return [
@@ -79,8 +90,8 @@ class CalendarExportService {
       'LOCATION:${_icsEscape(entry.client)}',
       'CLASS:PRIVATE',
       'TRANSP:OPAQUE',
-      'COLOR:$_defaultCalendarColor',
-      'X-APPLE-CALENDAR-COLOR:$_defaultCalendarColor',
+      'COLOR:${_icsCalendarColor(entry)}',
+      'X-APPLE-CALENDAR-COLOR:${_icsCalendarColor(entry)}',
       'X-MICROSOFT-CDO-BUSYSTATUS:BUSY',
       'CATEGORIES:${_icsEscape(entry.client)}',
       'END:VEVENT',
@@ -124,9 +135,9 @@ class CalendarExportService {
       ..writeln('Date: ${_formatDate(entry.date)}')
       ..writeln('Start time: ${_formatClock(start)}')
       ..writeln('End time: ${_formatClock(end)}')
-      ..writeln(
-        'Duration: ${entry.minutes} minutes (${entry.hours.toStringAsFixed(2)} hours)',
-      );
+      ..writeln('Visit duration: ${entry.minutes} minutes')
+      ..writeln('Note allowance: ${entry.billingTime.noteTimeText}')
+      ..writeln('Billable time: ${entry.hours.toStringAsFixed(2)} hours');
 
     if (entry.kilometres > 0) {
       buffer.writeln('Kilometres: ${entry.kilometres.toStringAsFixed(1)} km');
@@ -169,7 +180,30 @@ class CalendarExportService {
   ) {
     return '${entry.client} ${entry.type.label} on ${_formatDate(entry.date)} '
         'from ${_formatClock(start)} to ${_formatClock(end)} '
-        'for ${entry.minutes} minutes (${entry.hours.toStringAsFixed(2)} hours).';
+        'for ${entry.minutes} minutes plus ${entry.billingTime.noteTimeText} '
+        'notes (${entry.hours.toStringAsFixed(2)} billable hours).';
+  }
+
+  static String? _googleCalendarColorId(WorkEntry entry) {
+    if (entry.type != EntryType.textNote) return null;
+
+    return entry.importantText ? '11' : '7';
+  }
+
+  static String _calendarTitle(WorkEntry entry) {
+    if (entry.type == EntryType.textNote && entry.importantText) {
+      return 'IMPORTANT TEXT ${entry.client}';
+    }
+
+    return '${entry.client} ${entry.type.label}';
+  }
+
+  static String _icsCalendarColor(WorkEntry entry) {
+    if (entry.type != EntryType.textNote) return _defaultCalendarColor;
+
+    return entry.importantText
+        ? _importantTextCalendarColor
+        : _normalTextCalendarColor;
   }
 
   static String _icsDate(DateTime value) {

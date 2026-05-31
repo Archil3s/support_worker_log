@@ -142,6 +142,58 @@ function postGoogleCalendarEvent(accessToken, event) {
   });
 }
 
+function listGoogleCalendarEvents(accessToken, timeMin, timeMax) {
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams({
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      timeMin,
+      timeMax,
+    });
+
+    const request = https.request(
+      {
+        hostname: 'www.googleapis.com',
+        path: `/calendar/v3/calendars/primary/events?${params.toString()}`,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                responseBody.trim() ||
+                  `Google Calendar returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch (error) {
+            reject(new Error('Google Calendar returned invalid JSON.'));
+          }
+        });
+      },
+    );
+
+    request.on('error', reject);
+    request.end();
+  });
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -190,6 +242,48 @@ async function createPrivateCalendarEvent(req, res) {
   }
 }
 
+async function listPrivateCalendarEvents(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const body = await readBody(req);
+    const payload = body.trim() ? JSON.parse(body) : {};
+    const accessToken = String(payload.accessToken || '');
+    const timeMin = String(payload.timeMin || '');
+    const timeMax = String(payload.timeMax || '');
+
+    if (!accessToken) {
+      send(res, 400, 'Missing Google access token.');
+      return;
+    }
+
+    if (!timeMin || !timeMax) {
+      send(res, 400, 'Missing calendar date range.');
+      return;
+    }
+
+    const events = await listGoogleCalendarEvents(accessToken, timeMin, timeMax);
+
+    send(res, 200, JSON.stringify(events), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message
+        ? error.message
+        : 'Google Calendar events fetch failed.',
+    );
+  }
+}
+
 function filePathFor(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
   const clean = decoded === '/' ? '/index.html' : decoded;
@@ -210,6 +304,11 @@ const server = http.createServer((req, res) => {
 
   if ((req.url || '').split('?')[0] === '/__google_calendar/private_event') {
     createPrivateCalendarEvent(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_calendar/events') {
+    listPrivateCalendarEvents(req, res);
     return;
   }
 

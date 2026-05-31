@@ -70,13 +70,21 @@ class CloudStorageService {
   }
 
   Future<User> signInWithGoogle() async {
-    final provider = GoogleAuthProvider();
+    final provider = GoogleAuthProvider()
+      ..addScope('https://www.googleapis.com/auth/calendar.events')
+      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
+      ..setCustomParameters({'include_granted_scopes': 'true'});
     final credential = await _auth.signInWithPopup(provider);
     final user = credential.user;
 
     if (user == null) {
       throw StateError('Google sign-in returned no user.');
     }
+
+    final oauth = credential.credential;
+    _googleCalendarAccessToken = oauth is OAuthCredential
+        ? oauth.accessToken
+        : null;
 
     return user;
   }
@@ -90,6 +98,7 @@ class CloudStorageService {
 
     final provider = GoogleAuthProvider()
       ..addScope('https://www.googleapis.com/auth/calendar.events')
+      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
       ..setCustomParameters({'include_granted_scopes': 'true'});
     final credential = await _auth.signInWithPopup(provider);
     final user = credential.user;
