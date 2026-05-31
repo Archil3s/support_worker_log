@@ -1781,16 +1781,6 @@ class _StartVisitView extends StatelessWidget {
             ],
           ),
         ),
-        if (selectedType == EntryType.professionalContact) ...[
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Blenheim Agencies',
-            child: _AgencyChips(
-              selectedNotes: selectedNotes,
-              onChanged: onNoteToggle,
-            ),
-          ),
-        ],
         if (selectedType == EntryType.homeVisit) ...[
           const SizedBox(height: 12),
           _Panel(
@@ -1839,27 +1829,13 @@ class _StartVisitView extends StatelessWidget {
             label: const Text('Start Now'),
           ),
         ],
-        if (selectedType != EntryType.homeVisit) ...[
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Topics Covered',
-            child: _NoteChips(
-              notes: noteOptions,
-              selectedNotes: selectedNotes,
-              onChanged: onNoteToggle,
-            ),
-          ),
-        ] else ...[
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Topics Covered',
-            child: _NoteChips(
-              notes: noteOptions,
-              selectedNotes: selectedNotes,
-              onChanged: onNoteToggle,
-            ),
-          ),
-        ],
+        const SizedBox(height: 12),
+        _VisitContextTabs(
+          noteOptions: noteOptions,
+          selectedNotes: selectedNotes,
+          showAgencies: selectedType == EntryType.professionalContact,
+          onChanged: onNoteToggle,
+        ),
       ],
     );
   }
@@ -1978,24 +1954,14 @@ class _ActiveVisitView extends StatelessWidget {
             ),
           ),
         if (activeVisit.type == EntryType.homeVisit) const SizedBox(height: 12),
-        _Panel(
-          title: 'Topics Covered',
-          child: Column(
+        _VisitContextTabs(
+          noteOptions: noteOptions,
+          selectedNotes: selectedNotes,
+          showAgencies: activeVisit.type == EntryType.professionalContact,
+          onChanged: onNoteToggle,
+          footer: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (activeVisit.type == EntryType.professionalContact) ...[
-                _AgencyChips(
-                  selectedNotes: selectedNotes,
-                  onChanged: onNoteToggle,
-                ),
-                const SizedBox(height: 12),
-              ],
-              _NoteChips(
-                notes: noteOptions,
-                selectedNotes: selectedNotes,
-                onChanged: onNoteToggle,
-              ),
-              const SizedBox(height: 12),
               TextField(
                 controller: noteController,
                 minLines: 2,
@@ -2288,6 +2254,75 @@ class _NoteChips extends StatelessWidget {
             onSelected: (selected) => onChanged(note, selected),
           ),
       ],
+    );
+  }
+}
+
+class _VisitContextTabs extends StatelessWidget {
+  const _VisitContextTabs({
+    required this.noteOptions,
+    required this.selectedNotes,
+    required this.showAgencies,
+    required this.onChanged,
+    this.footer,
+  });
+
+  final List<String> noteOptions;
+  final Set<String> selectedNotes;
+  final bool showAgencies;
+  final void Function(String note, bool selected) onChanged;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabCount = showAgencies ? 2 : 1;
+
+    return _Panel(
+      title: 'Visit Context',
+      child: DefaultTabController(
+        length: tabCount,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TabBar(
+              tabs: [
+                const Tab(
+                  icon: Icon(Icons.topic_outlined),
+                  text: 'Topics Covered',
+                ),
+                if (showAgencies)
+                  const Tab(
+                    icon: Icon(Icons.business_outlined),
+                    text: 'Agencies',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: showAgencies ? 250 : 190,
+              child: TabBarView(
+                children: [
+                  SingleChildScrollView(
+                    child: _NoteChips(
+                      notes: noteOptions,
+                      selectedNotes: selectedNotes,
+                      onChanged: onChanged,
+                    ),
+                  ),
+                  if (showAgencies)
+                    SingleChildScrollView(
+                      child: _AgencyChips(
+                        selectedNotes: selectedNotes,
+                        onChanged: onChanged,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (footer != null) ...[const SizedBox(height: 12), footer!],
+          ],
+        ),
+      ),
     );
   }
 }
