@@ -19,7 +19,7 @@ export FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:?Missing FIREBASE_STOR
 
 flutter pub get
 dart run tool/generate_firebase_options.dart
-flutter build web --release
+flutter build web --release --pwa-strategy=none
 """
   publish = "build/web"
 
@@ -30,3 +30,28 @@ flutter build web --release
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/flutter_bootstrap.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/main.dart.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/flutter_service_worker.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
