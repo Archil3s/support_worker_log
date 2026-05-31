@@ -1,5 +1,26 @@
 [build]
-  command = "dart run tool/generate_firebase_options.dart && flutter build web --release"
+  command = """
+set -e
+
+if [ ! -d "$HOME/flutter" ]; then
+  git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+fi
+
+export PATH="$HOME/flutter/bin:$PATH"
+flutter config --no-analytics
+flutter --version
+
+export FIREBASE_WEB_API_KEY="${FIREBASE_WEB_API_KEY:?Missing FIREBASE_WEB_API_KEY}"
+export FIREBASE_WEB_APP_ID="${FIREBASE_WEB_APP_ID:?Missing FIREBASE_WEB_APP_ID}"
+export FIREBASE_MESSAGING_SENDER_ID="${FIREBASE_MESSAGING_SENDER_ID:?Missing FIREBASE_MESSAGING_SENDER_ID}"
+export FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:?Missing FIREBASE_PROJECT_ID}"
+export FIREBASE_AUTH_DOMAIN="${FIREBASE_AUTH_DOMAIN:?Missing FIREBASE_AUTH_DOMAIN}"
+export FIREBASE_STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:?Missing FIREBASE_STORAGE_BUCKET}"
+
+flutter pub get
+dart run tool/generate_firebase_options.dart
+flutter build web --release
+"""
   publish = "build/web"
 
 [[redirects]]
