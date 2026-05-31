@@ -133,10 +133,17 @@ class CloudStorageService {
       return current;
     }
 
-    final provider = GoogleAuthProvider()
-      ..addScope('https://www.googleapis.com/auth/drive.file')
-      ..setCustomParameters({'include_granted_scopes': 'true'});
-    final credential = await _auth.signInWithPopup(provider);
+    late final UserCredential credential;
+
+    try {
+      final provider = GoogleAuthProvider()
+        ..addScope('https://www.googleapis.com/auth/drive.file')
+        ..setCustomParameters({'include_granted_scopes': 'true'});
+      credential = await _auth.signInWithPopup(provider);
+    } on FirebaseAuthException catch (error) {
+      throw StateError(_authErrorMessage('Google Drive sign-in', error));
+    }
+
     final user = credential.user;
     final oauth = credential.credential;
 
@@ -157,6 +164,16 @@ class CloudStorageService {
     }
 
     return updated;
+  }
+
+  String _authErrorMessage(String action, FirebaseAuthException error) {
+    final message = error.message;
+
+    if (message != null && message.trim().isNotEmpty) {
+      return '$action failed: ${message.trim()}';
+    }
+
+    return '$action failed: ${error.code}';
   }
 
   Future<void> sendPasswordResetEmail(String email) {

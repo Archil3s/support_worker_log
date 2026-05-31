@@ -17,7 +17,7 @@ class GoogleDriveApiPlatform {
       if (parentId != null && parentId.trim().isNotEmpty) 'parents': [parentId],
     };
 
-    final response = await html.HttpRequest.request(
+    final response = await _request(
       _driveFilesUri.toString(),
       method: 'POST',
       requestHeaders: {
@@ -25,6 +25,7 @@ class GoogleDriveApiPlatform {
         'Content-Type': 'application/json; charset=utf-8',
       },
       sendData: jsonEncode(body),
+      failureMessage: 'Google Drive folder creation failed',
     );
 
     return _fileFromResponse(response, 'Google Drive folder creation failed');
@@ -57,7 +58,7 @@ class GoogleDriveApiPlatform {
       ..add(bytes)
       ..add(utf8.encode('\r\n--$boundary--'));
 
-    final response = await html.HttpRequest.request(
+    final response = await _request(
       _driveUploadUri.toString(),
       method: 'POST',
       requestHeaders: {
@@ -65,6 +66,7 @@ class GoogleDriveApiPlatform {
         'Content-Type': 'multipart/related; boundary=$boundary',
       },
       sendData: body.takeBytes(),
+      failureMessage: 'Google Drive upload failed',
     );
 
     return _fileFromResponse(response, 'Google Drive upload failed');
@@ -80,10 +82,11 @@ class GoogleDriveApiPlatform {
       'q': "'$parentId' in parents and trashed = false",
     });
 
-    final response = await html.HttpRequest.request(
+    final response = await _request(
       uri.toString(),
       method: 'GET',
       requestHeaders: {'Authorization': 'Bearer $accessToken'},
+      failureMessage: 'Google Drive file listing failed',
     );
     final decoded = _decodeJsonResponse(
       response,
@@ -126,6 +129,32 @@ class GoogleDriveApiPlatform {
     return file;
   }
 
+  Future<html.HttpRequest> _request(
+    String url, {
+    required String method,
+    required Map<String, String> requestHeaders,
+    required String failureMessage,
+    Object? sendData,
+  }) async {
+    try {
+      return await html.HttpRequest.request(
+        url,
+        method: method,
+        requestHeaders: requestHeaders,
+        sendData: sendData,
+      );
+    } catch (error) {
+      if (error is html.ProgressEvent) {
+        throw StateError(
+          '$failureMessage. The browser could not reach the Google Drive API. '
+          'Check that Google Drive API is enabled for this Firebase/Google project.',
+        );
+      }
+
+      throw StateError('$failureMessage: ${_readableError(error)}');
+    }
+  }
+
   Map<String, dynamic> _decodeJsonResponse(
     html.HttpRequest response, {
     required String failureMessage,
@@ -134,8 +163,11 @@ class GoogleDriveApiPlatform {
     final status = response.status ?? 0;
 
     if (status < 200 || status >= 300) {
+      final googleMessage = _googleApiError(raw);
+
       throw StateError(
-        raw.trim().isEmpty ? '$failureMessage with HTTP $status.' : raw,
+        googleMessage ??
+            (raw.trim().isEmpty ? '$failureMessage with HTTP $status.' : raw),
       );
     }
 
@@ -161,5 +193,38 @@ class GoogleDriveApiPlatform {
       mimeType: mimeType,
       webViewLink: json['webViewLink'] as String?,
     );
+  }
+
+  String? _googleApiError(String raw) {
+    if (raw.trim().isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final error = decoded['error'];
+      if (error is Map<String, dynamic>) {
+        final message = error['message'];
+        final status = error['status'];
+
+        if (message is String && message.trim().isNotEmpty) {
+          final cleanStatus = status is String && status.trim().isNotEmpty
+              ? ' ($status)'
+              : '';
+          return 'Google Drive API error$cleanStatus: ${message.trim()}';
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+
+  String _readableError(Object error) {
+    final text = error.toString();
+    if (!text.startsWith('Instance of ')) return text;
+
+    return 'Google returned an unreadable browser error. Reconnect Drive and try again. If it repeats, enable Google Drive API in the Google Cloud project used by Firebase.';
   }
 }

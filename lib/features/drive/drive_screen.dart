@@ -140,7 +140,7 @@ class _DriveScreenState extends State<DriveScreen> {
       if (!mounted) return;
 
       setState(() {
-        message = error.toString();
+        message = _friendlyError(error);
         messageIsError = true;
       });
     } finally {
@@ -148,6 +148,20 @@ class _DriveScreenState extends State<DriveScreen> {
         setState(idle);
       }
     }
+  }
+
+  String _friendlyError(Object error) {
+    final text = error.toString().trim();
+
+    if (text.startsWith('Bad state: ')) {
+      return text.replaceFirst('Bad state: ', '');
+    }
+
+    if (text.startsWith('Instance of ')) {
+      return 'Google Drive returned an unreadable browser error. Reconnect Drive and try again. If it repeats, enable Google Drive API in the Google Cloud project used by Firebase.';
+    }
+
+    return text;
   }
 
   Future<void> _openDriveFolder(String folderId) async {
