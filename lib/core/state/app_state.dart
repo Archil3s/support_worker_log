@@ -131,12 +131,16 @@ class AppState extends ChangeNotifier {
     return token;
   }
 
-  Future<String> requireGoogleDriveAccessToken() {
-    return _cloudStorageService.requireGoogleDriveAccessToken();
+  Future<String> requireGoogleDriveAccessToken({bool forceRefresh = false}) {
+    return _cloudStorageService.requireGoogleDriveAccessToken(
+      forceRefresh: forceRefresh,
+    );
   }
 
-  Future<String> connectGoogleDrive() async {
-    final token = await _cloudStorageService.requireGoogleDriveAccessToken();
+  Future<String> connectGoogleDrive({bool forceRefresh = false}) async {
+    final token = await _cloudStorageService.requireGoogleDriveAccessToken(
+      forceRefresh: forceRefresh,
+    );
     notifyListeners();
     return token;
   }

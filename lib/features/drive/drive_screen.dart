@@ -9,6 +9,10 @@ import '../../core/state/app_state.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/section_card.dart';
 
+const _driveApiSetupUrl =
+    'https://console.cloud.google.com/apis/library/drive.googleapis.com'
+    '?project=support-worker-log';
+
 class DriveScreen extends StatefulWidget {
   const DriveScreen({super.key});
 
@@ -29,7 +33,9 @@ class _DriveScreenState extends State<DriveScreen> {
   List<GoogleDriveFile> templateFiles = const [];
 
   Future<String> _connectDrive() async {
-    final token = await context.read<AppState>().connectGoogleDrive();
+    final token = await context.read<AppState>().connectGoogleDrive(
+      forceRefresh: true,
+    );
     return token;
   }
 
@@ -176,6 +182,10 @@ class _DriveScreenState extends State<DriveScreen> {
     await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
   }
 
+  Future<void> _openDriveApiSetup() async {
+    await launchUrl(Uri.parse(_driveApiSetupUrl), webOnlyWindowName: '_blank');
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -234,6 +244,12 @@ class _DriveScreenState extends State<DriveScreen> {
                 label: Text(
                   foldersReady ? 'Recreate App Folders' : 'Create App Folders',
                 ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _openDriveApiSetup,
+                icon: const Icon(Icons.settings_applications_outlined),
+                label: const Text('Open Drive API Setup'),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(

@@ -126,10 +126,12 @@ class CloudStorageService {
     return updated;
   }
 
-  Future<String> requireGoogleDriveAccessToken() async {
+  Future<String> requireGoogleDriveAccessToken({
+    bool forceRefresh = false,
+  }) async {
     final current = _googleDriveAccessToken;
 
-    if (current != null && current.isNotEmpty) {
+    if (!forceRefresh && current != null && current.isNotEmpty) {
       return current;
     }
 
