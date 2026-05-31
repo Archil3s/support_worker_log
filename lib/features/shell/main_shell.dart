@@ -340,7 +340,40 @@ class _MoreScreen extends StatelessWidget {
           subtitle: 'Clients, rates, notes, goals, and app data',
           onTap: onSettings,
         ),
+        const SizedBox(height: 12),
+        const _BuildInfoTile(),
       ],
+    );
+  }
+}
+
+class _BuildInfoTile extends StatelessWidget {
+  const _BuildInfoTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF102A1C),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF31E981)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.verified_outlined, color: Color(0xFF31E981)),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Phone sync build 2026-06-01',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
