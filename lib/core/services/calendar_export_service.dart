@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/entry_type.dart';
 import '../models/work_entry.dart';
 
+const _defaultCalendarColor = '#FF0000';
+
 class CalendarExportService {
   const CalendarExportService._();
 
@@ -21,6 +23,7 @@ class CalendarExportService {
       'dates': '${_calendarDate(start)}/${_calendarDate(end)}',
       'details': _detailsForEntry(entry, start, end),
       'location': entry.client,
+      'trp': 'false',
     });
 
     return launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -65,6 +68,12 @@ class CalendarExportService {
       'SUMMARY:${_icsEscape(title)}',
       'DESCRIPTION:${_icsEscape(details)}',
       'LOCATION:${_icsEscape(entry.client)}',
+      'CLASS:PRIVATE',
+      'TRANSP:OPAQUE',
+      'COLOR:$_defaultCalendarColor',
+      'X-APPLE-CALENDAR-COLOR:$_defaultCalendarColor',
+      'X-MICROSOFT-CDO-BUSYSTATUS:BUSY',
+      'CATEGORIES:${_icsEscape(entry.client)}',
       'END:VEVENT',
       'END:VCALENDAR',
       '',
@@ -92,8 +101,14 @@ class CalendarExportService {
     DateTime start,
     DateTime end,
   ) {
+    final breakdown = entry.supportNoteBreakdown.trim().isEmpty
+        ? supportNoteBreakdownTemplate.trim()
+        : entry.supportNoteBreakdown.trim();
+
     final buffer = StringBuffer()
       ..writeln(_sentenceForEntry(entry, start, end))
+      ..writeln()
+      ..writeln(breakdown)
       ..writeln()
       ..writeln('Client initials: ${entry.client}')
       ..writeln('Support type: ${entry.type.label}')
@@ -113,9 +128,7 @@ class CalendarExportService {
 
       buffer
         ..writeln()
-        ..writeln('Quick info: ${sortedNotes.join(', ')}')
-        ..writeln()
-        ..writeln('Notes:');
+        ..writeln('Quick notes:');
 
       for (final note in sortedNotes) {
         buffer.writeln('- $note');

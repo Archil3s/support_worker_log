@@ -1,4 +1,5 @@
 // ignore_for_file: prefer_collection_literals
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -186,7 +187,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
   }
 
-  void _finishVisit(AppState appState, ActiveVisit activeVisit) {
+  Future<void> _finishVisit(AppState appState, ActiveVisit activeVisit) async {
     final finishedAt = DateTime.now();
     final finishOdometer = activeVisit.type == EntryType.homeVisit
         ? _readDouble(finishOdometerController)
@@ -199,6 +200,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       _snack('Finish odometer must be higher than start odometer.');
       return;
     }
+
+    final supportNoteBreakdown = await _promptSupportNoteBreakdown();
+
+    if (!mounted || supportNoteBreakdown == null) return;
 
     final typedNote = noteController.text.trim();
 
@@ -220,6 +225,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       startTime: TimeOfDay.fromDateTime(activeVisit.startedAt),
       minutes: _minutesBetween(activeVisit.startedAt, finishedAt),
       notes: notes,
+      supportNoteBreakdown: supportNoteBreakdown.trim(),
       odometerStart: activeVisit.type == EntryType.homeVisit
           ? activeVisit.odometerStart
           : null,
@@ -238,6 +244,71 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     appState.completeActiveVisit(entry);
     ScaffoldMessenger.of(context).clearSnackBars();
+  }
+
+  Future<String?> _promptSupportNoteBreakdown() async {
+    final controller = TextEditingController(
+      text: supportNoteBreakdownTemplate,
+    );
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: 16 + MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Support Note Breakdown',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 10,
+                maxLines: 16,
+                decoration: const InputDecoration(
+                  labelText: 'Calendar and notes breakdown',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(controller.text.trim()),
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Save Visit'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
   }
 
   Future<void> _confirmCancelVisit(
@@ -333,7 +404,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
           });
         },
         onSaveDraft: () => _saveDraftNotes(appState, activeVisit),
-        onFinish: () => _finishVisit(appState, activeVisit),
+        onFinish: () => unawaited(_finishVisit(appState, activeVisit)),
         onCancel: () => _confirmCancelVisit(appState, activeVisit),
       );
     }

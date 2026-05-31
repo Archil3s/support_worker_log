@@ -158,7 +158,7 @@ class LocalSupportNoteService {
       initials: cleanedInitials,
       status: status,
       fileName: fileName,
-      noteText: '',
+      noteText: noteText,
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -201,16 +201,10 @@ class LocalSupportNoteService {
     required WorkEntry entry,
     required EntrySupportNoteStatus status,
   }) {
-    return '''
-Main topic(s)  (max. 200 words)
-    1. 
+    final savedBreakdown = entry.supportNoteBreakdown.trim();
+    if (savedBreakdown.isNotEmpty) return savedBreakdown;
 
-Outcome(s)  (Max. 100 words)
-    1. 
-
-Overall impression (Max. 150 words)
-    1. 
-''';
+    return supportNoteBreakdownTemplate;
   }
 
   static String noteTitle({

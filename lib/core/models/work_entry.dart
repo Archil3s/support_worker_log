@@ -5,6 +5,17 @@ import '../utils/formatters.dart';
 import 'app_settings.dart';
 import 'entry_type.dart';
 
+const supportNoteBreakdownTemplate = '''
+Main topic(s)  (max. 200 words)
+    1. 
+
+Outcome(s)  (Max. 100 words)
+    1. 
+
+Overall impression (Max. 150 words)
+    1. 
+''';
+
 class WorkEntry {
   const WorkEntry({
     required this.id,
@@ -14,6 +25,7 @@ class WorkEntry {
     required this.startTime,
     required this.minutes,
     required this.notes,
+    this.supportNoteBreakdown = '',
     this.odometerStart,
     this.odometerEnd,
   });
@@ -25,6 +37,7 @@ class WorkEntry {
   final TimeOfDay startTime;
   final int minutes;
   final List<String> notes;
+  final String supportNoteBreakdown;
   final double? odometerStart;
   final double? odometerEnd;
 
@@ -74,6 +87,7 @@ class WorkEntry {
     TimeOfDay? startTime,
     int? minutes,
     List<String>? notes,
+    String? supportNoteBreakdown,
     double? odometerStart,
     double? odometerEnd,
   }) {
@@ -85,6 +99,7 @@ class WorkEntry {
       startTime: startTime ?? this.startTime,
       minutes: minutes ?? this.minutes,
       notes: notes ?? this.notes,
+      supportNoteBreakdown: supportNoteBreakdown ?? this.supportNoteBreakdown,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
     );
@@ -100,6 +115,7 @@ class WorkEntry {
       'startMinute': startTime.minute,
       'minutes': minutes,
       'notes': notes,
+      'supportNoteBreakdown': supportNoteBreakdown,
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
     };
@@ -152,6 +168,7 @@ class WorkEntry {
       ),
       minutes: boundInt(readInt('minutes', 0), 0, 1440),
       notes: notes,
+      supportNoteBreakdown: json['supportNoteBreakdown'] as String? ?? '',
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
     );
@@ -173,6 +190,12 @@ class WorkEntry {
 
     if (notes.isNotEmpty) {
       buffer.writeln('Notes: ${notes.join(', ')}');
+    }
+
+    if (supportNoteBreakdown.trim().isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(supportNoteBreakdown.trim());
     }
 
     return buffer.toString().trim();

@@ -248,6 +248,13 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                 style: const TextStyle(color: Color(0xFF8396C7), fontSize: 12),
               ),
             ],
+            if (widget.entry.supportNoteBreakdown.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SelectableText(
+                widget.entry.supportNoteBreakdown.trim(),
+                style: const TextStyle(height: 1.35),
+              ),
+            ],
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
