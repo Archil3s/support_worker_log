@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_settings.dart';
 import '../models/google_drive_file.dart';
 import '../models/work_entry.dart';
 import 'google_drive/google_drive_api_platform.dart';
+import 'local_support_note_service.dart';
 
 class GoogleDriveFolderSetup {
   const GoogleDriveFolderSetup({
@@ -43,11 +45,83 @@ class GoogleDriveTemplateUpload {
   final GoogleDriveFile file;
 }
 
+class EntryDriveSupportNoteMeta {
+  const EntryDriveSupportNoteMeta({
+    required this.entryId,
+    required this.initials,
+    required this.status,
+    required this.fileId,
+    required this.fileName,
+    required this.noteText,
+    this.webViewLink,
+  });
+
+  final String entryId;
+  final String initials;
+  final EntrySupportNoteStatus status;
+  final String fileId;
+  final String fileName;
+  final String noteText;
+  final String? webViewLink;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'entryId': entryId,
+      'initials': initials,
+      'status': status.name,
+      'fileId': fileId,
+      'fileName': fileName,
+      'noteText': noteText,
+      'webViewLink': webViewLink,
+    };
+  }
+
+  factory EntryDriveSupportNoteMeta.fromJson(Map<String, dynamic> json) {
+    final statusName = json['status'] as String?;
+    final status = EntrySupportNoteStatus.values.firstWhere(
+      (item) => item.name == statusName,
+      orElse: () => EntrySupportNoteStatus.incomplete,
+    );
+
+    return EntryDriveSupportNoteMeta(
+      entryId: json['entryId'] as String? ?? '',
+      initials: json['initials'] as String? ?? '',
+      status: status,
+      fileId: json['fileId'] as String? ?? '',
+      fileName: json['fileName'] as String? ?? '',
+      noteText: json['noteText'] as String? ?? '',
+      webViewLink: json['webViewLink'] as String?,
+    );
+  }
+}
+
 class GoogleDriveService {
   GoogleDriveService({GoogleDriveApiPlatform? api})
     : _api = api ?? GoogleDriveApiPlatform();
 
   final GoogleDriveApiPlatform _api;
+
+  static String _supportNoteMetaKey(String entryId) {
+    return 'entry_google_drive_support_note_$entryId';
+  }
+
+  Future<EntryDriveSupportNoteMeta?> loadSupportNoteMeta(String entryId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_supportNoteMetaKey(entryId));
+
+    if (raw == null || raw.trim().isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return EntryDriveSupportNoteMeta.fromJson(decoded);
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
 
   Future<GoogleDriveFolderSetup> createFolderSetup({
     required String accessToken,
@@ -140,6 +214,59 @@ class GoogleDriveService {
     required String folderId,
   }) {
     return _api.listChildren(accessToken: accessToken, parentId: folderId);
+  }
+
+  Future<EntryDriveSupportNoteMeta> saveSupportNote({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
+  }) async {
+    final cleanedInitials = initials.trim().toUpperCase();
+
+    if (cleanedInitials.isEmpty) {
+      throw StateError('Enter initials first.');
+    }
+
+    final localFileName = LocalSupportNoteService.noteFileName(
+      entry: entry,
+      initials: cleanedInitials,
+      status: status,
+    );
+    final driveFileName = localFileName.replaceAll('/', '_');
+    final bytes = await LocalSupportNoteService.buildNoteDocx(
+      entry: entry,
+      initials: cleanedInitials,
+      status: status,
+      noteText: noteText,
+    );
+    final file = await _api.uploadFile(
+      accessToken: accessToken,
+      name: driveFileName,
+      mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      bytes: bytes,
+      parentId: clientNotesFolderId,
+    );
+
+    final meta = EntryDriveSupportNoteMeta(
+      entryId: entry.id,
+      initials: cleanedInitials,
+      status: status,
+      fileId: file.id,
+      fileName: file.name,
+      noteText: noteText,
+      webViewLink: file.webViewLink,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _supportNoteMetaKey(entry.id),
+      jsonEncode(meta.toJson()),
+    );
+
+    return meta;
   }
 
   static const _textTemplates = [

@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
@@ -668,11 +670,13 @@ class EntryNoteSheet extends StatefulWidget {
 }
 
 class _EntryNoteSheetState extends State<EntryNoteSheet> {
+  final GoogleDriveService driveService = GoogleDriveService();
   final initialsController = TextEditingController();
   final noteController = TextEditingController();
 
   EntrySupportNoteStatus status = EntrySupportNoteStatus.incomplete;
   EntrySupportNoteMeta? meta;
+  EntryDriveSupportNoteMeta? driveMeta;
   bool busy = false;
   String? message;
 
@@ -691,11 +695,13 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   Future<void> _load() async {
     final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    final loadedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
 
     if (!mounted) return;
 
     setState(() {
       meta = loaded;
+      driveMeta = loadedDrive;
 
       if (loaded == null) {
         initialsController.text =
@@ -708,6 +714,12 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         initialsController.text = loaded.initials;
         noteController.text = loaded.noteText;
         status = loaded.status;
+      }
+
+      if (loaded == null && loadedDrive != null) {
+        initialsController.text = loadedDrive.initials;
+        noteController.text = loadedDrive.noteText;
+        status = loadedDrive.status;
       }
     });
   }
@@ -776,6 +788,53 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     }
   }
 
+  Future<void> _saveToDrive() async {
+    setState(() {
+      busy = true;
+      message = 'Saving note to Google Drive...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      final folderId = appState.settings.googleDriveClientNotesFolderId;
+
+      if (folderId == null || folderId.isEmpty) {
+        throw StateError(
+          'Create Google Drive app folders first, then save this note to Drive.',
+        );
+      }
+
+      final token = await appState.connectGoogleDrive();
+      final updated = await driveService.saveSupportNote(
+        accessToken: token,
+        clientNotesFolderId: folderId,
+        entry: widget.entry,
+        initials: initialsController.text,
+        status: status,
+        noteText: noteController.text,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updated;
+        message = 'Saved to Google Drive as ${updated.fileName}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not save to Google Drive: ${_friendlyError(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _changeStatus(EntrySupportNoteStatus next) async {
     setState(() {
       status = next;
@@ -828,6 +887,29 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         });
       }
     }
+  }
+
+  Future<void> _openDriveFile() async {
+    final current = driveMeta;
+    final link = current?.webViewLink;
+
+    if (current == null || link == null || link.isEmpty) {
+      setState(() {
+        message = 'Create the Google Drive note file first.';
+      });
+      return;
+    }
+
+    await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+  }
+
+  String _friendlyError(Object error) {
+    final text = error.toString().trim();
+    if (text.startsWith('Bad state: ')) {
+      return text.replaceFirst('Bad state: ', '');
+    }
+
+    return text;
   }
 
   @override
@@ -920,6 +1002,16 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
                 ),
               ),
             ),
+          if (driveMeta != null)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: SelectableText(
+                  'Attached Google Drive file:\n${driveMeta!.fileName}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -949,9 +1041,25 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             icon: const Icon(Icons.open_in_new),
             label: const Text('Open Attached Local File'),
           ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: busy ? null : _saveToDrive,
+            icon: const Icon(Icons.add_to_drive_outlined),
+            label: Text(
+              driveMeta == null
+                  ? 'Create Google Drive Note File'
+                  : 'Create Updated Google Drive Note File',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _openDriveFile,
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Open Google Drive File'),
+          ),
           const SizedBox(height: 12),
           const Text(
-            'Local only. This note is attached to the saved entry and saved only to the folder you choose. Changing status renames the attached local file.',
+            'Local files save to the folder you choose. Google Drive files save to the Client Notes folder created in More > Google Drive.',
             style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],

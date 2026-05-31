@@ -129,13 +129,13 @@ class LocalSupportNoteService {
 
     final existing = await loadMeta(entry.id);
 
-    final fileName = _fileName(
+    final fileName = noteFileName(
       entry: entry,
       initials: cleanedInitials,
       status: status,
     );
 
-    final docxBytes = await _buildTemplateDocx(
+    final docxBytes = await buildNoteDocx(
       entry: entry,
       initials: cleanedInitials,
       status: status,
@@ -220,7 +220,7 @@ class LocalSupportNoteService {
     return '${initials.trim().toUpperCase()} | ${formatDate(entry.date)} | ${status.label}';
   }
 
-  static String _fileName({
+  static String noteFileName({
     required WorkEntry entry,
     required String initials,
     required EntrySupportNoteStatus status,
@@ -232,7 +232,7 @@ class LocalSupportNoteService {
     return '$cleanInitials/${date}_${cleanInitials}_$statusPart.docx';
   }
 
-  static Future<List<int>> _buildTemplateDocx({
+  static Future<List<int>> buildNoteDocx({
     required WorkEntry entry,
     required String initials,
     required EntrySupportNoteStatus status,
