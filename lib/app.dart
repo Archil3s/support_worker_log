@@ -202,6 +202,24 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
             textColor: Colors.white,
             tileColor: Colors.transparent,
           ),
+          bottomSheetTheme: const BottomSheetThemeData(
+            backgroundColor: panel,
+            surfaceTintColor: Colors.transparent,
+            modalBackgroundColor: panel,
+            modalBarrierColor: Color(0x99000000),
+            dragHandleColor: muted,
+          ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: panel2,
+            contentTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
           dividerTheme: const DividerThemeData(color: border),
           textTheme: ThemeData.dark().textTheme.apply(
             bodyColor: Colors.white,

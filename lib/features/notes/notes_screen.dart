@@ -16,7 +16,11 @@ String _noteTitleForEntry({
   required EntrySupportNoteStatus status,
 }) {
   final initials = LocalSupportNoteService.defaultInitialsForEntry(entry);
-  return '$initials | ${status.label} | ${formatDate(entry.date)}';
+  return LocalSupportNoteService.noteTitle(
+    entry: entry,
+    initials: initials,
+    status: status,
+  );
 }
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -397,6 +401,15 @@ class _NextActionTile extends StatelessWidget {
   final NextActionItem action;
   final ValueChanged<bool> onChanged;
 
+  Future<void> _openNote(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => EntryNoteSheet(entry: entry),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final completedAt = action.completedAt;
@@ -408,6 +421,11 @@ class _NextActionTile extends StatelessWidget {
         onChanged: (value) => onChanged(value ?? false),
         controlAffinity: ListTileControlAffinity.leading,
         activeColor: const Color(0xFF31E981),
+        secondary: IconButton(
+          tooltip: 'Open note',
+          onPressed: () => _openNote(context),
+          icon: const Icon(Icons.note_alt_outlined),
+        ),
         title: Text(
           action.text,
           style: TextStyle(

@@ -1,15 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 class LocalSupportNotesPlatform {
   static const String defaultRootPath = r'C:\Users\Danie\MR NOTES FOLDER';
+  static const String _androidWriterUrl = 'http://10.0.2.2:51239';
 
   bool hasFolder() {
     return true;
   }
 
   Future<bool> chooseFolder() async {
+    if (Platform.isAndroid) {
+      await _post('/ping', <String, dynamic>{});
+      return true;
+    }
+
     await Directory(defaultRootPath).create(recursive: true);
     return true;
   }
@@ -18,6 +25,14 @@ class LocalSupportNotesPlatform {
     required String fileName,
     required String contents,
   }) async {
+    if (Platform.isAndroid) {
+      await _post('/write-note', <String, dynamic>{
+        'fileName': fileName,
+        'contents': contents,
+      });
+      return true;
+    }
+
     final file = await _fileForRelativePath(fileName);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(_payloadBytes(contents), flush: true);
@@ -29,6 +44,15 @@ class LocalSupportNotesPlatform {
     required String newFileName,
     required String contents,
   }) async {
+    if (Platform.isAndroid) {
+      await _post('/rename-note', <String, dynamic>{
+        'oldFileName': oldFileName,
+        'newFileName': newFileName,
+        'contents': contents,
+      });
+      return true;
+    }
+
     final newFile = await _fileForRelativePath(newFileName);
     await newFile.parent.create(recursive: true);
     await newFile.writeAsBytes(_payloadBytes(contents), flush: true);
@@ -44,6 +68,11 @@ class LocalSupportNotesPlatform {
   }
 
   Future<bool> openFile(String fileName) async {
+    if (Platform.isAndroid) {
+      await _post('/open-note', <String, dynamic>{'fileName': fileName});
+      return true;
+    }
+
     final file = await _fileForRelativePath(fileName);
 
     if (!await file.exists()) {
@@ -88,5 +117,54 @@ class LocalSupportNotesPlatform {
     }
 
     return utf8.encode(contents);
+  }
+}
+
+Future<void> _post(String path, Map<String, dynamic> body) async {
+  final client = HttpClient();
+
+  try {
+    final request = await client
+        .postUrl(
+          Uri.parse('${LocalSupportNotesPlatform._androidWriterUrl}$path'),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    request.headers.contentType = ContentType(
+      'text',
+      'plain',
+      charset: 'utf-8',
+    );
+
+    request.write(jsonEncode(body));
+
+    final response = await request.close().timeout(const Duration(seconds: 20));
+    final raw = await utf8.decoder.bind(response).join();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        raw.trim().isNotEmpty
+            ? raw
+            : 'Local notes writer failed with HTTP ${response.statusCode}.',
+      );
+    }
+
+    if (raw.trim().isEmpty) return;
+
+    final decoded = jsonDecode(raw);
+
+    if (decoded is Map && decoded['ok'] == true) return;
+
+    throw StateError(raw);
+  } on TimeoutException {
+    throw StateError(
+      'Local notes writer timed out. Start start_invoice_web.ps1 first.',
+    );
+  } on SocketException catch (error) {
+    throw StateError(
+      'Local notes writer is not reachable. Start start_invoice_web.ps1 first. Details: $error',
+    );
+  } finally {
+    client.close(force: true);
   }
 }

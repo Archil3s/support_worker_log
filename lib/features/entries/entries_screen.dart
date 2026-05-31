@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/models/app_settings.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/calendar_export_service.dart';
@@ -764,6 +765,126 @@ class _EntryCard extends StatelessWidget {
     }
   }
 
+  void _copyEntry(BuildContext context, AppSettings settings) {
+    Clipboard.setData(ClipboardData(text: entry.textSummary(settings)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Entry copied')));
+  }
+
+  void _duplicateEntry(BuildContext context) {
+    context.read<AppState>().duplicateEntry(entry);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Entry duplicated')));
+  }
+
+  void _deleteEntry(BuildContext context) {
+    final appState = context.read<AppState>();
+    final removed = appState.deleteEntry(entry);
+
+    if (removed == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Entry deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => appState.restoreEntry(removed),
+        ),
+      ),
+    );
+  }
+
+  void _showActions(BuildContext context, AppSettings settings) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF151B29),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${entry.client} actions',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${entry.type.label} Ã‚Â· ${formatDate(entry.date)} Ã‚Â· ${entry.hours.toStringAsFixed(2)}h',
+                    style: const TextStyle(color: Color(0xFF8396C7)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _EntryActionTile(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit entry',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    onEdit();
+                  },
+                ),
+                _EntryActionTile(
+                  icon: Icons.copy_outlined,
+                  label: 'Copy summary',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _copyEntry(context, settings);
+                  },
+                ),
+                _EntryActionTile(
+                  icon: Icons.copy_all_outlined,
+                  label: 'Duplicate entry',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _duplicateEntry(context);
+                  },
+                ),
+                _EntryActionTile(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Open in Google Calendar',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _openGoogleCalendar(context);
+                  },
+                ),
+                _EntryActionTile(
+                  icon: Icons.event_available_outlined,
+                  label: 'Download ICS file',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _exportIcs(context);
+                  },
+                ),
+                const Divider(height: 18),
+                _EntryActionTile(
+                  icon: Icons.delete_outline,
+                  label: 'Delete entry',
+                  danger: true,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _deleteEntry(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
@@ -777,15 +898,21 @@ class _EntryCard extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(child: Icon(entry.type.icon)),
-              title: Text(entry.client),
-              subtitle: Text(
-                '${entry.type.label} | ${formatDate(entry.date)} | ${entry.baseMinutes} min | time ${entry.hours.toStringAsFixed(2)}h',
+              title: Text(
+                entry.client,
+                style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-              trailing: Text(money(entry.earnings(settings))),
+              subtitle: Text(
+                '${entry.type.label} Ã‚Â· ${formatDate(entry.date)} Ã‚Â· ${entry.baseMinutes} min Ã‚Â· ${entry.hours.toStringAsFixed(2)}h',
+              ),
+              trailing: Text(
+                money(entry.earnings(settings)),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
             if (entry.notes.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -798,69 +925,46 @@ class _EntryCard extends StatelessWidget {
                   ],
                 ),
               ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit'),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(
-                      ClipboardData(text: entry.textSummary(settings)),
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Entry copied')),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_outlined),
-                  label: const Text('Copy'),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    context.read<AppState>().duplicateEntry(entry);
-                  },
-                  icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('Duplicate'),
-                ),
-                TextButton.icon(
-                  onPressed: () => _openGoogleCalendar(context),
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  label: const Text('Google Cal'),
-                ),
-                TextButton.icon(
-                  onPressed: () => _exportIcs(context),
-                  icon: const Icon(Icons.event_available_outlined),
-                  label: const Text('ICS'),
-                ),
-                IconButton(
-                  onPressed: () {
-                    final removed = context.read<AppState>().deleteEntry(entry);
-                    if (removed == null) return;
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Entry deleted'),
-                        action: SnackBarAction(
-                          label: 'Undo',
-                          onPressed: () {
-                            context.read<AppState>().restoreEntry(removed);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Delete',
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _showActions(context, settings),
+                icon: const Icon(Icons.more_horiz),
+                label: const Text('Actions'),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EntryActionTile extends StatelessWidget {
+  const _EntryActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFFF6B6B) : Colors.white;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: color),
+      title: Text(
+        label,
+        style: TextStyle(color: color, fontWeight: FontWeight.w800),
+      ),
+      onTap: onTap,
     );
   }
 }

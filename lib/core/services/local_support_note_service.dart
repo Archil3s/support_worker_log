@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/entry_type.dart';
 import '../models/work_entry.dart';
 import '../utils/formatters.dart';
 import 'local_support_notes/local_support_notes_platform.dart';
@@ -132,9 +135,11 @@ class LocalSupportNoteService {
       status: status,
     );
 
-    final docxBytes = _buildBlankTemplateDocx(
+    final docxBytes = await _buildTemplateDocx(
       entry: entry,
       initials: cleanedInitials,
+      status: status,
+      noteText: noteText,
     );
 
     final contents = '__BASE64__:${base64Encode(docxBytes)}';
@@ -230,7 +235,7 @@ class LocalSupportNoteService {
     required String initials,
     required EntrySupportNoteStatus status,
   }) {
-    return '${initials.trim().toUpperCase()} | ${status.label} | ${formatDate(entry.date)}';
+    return '${initials.trim().toUpperCase()} | ${formatDate(entry.date)} | ${status.label}';
   }
 
   static String _fileName({
@@ -245,19 +250,55 @@ class LocalSupportNoteService {
     return '$cleanInitials/${date}_${cleanInitials}_$statusPart.docx';
   }
 
-  static List<int> _buildBlankTemplateDocx({
+  static Future<List<int>> _buildTemplateDocx({
     required WorkEntry entry,
     required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
+  }) async {
+    final paragraphs = _templateParagraphs(
+      entry: entry,
+      initials: initials,
+      status: status,
+      noteText: noteText,
+    );
+
+    try {
+      final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      return _docxFromTemplate(bytes: bytes, paragraphs: paragraphs);
+    } catch (_) {
+      return _minimalDocx(paragraphs);
+    }
+  }
+
+  static List<_DocxParagraph> _templateParagraphs({
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
   }) {
     final visitDate = formatDate(entry.date);
     final cleanInitials = initials.trim().toUpperCase();
+    final cleanNote = noteText.trim().isEmpty
+        ? defaultNoteTextForEntry(entry: entry, status: status)
+        : noteText.trim();
 
     final paragraphs = <_DocxParagraph>[
+      _DocxParagraph(
+        noteTitle(entry: entry, initials: cleanInitials, status: status),
+        bold: true,
+        center: true,
+        size: 28,
+      ),
+      const _DocxParagraph(''),
       const _DocxParagraph(
         'Template for reporting of interactions with survivors.',
         bold: true,
         center: true,
-        size: 28,
       ),
       const _DocxParagraph(''),
       const _DocxParagraph(
@@ -265,23 +306,53 @@ class LocalSupportNoteService {
       ),
       const _DocxParagraph(''),
       const _DocxParagraph('Geographical area. Blenheim'),
-      const _DocxParagraph(''),
       _DocxParagraph('Date: $visitDate'),
-      const _DocxParagraph(''),
-      _DocxParagraph('Name of client. $cleanInitials'),
-      const _DocxParagraph(''),
-      const _DocxParagraph(
-        'Date/time/length of interaction. Also record calls and texts, just time spent on each, no need for non important calls and texts. Record travel time.',
+      _DocxParagraph('Name of client: $cleanInitials'),
+      _DocxParagraph('Status: ${status.label}'),
+      _DocxParagraph('Initials: $cleanInitials'),
+      _DocxParagraph(
+        'Date/time/length of interaction: $visitDate / '
+        '${formatTime(entry.startTime)} / ${entry.baseMinutes} minutes '
+        '(${entry.hours.toStringAsFixed(2)} hours). Type: '
+        '${entry.type.label}.${_kilometresText(entry)}',
       ),
       const _DocxParagraph(''),
-      const _DocxParagraph('Main topic(s)  (max. 200 words)'),
-      const _DocxParagraph('1. ', leftIndentTwips: 720),
-      const _DocxParagraph('Outcome(s)  (Max. 100 words)'),
-      const _DocxParagraph('1. ', leftIndentTwips: 720),
-      const _DocxParagraph('Overall impression (Max. 150 words)'),
-      const _DocxParagraph('1. ', leftIndentTwips: 720),
+      ..._noteTextParagraphs(cleanNote),
+      const _DocxParagraph(''),
+      const _DocxParagraph(
+        'Local only: this document was generated locally and is not uploaded by this notes feature.',
+        size: 18,
+      ),
     ];
 
+    return paragraphs;
+  }
+
+  static List<int> _docxFromTemplate({
+    required Uint8List bytes,
+    required List<_DocxParagraph> paragraphs,
+  }) {
+    final source = ZipDecoder().decodeBytes(bytes);
+    final archive = Archive();
+    final documentBytes = utf8.encode(_documentXml(paragraphs));
+
+    for (final file in source.files) {
+      if (!file.isFile) continue;
+
+      if (file.name == 'word/document.xml') {
+        archive.addFile(
+          ArchiveFile(file.name, documentBytes.length, documentBytes),
+        );
+      } else {
+        final content = file.content as List<int>;
+        archive.addFile(ArchiveFile(file.name, content.length, content));
+      }
+    }
+
+    return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static List<int> _minimalDocx(List<_DocxParagraph> paragraphs) {
     final archive = Archive();
 
     void addTextFile(String name, String content) {
@@ -297,6 +368,24 @@ class LocalSupportNoteService {
     addTextFile('word/_rels/document.xml.rels', _documentRelsXml);
 
     return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static String _kilometresText(WorkEntry entry) {
+    if (entry.type != EntryType.homeVisit) return '';
+    return ' Kilometres: ${entry.kilometres.toStringAsFixed(1)}.';
+  }
+
+  static List<_DocxParagraph> _noteTextParagraphs(String noteText) {
+    return noteText.split(RegExp(r'\r?\n')).map((line) {
+      final trimmedRight = line.replaceFirst(RegExp(r'\s+$'), '');
+      final trimmed = trimmedRight.trimLeft();
+      final isIndented = RegExp(r'^(\d+[\.)]|[-*])\s*').hasMatch(trimmed);
+
+      return _DocxParagraph(
+        trimmedRight.trim().isEmpty ? '' : trimmedRight,
+        leftIndentTwips: isIndented ? 720 : null,
+      );
+    }).toList();
   }
 
   static String _documentXml(List<_DocxParagraph> paragraphs) {

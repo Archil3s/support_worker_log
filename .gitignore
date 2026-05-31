@@ -141,3 +141,9 @@ MR NOTES FOLDER/
 
 # Keep only blank app template asset
 !assets/templates/TEMPLATE.docx
+
+# Local patch backups
+*.bak_*
+*.backup_*
+*_backup.dart
+*_old.dart

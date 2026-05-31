@@ -153,16 +153,20 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     return 'Signed in. Waiting for first Firebase sync...';
   }
 
-  Widget _actionButton({required String label, required VoidCallback? onTap}) {
+  Widget _actionButton({
+    required String label,
+    required VoidCallback? onTap,
+    Color color = const Color(0xFF4F8DF7),
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Opacity(
         opacity: onTap == null ? 0.45 : 1,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF4F8DF7),
-            borderRadius: BorderRadius.circular(10),
+            color: color,
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             label,
@@ -188,8 +192,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         });
       },
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 360),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        constraints: const BoxConstraints(maxWidth: 172),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFF151B29),
           borderRadius: BorderRadius.circular(999),
@@ -208,17 +212,17 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
             Icon(
               live ? Icons.cloud_done : Icons.cloud_sync,
               color: live ? const Color(0xFF31E981) : const Color(0xFFFFC857),
-              size: 18,
+              size: 17,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 7),
             Flexible(
               child: Text(
-                '${_userLabel(user)} | ${_firebaseLabel(appState)}',
+                _firebaseLabel(appState),
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                   decoration: TextDecoration.none,
                 ),
               ),
@@ -229,8 +233,32 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     );
   }
 
+  Widget _closeButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _expanded = false;
+        });
+      },
+      child: Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFF20283B),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFF34405F)),
+        ),
+        child: const Icon(Icons.close, color: Colors.white, size: 22),
+      ),
+    );
+  }
+
   Widget _expandedPanel({required User user, required AppState appState}) {
     final live = _isLive(appState);
+    final size = MediaQuery.sizeOf(context);
+    final panelWidth = size.width < 430 ? size.width - 24 : 390.0;
+    final panelMaxHeight = size.height < 720 ? size.height * 0.62 : 520.0;
 
     final statusColor = live
         ? const Color(0xFF31E981)
@@ -244,125 +272,128 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         ? Icons.cloud_off
         : Icons.cloud_sync;
 
-    return Container(
-      width: 390,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF151B29),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF34405F)),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 24,
-            offset: Offset(0, 10),
-            color: Color(0x66000000),
-          ),
-        ],
-      ),
-      child: DefaultTextStyle(
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          decoration: TextDecoration.none,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'App Status',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _expanded = false;
-                    });
-                  },
-                  child: const Icon(Icons.close, color: Colors.white, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Currently logged in',
-              style: TextStyle(
-                color: Color(0xFF8396C7),
-                fontWeight: FontWeight.w800,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              _userLabel(user),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'UID: ${user.uid}',
-              style: const TextStyle(
-                color: Color(0xFF8396C7),
-                fontSize: 12,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(statusIcon, color: statusColor, size: 24),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _statusMessage(appState),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_lastChecked != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Last checked: $_lastChecked',
-                style: const TextStyle(
-                  color: Color(0xFF8396C7),
-                  fontSize: 12,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _actionButton(
-                  label: _syncing ? 'Syncing...' : 'Sync Now',
-                  onTap: _syncing ? null : _syncNow,
-                ),
-                _actionButton(
-                  label: _syncing ? 'Please wait...' : 'Logout',
-                  onTap: _syncing ? null : _logout,
-                ),
-              ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: 390, maxHeight: panelMaxHeight),
+      child: Container(
+        width: panelWidth,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF151B29),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF34405F)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 24,
+              offset: Offset(0, 10),
+              color: Color(0x66000000),
             ),
           ],
+        ),
+        child: DefaultTextStyle(
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            decoration: TextDecoration.none,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'App Status',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                    _closeButton(),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Currently logged in',
+                  style: TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _userLabel(user),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'UID: ${user.uid}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontSize: 12,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(statusIcon, color: statusColor, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _statusMessage(appState),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_lastChecked != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last checked: $_lastChecked',
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontSize: 12,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _actionButton(
+                      label: _syncing ? 'Syncing...' : 'Sync Now',
+                      onTap: _syncing ? null : _syncNow,
+                    ),
+                    _actionButton(
+                      label: _syncing ? 'Please wait...' : 'Logout',
+                      onTap: _syncing ? null : _logout,
+                      color: const Color(0xFF33405F),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -388,12 +419,38 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
               fit: StackFit.expand,
               children: [
                 widget.child,
-                Positioned(
-                  top: 36,
-                  right: 12,
-                  child: _expanded
-                      ? _expandedPanel(user: user, appState: appState)
-                      : _collapsed(user: user, appState: appState),
+                if (_expanded)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        setState(() {
+                          _expanded = false;
+                        });
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 72),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: _expanded
+                            ? GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {},
+                                child: _expandedPanel(
+                                  user: user,
+                                  appState: appState,
+                                ),
+                              )
+                            : _collapsed(user: user, appState: appState),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             );
