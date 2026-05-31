@@ -10,6 +10,12 @@ class AppSettings {
     this.payPeriodAnchorDate,
     this.weeklyHoursGoal = 10,
     this.weeklyEarningsGoal = 1000,
+    this.googleDriveRootFolderId,
+    this.googleDriveTemplatesFolderId,
+    this.googleDriveClientNotesFolderId,
+    this.googleDriveCalendarExportsFolderId,
+    this.googleDriveInvoicesFolderId,
+    this.googleDriveReferralsFolderId,
   });
 
   static const defaultNoteOptions = [
@@ -46,6 +52,12 @@ class AppSettings {
   final DateTime? payPeriodAnchorDate;
   final double weeklyHoursGoal;
   final double weeklyEarningsGoal;
+  final String? googleDriveRootFolderId;
+  final String? googleDriveTemplatesFolderId;
+  final String? googleDriveClientNotesFolderId;
+  final String? googleDriveCalendarExportsFolderId;
+  final String? googleDriveInvoicesFolderId;
+  final String? googleDriveReferralsFolderId;
 
   AppSettings copyWith({
     double? hourlyRate,
@@ -59,6 +71,13 @@ class AppSettings {
     bool clearPayPeriodAnchorDate = false,
     double? weeklyHoursGoal,
     double? weeklyEarningsGoal,
+    String? googleDriveRootFolderId,
+    String? googleDriveTemplatesFolderId,
+    String? googleDriveClientNotesFolderId,
+    String? googleDriveCalendarExportsFolderId,
+    String? googleDriveInvoicesFolderId,
+    String? googleDriveReferralsFolderId,
+    bool clearGoogleDriveFolders = false,
   }) {
     return AppSettings(
       hourlyRate: hourlyRate ?? this.hourlyRate,
@@ -73,6 +92,26 @@ class AppSettings {
           : payPeriodAnchorDate ?? this.payPeriodAnchorDate,
       weeklyHoursGoal: weeklyHoursGoal ?? this.weeklyHoursGoal,
       weeklyEarningsGoal: weeklyEarningsGoal ?? this.weeklyEarningsGoal,
+      googleDriveRootFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveRootFolderId ?? this.googleDriveRootFolderId,
+      googleDriveTemplatesFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveTemplatesFolderId ?? this.googleDriveTemplatesFolderId,
+      googleDriveClientNotesFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveClientNotesFolderId ??
+                this.googleDriveClientNotesFolderId,
+      googleDriveCalendarExportsFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveCalendarExportsFolderId ??
+                this.googleDriveCalendarExportsFolderId,
+      googleDriveInvoicesFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveInvoicesFolderId ?? this.googleDriveInvoicesFolderId,
+      googleDriveReferralsFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDriveReferralsFolderId ?? this.googleDriveReferralsFolderId,
     );
   }
 
@@ -88,6 +127,12 @@ class AppSettings {
       'payPeriodAnchorDate': payPeriodAnchorDate?.toIso8601String(),
       'weeklyHoursGoal': weeklyHoursGoal,
       'weeklyEarningsGoal': weeklyEarningsGoal,
+      'googleDriveRootFolderId': googleDriveRootFolderId,
+      'googleDriveTemplatesFolderId': googleDriveTemplatesFolderId,
+      'googleDriveClientNotesFolderId': googleDriveClientNotesFolderId,
+      'googleDriveCalendarExportsFolderId': googleDriveCalendarExportsFolderId,
+      'googleDriveInvoicesFolderId': googleDriveInvoicesFolderId,
+      'googleDriveReferralsFolderId': googleDriveReferralsFolderId,
     };
   }
 
@@ -124,6 +169,12 @@ class AppSettings {
       return DateTime.tryParse(value);
     }
 
+    String? readString(String key) {
+      final value = json[key];
+      if (value is! String || value.trim().isEmpty) return null;
+      return value.trim();
+    }
+
     return AppSettings(
       hourlyRate: readDouble('hourlyRate', 43),
       fuelRate: readDouble('fuelRate', 1.17),
@@ -135,6 +186,16 @@ class AppSettings {
       payPeriodAnchorDate: readDate('payPeriodAnchorDate'),
       weeklyHoursGoal: readDouble('weeklyHoursGoal', 10),
       weeklyEarningsGoal: readDouble('weeklyEarningsGoal', 1000),
+      googleDriveRootFolderId: readString('googleDriveRootFolderId'),
+      googleDriveTemplatesFolderId: readString('googleDriveTemplatesFolderId'),
+      googleDriveClientNotesFolderId: readString(
+        'googleDriveClientNotesFolderId',
+      ),
+      googleDriveCalendarExportsFolderId: readString(
+        'googleDriveCalendarExportsFolderId',
+      ),
+      googleDriveInvoicesFolderId: readString('googleDriveInvoicesFolderId'),
+      googleDriveReferralsFolderId: readString('googleDriveReferralsFolderId'),
     );
   }
 }

@@ -11,6 +11,7 @@ class CloudStorageService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   String? _googleCalendarAccessToken;
+  String? _googleDriveAccessToken;
 
   User? get currentUser => _auth.currentUser;
 
@@ -19,6 +20,8 @@ class CloudStorageService {
   String? get email => currentUser?.email;
 
   String? get googleCalendarAccessToken => _googleCalendarAccessToken;
+
+  String? get googleDriveAccessToken => _googleDriveAccessToken;
 
   bool get isSignedIn {
     final user = currentUser;
@@ -117,6 +120,39 @@ class CloudStorageService {
     if (updated == null || updated.isEmpty) {
       throw StateError(
         'Google Calendar access was not granted. Sign in with Google and allow calendar event access.',
+      );
+    }
+
+    return updated;
+  }
+
+  Future<String> requireGoogleDriveAccessToken() async {
+    final current = _googleDriveAccessToken;
+
+    if (current != null && current.isNotEmpty) {
+      return current;
+    }
+
+    final provider = GoogleAuthProvider()
+      ..addScope('https://www.googleapis.com/auth/drive.file')
+      ..setCustomParameters({'include_granted_scopes': 'true'});
+    final credential = await _auth.signInWithPopup(provider);
+    final user = credential.user;
+    final oauth = credential.credential;
+
+    if (user == null) {
+      throw StateError('Google Drive sign-in returned no user.');
+    }
+
+    _googleDriveAccessToken = oauth is OAuthCredential
+        ? oauth.accessToken
+        : null;
+
+    final updated = _googleDriveAccessToken;
+
+    if (updated == null || updated.isEmpty) {
+      throw StateError(
+        'Google Drive access was not granted. Sign in with Google and allow Drive file access.',
       );
     }
 

@@ -1,0 +1,24 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:support_worker_log/core/models/app_settings.dart';
+
+void main() {
+  test('persists Google Drive folder ids', () {
+    final settings = const AppSettings().copyWith(
+      googleDriveRootFolderId: 'root',
+      googleDriveTemplatesFolderId: 'templates',
+      googleDriveClientNotesFolderId: 'client-notes',
+      googleDriveCalendarExportsFolderId: 'calendar-exports',
+      googleDriveInvoicesFolderId: 'invoices',
+      googleDriveReferralsFolderId: 'referrals',
+    );
+
+    final restored = AppSettings.fromJson(settings.toJson());
+
+    expect(restored.googleDriveRootFolderId, 'root');
+    expect(restored.googleDriveTemplatesFolderId, 'templates');
+    expect(restored.googleDriveClientNotesFolderId, 'client-notes');
+    expect(restored.googleDriveCalendarExportsFolderId, 'calendar-exports');
+    expect(restored.googleDriveInvoicesFolderId, 'invoices');
+    expect(restored.googleDriveReferralsFolderId, 'referrals');
+  });
+}

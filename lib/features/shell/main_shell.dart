@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../calendar/calendar_screen.dart';
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
 import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
@@ -20,6 +21,7 @@ enum _Section {
   entries,
   pay,
   tax,
+  drive,
   settings,
 }
 
@@ -48,6 +50,7 @@ class _MainShellState extends State<MainShell> {
       case _Section.entries:
       case _Section.pay:
       case _Section.tax:
+      case _Section.drive:
       case _Section.settings:
         return 4;
     }
@@ -73,6 +76,8 @@ class _MainShellState extends State<MainShell> {
         return 'More';
       case _Section.tax:
         return 'Tax';
+      case _Section.drive:
+        return 'Google Drive';
       case _Section.settings:
         return 'Settings';
     }
@@ -129,10 +134,13 @@ class _MainShellState extends State<MainShell> {
           onEntries: () => _go(_Section.entries),
           onPay: () => _go(_Section.pay),
           onTax: () => _go(_Section.tax),
+          onDrive: () => _go(_Section.drive),
           onSettings: () => _go(_Section.settings),
         );
       case _Section.tax:
         return const TaxScreen();
+      case _Section.drive:
+        return const DriveScreen();
       case _Section.settings:
         return const SettingsScreen();
     }
@@ -292,6 +300,7 @@ class _MoreScreen extends StatelessWidget {
     required this.onEntries,
     required this.onPay,
     required this.onTax,
+    required this.onDrive,
     required this.onSettings,
   });
 
@@ -299,6 +308,7 @@ class _MoreScreen extends StatelessWidget {
   final VoidCallback onEntries;
   final VoidCallback onPay;
   final VoidCallback onTax;
+  final VoidCallback onDrive;
   final VoidCallback onSettings;
 
   @override
@@ -332,6 +342,13 @@ class _MoreScreen extends StatelessWidget {
           title: 'Tax',
           subtitle: 'GST, ACC, KiwiSaver, and net estimate',
           onTap: onTax,
+        ),
+        const SizedBox(height: 12),
+        _MoreTile(
+          icon: Icons.add_to_drive_outlined,
+          title: 'Google Drive',
+          subtitle: 'Connect Drive, create folders, and upload templates',
+          onTap: onDrive,
         ),
         const SizedBox(height: 12),
         _MoreTile(

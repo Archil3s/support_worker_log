@@ -45,6 +45,8 @@ class AppState extends ChangeNotifier {
   String? get cloudEmail => _cloudStorageService.email;
   String? get googleCalendarAccessToken =>
       _cloudStorageService.googleCalendarAccessToken;
+  String? get googleDriveAccessToken =>
+      _cloudStorageService.googleDriveAccessToken;
 
   String get existingGoogleCalendarAccessToken {
     final token = _cloudStorageService.googleCalendarAccessToken;
@@ -125,6 +127,16 @@ class AppState extends ChangeNotifier {
 
   Future<String> connectGoogleCalendar() async {
     final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
+    notifyListeners();
+    return token;
+  }
+
+  Future<String> requireGoogleDriveAccessToken() {
+    return _cloudStorageService.requireGoogleDriveAccessToken();
+  }
+
+  Future<String> connectGoogleDrive() async {
+    final token = await _cloudStorageService.requireGoogleDriveAccessToken();
     notifyListeners();
     return token;
   }
