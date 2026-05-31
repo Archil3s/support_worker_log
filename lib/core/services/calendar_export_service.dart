@@ -148,7 +148,7 @@ class CalendarExportService {
 
       buffer
         ..writeln()
-        ..writeln('Quick notes:');
+        ..writeln('Notes / topics:');
 
       for (final note in sortedNotes) {
         buffer.writeln('- $note');

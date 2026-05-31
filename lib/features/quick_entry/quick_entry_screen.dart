@@ -157,6 +157,33 @@ String _joinLoggingLines(Iterable<String> values) {
       .join('\n');
 }
 
+List<String> _buildVisitNotes({
+  required Iterable<String> selectedNotes,
+  String typedNote = '',
+}) {
+  final agencies = <String>[];
+  final topics = <String>[];
+
+  for (final rawNote in selectedNotes) {
+    final note = rawNote.trim();
+    if (note.isEmpty) continue;
+
+    if (note.startsWith('Agency: ')) {
+      agencies.add(note);
+    } else {
+      topics.add(note);
+    }
+  }
+
+  final notes = <String>[
+    if (topics.isNotEmpty) 'Topics covered: ${topics.toSet().join(', ')}',
+    ...agencies.toSet(),
+    if (typedNote.trim().isNotEmpty) typedNote.trim(),
+  ]..sort();
+
+  return notes;
+}
+
 int _wordCount(String value) {
   return RegExp(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?").allMatches(value).length;
 }
@@ -303,7 +330,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return;
     }
 
-    final notes = selectedNotes.toList()..sort();
+    final notes = _buildVisitNotes(selectedNotes: selectedNotes);
     final startedAt = _startDateTimeForSelectedDate();
 
     appState.startActiveVisit(
@@ -344,10 +371,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   void _saveDraftNotes(AppState appState, ActiveVisit activeVisit) {
     final typedNote = noteController.text.trim();
 
-    final notes = [
-      ...selectedNotes,
-      if (typedNote.isNotEmpty) typedNote,
-    ].toSet().toList()..sort();
+    final notes = _buildVisitNotes(
+      selectedNotes: selectedNotes,
+      typedNote: typedNote,
+    );
 
     appState.updateActiveVisit(activeVisit.copyWith(notes: notes));
 
@@ -390,11 +417,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     }
 
     final typedNote = noteController.text.trim();
-    final notes = [
-      ...activeVisit.notes,
-      ...selectedNotes,
-      if (typedNote.isNotEmpty) typedNote,
-    ].toSet().toList()..sort();
+    final notes = _buildVisitNotes(
+      selectedNotes: [...activeVisit.notes, ...selectedNotes],
+      typedNote: typedNote,
+    );
     final visitMinutes = _minutesBetween(activeVisit.startedAt, finishedAt);
     final kilometres =
         activeVisit.type == EntryType.homeVisit &&
@@ -1816,7 +1842,7 @@ class _StartVisitView extends StatelessWidget {
         if (selectedType != EntryType.homeVisit) ...[
           const SizedBox(height: 12),
           _Panel(
-            title: 'Optional Starting Notes',
+            title: 'Topics Covered',
             child: _NoteChips(
               notes: noteOptions,
               selectedNotes: selectedNotes,
@@ -1826,7 +1852,7 @@ class _StartVisitView extends StatelessWidget {
         ] else ...[
           const SizedBox(height: 12),
           _Panel(
-            title: 'Optional Starting Notes',
+            title: 'Topics Covered',
             child: _NoteChips(
               notes: noteOptions,
               selectedNotes: selectedNotes,
@@ -1953,7 +1979,7 @@ class _ActiveVisitView extends StatelessWidget {
           ),
         if (activeVisit.type == EntryType.homeVisit) const SizedBox(height: 12),
         _Panel(
-          title: 'Notes',
+          title: 'Topics Covered',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1976,7 +2002,7 @@ class _ActiveVisitView extends StatelessWidget {
                 maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: 'Optional extra note',
-                  hintText: 'Type only if the chips do not cover it',
+                  hintText: 'Brief detail if the topics do not cover it',
                 ),
               ),
               const SizedBox(height: 12),
@@ -2245,7 +2271,7 @@ class _NoteChips extends StatelessWidget {
   Widget build(BuildContext context) {
     if (notes.isEmpty) {
       return const Text(
-        'Add reusable note chips in Settings.',
+        'Add reusable topics in Settings.',
         style: TextStyle(color: Color(0xFF8396C7)),
       );
     }
