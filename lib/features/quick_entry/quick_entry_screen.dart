@@ -505,10 +505,11 @@ class _SavedVisitView extends StatelessWidget {
 
   Future<void> _exportToGoogleCalendar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final appState = context.read<AppState>();
 
     messenger.showSnackBar(
       SnackBar(
-        content: const Text('Opening Google Calendar...'),
+        content: const Text('Creating private Google Calendar event...'),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -516,20 +517,27 @@ class _SavedVisitView extends StatelessWidget {
     );
 
     try {
-      final opened = await CalendarExportService.openGoogleCalendarForEntry(
-        entry,
-      );
+      final token = await appState.requireGoogleCalendarAccessToken();
+      final opened =
+          await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+            entry,
+            accessToken: token,
+          );
 
       messenger.clearSnackBars();
 
       if (!opened) {
-        throw Exception('Could not open Google Calendar.');
+        throw Exception(
+          'Private calendar event was created, but could not open Google Calendar.',
+        );
       }
+
+      appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
 
       messenger.showSnackBar(
         SnackBar(
           content: const Text(
-            'Google Calendar opened. Press Save there to upload the visit.',
+            'Private Google Calendar event created and marked entered.',
           ),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
@@ -542,7 +550,7 @@ class _SavedVisitView extends StatelessWidget {
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Calendar export failed: '),
+          content: Text('Calendar export failed: $error'),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
           shape: RoundedRectangleBorder(
@@ -602,8 +610,16 @@ class _SavedVisitView extends StatelessWidget {
         const SizedBox(height: 14),
         OutlinedButton.icon(
           onPressed: () => _exportToGoogleCalendar(context),
-          icon: const Icon(Icons.calendar_month_outlined),
-          label: const Text('Export to Google Calendar'),
+          icon: Icon(
+            entry.googleCalendarEntered
+                ? Icons.event_available_outlined
+                : Icons.calendar_month_outlined,
+          ),
+          label: Text(
+            entry.googleCalendarEntered
+                ? 'Private calendar event entered'
+                : 'Create private Calendar event',
+          ),
         ),
         const SizedBox(height: 8),
         FilledButton.icon(

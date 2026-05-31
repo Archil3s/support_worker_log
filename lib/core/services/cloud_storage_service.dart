@@ -10,12 +10,15 @@ class CloudStorageService {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  String? _googleCalendarAccessToken;
 
   User? get currentUser => _auth.currentUser;
 
   String? get userId => currentUser?.uid;
 
   String? get email => currentUser?.email;
+
+  String? get googleCalendarAccessToken => _googleCalendarAccessToken;
 
   bool get isSignedIn {
     final user = currentUser;
@@ -67,9 +70,7 @@ class CloudStorageService {
   }
 
   Future<User> signInWithGoogle() async {
-    final provider = GoogleAuthProvider()
-      ..setCustomParameters({'prompt': 'select_account'});
-
+    final provider = GoogleAuthProvider();
     final credential = await _auth.signInWithPopup(provider);
     final user = credential.user;
 
@@ -78,6 +79,39 @@ class CloudStorageService {
     }
 
     return user;
+  }
+
+  Future<String> requireGoogleCalendarAccessToken() async {
+    final current = _googleCalendarAccessToken;
+
+    if (current != null && current.isNotEmpty) {
+      return current;
+    }
+
+    final provider = GoogleAuthProvider()
+      ..addScope('https://www.googleapis.com/auth/calendar.events')
+      ..setCustomParameters({'include_granted_scopes': 'true'});
+    final credential = await _auth.signInWithPopup(provider);
+    final user = credential.user;
+    final oauth = credential.credential;
+
+    if (user == null) {
+      throw StateError('Google Calendar sign-in returned no user.');
+    }
+
+    _googleCalendarAccessToken = oauth is OAuthCredential
+        ? oauth.accessToken
+        : null;
+
+    final updated = _googleCalendarAccessToken;
+
+    if (updated == null || updated.isEmpty) {
+      throw StateError(
+        'Google Calendar access was not granted. Sign in with Google and allow calendar event access.',
+      );
+    }
+
+    return updated;
   }
 
   Future<void> sendPasswordResetEmail(String email) {

@@ -147,3 +147,6 @@ MR NOTES FOLDER/
 *.backup_*
 *_backup.dart
 *_old.dart
+
+# Local desktop app browser profile
+.desktop_chrome_profile/

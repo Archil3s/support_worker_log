@@ -6,27 +6,36 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/entry_type.dart';
 import '../models/work_entry.dart';
+import 'google_calendar/google_calendar_api_platform.dart';
 
 const _defaultCalendarColor = '#FF0000';
 
 class CalendarExportService {
   const CalendarExportService._();
 
-  static Future<bool> openGoogleCalendarForEntry(WorkEntry entry) async {
+  static final GoogleCalendarApiPlatform _googleCalendarApi =
+      GoogleCalendarApiPlatform();
+
+  static Future<bool> createPrivateGoogleCalendarEventForEntry(
+    WorkEntry entry, {
+    required String accessToken,
+  }) async {
     final start = _entryStart(entry);
     final end = _entryEnd(entry);
-    final title = '${entry.client} ${entry.type.label}';
+    final link = await _googleCalendarApi.insertPrivateEvent(
+      accessToken: accessToken,
+      summary: '${entry.client} ${entry.type.label}',
+      description: _detailsForEntry(entry, start, end),
+      location: entry.client,
+      start: start,
+      end: end,
+    );
 
-    final uri = Uri.https('calendar.google.com', '/calendar/render', {
-      'action': 'TEMPLATE',
-      'text': title,
-      'dates': '${_calendarDate(start)}/${_calendarDate(end)}',
-      'details': _detailsForEntry(entry, start, end),
-      'location': entry.client,
-      'trp': 'false',
-    });
+    if (link.trim().isEmpty) {
+      return true;
+    }
 
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+    return launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
   }
 
   static Future<void> saveIcsFileForEntry(WorkEntry entry) async {
@@ -161,19 +170,6 @@ class CalendarExportService {
     return '${entry.client} ${entry.type.label} on ${_formatDate(entry.date)} '
         'from ${_formatClock(start)} to ${_formatClock(end)} '
         'for ${entry.minutes} minutes (${entry.hours.toStringAsFixed(2)} hours).';
-  }
-
-  static String _calendarDate(DateTime value) {
-    final utc = value.toUtc();
-
-    return '${utc.year}'
-        '${_two(utc.month)}'
-        '${_two(utc.day)}'
-        'T'
-        '${_two(utc.hour)}'
-        '${_two(utc.minute)}'
-        '${_two(utc.second)}'
-        'Z';
   }
 
   static String _icsDate(DateTime value) {

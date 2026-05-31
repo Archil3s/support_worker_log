@@ -84,6 +84,7 @@ class WorkEntry {
     required this.notes,
     this.supportNoteBreakdown = '',
     this.nextActions = const [],
+    this.googleCalendarEntered = false,
     this.odometerStart,
     this.odometerEnd,
   });
@@ -97,6 +98,7 @@ class WorkEntry {
   final List<String> notes;
   final String supportNoteBreakdown;
   final List<NextActionItem> nextActions;
+  final bool googleCalendarEntered;
   final double? odometerStart;
   final double? odometerEnd;
 
@@ -148,6 +150,7 @@ class WorkEntry {
     List<String>? notes,
     String? supportNoteBreakdown,
     List<NextActionItem>? nextActions,
+    bool? googleCalendarEntered,
     double? odometerStart,
     double? odometerEnd,
   }) {
@@ -161,6 +164,8 @@ class WorkEntry {
       notes: notes ?? this.notes,
       supportNoteBreakdown: supportNoteBreakdown ?? this.supportNoteBreakdown,
       nextActions: nextActions ?? this.nextActions,
+      googleCalendarEntered:
+          googleCalendarEntered ?? this.googleCalendarEntered,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
     );
@@ -178,6 +183,7 @@ class WorkEntry {
       'notes': notes,
       'supportNoteBreakdown': supportNoteBreakdown,
       'nextActions': nextActions.map((item) => item.toJson()).toList(),
+      'googleCalendarEntered': googleCalendarEntered,
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
     };
@@ -242,6 +248,7 @@ class WorkEntry {
       notes: notes,
       supportNoteBreakdown: json['supportNoteBreakdown'] as String? ?? '',
       nextActions: nextActions,
+      googleCalendarEntered: json['googleCalendarEntered'] == true,
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
     );
@@ -269,6 +276,12 @@ class WorkEntry {
       buffer
         ..writeln()
         ..writeln(supportNoteBreakdown.trim());
+    }
+
+    if (googleCalendarEntered) {
+      buffer
+        ..writeln()
+        ..writeln('Google Calendar: entered');
     }
 
     if (nextActions.isNotEmpty) {

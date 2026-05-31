@@ -43,6 +43,8 @@ class AppState extends ChangeNotifier {
   String? get cloudSyncError => _cloudSyncError;
   String? get cloudUserId => _cloudStorageService.userId;
   String? get cloudEmail => _cloudStorageService.email;
+  String? get googleCalendarAccessToken =>
+      _cloudStorageService.googleCalendarAccessToken;
 
   Future<void> load() async {
     final localData = await _storageService.load();
@@ -52,7 +54,7 @@ class AppState extends ChangeNotifier {
       await _cloudStorageService.signOutAnonymousUserIfNeeded();
 
       if (_cloudStorageService.isSignedIn) {
-        await _syncLocalAndCloud();
+        unawaited(_syncLocalAndCloudSafely());
       } else {
         _cloudSyncReady = false;
         _cloudSyncError = null;
@@ -71,8 +73,10 @@ class AppState extends ChangeNotifier {
       password: password,
     );
 
-    await _syncLocalAndCloud();
+    _cloudSyncReady = false;
+    _cloudSyncError = null;
     notifyListeners();
+    unawaited(_syncLocalAndCloudSafely());
   }
 
   Future<void> register({
@@ -84,19 +88,27 @@ class AppState extends ChangeNotifier {
       password: password,
     );
 
-    await _syncLocalAndCloud();
+    _cloudSyncReady = false;
+    _cloudSyncError = null;
     notifyListeners();
+    unawaited(_syncLocalAndCloudSafely());
   }
 
   Future<void> signInWithGoogle() async {
     await _cloudStorageService.signInWithGoogle();
 
-    await _syncLocalAndCloud();
+    _cloudSyncReady = false;
+    _cloudSyncError = null;
     notifyListeners();
+    unawaited(_syncLocalAndCloudSafely());
   }
 
   Future<void> sendPasswordResetEmail(String email) {
     return _cloudStorageService.sendPasswordResetEmail(email);
+  }
+
+  Future<String> requireGoogleCalendarAccessToken() {
+    return _cloudStorageService.requireGoogleCalendarAccessToken();
   }
 
   Future<void> signOut() async {
@@ -109,7 +121,7 @@ class AppState extends ChangeNotifier {
   Future<void> syncNow() async {
     if (!_cloudStorageService.isSignedIn) return;
 
-    await _syncLocalAndCloud();
+    await _syncLocalAndCloudSafely();
     notifyListeners();
   }
 
@@ -228,6 +240,7 @@ class AppState extends ChangeNotifier {
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         date: DateTime.now(),
         startTime: TimeOfDay.now(),
+        googleCalendarEntered: false,
       ),
     );
     _persistAndNotify();
@@ -345,6 +358,17 @@ class AppState extends ChangeNotifier {
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
+  }
+
+  Future<void> _syncLocalAndCloudSafely() async {
+    try {
+      await _syncLocalAndCloud();
+    } catch (error) {
+      _cloudSyncReady = false;
+      _cloudSyncError = error.toString();
+    }
+
+    notifyListeners();
   }
 
   void _replaceInMemory(StoredAppData data) {

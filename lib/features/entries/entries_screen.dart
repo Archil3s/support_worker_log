@@ -739,20 +739,38 @@ class _EntryCard extends StatelessWidget {
 
   Future<void> _openGoogleCalendar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final appState = context.read<AppState>();
 
     try {
-      final opened = await CalendarExportService.openGoogleCalendarForEntry(
-        entry,
-      );
+      final token = await appState.requireGoogleCalendarAccessToken();
+      final opened =
+          await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+            entry,
+            accessToken: token,
+          );
 
       if (!opened) {
-        throw Exception('Could not open Google Calendar.');
+        throw Exception(
+          'Private calendar event was created, but could not open Google Calendar.',
+        );
       }
 
+      appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
+
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Google Calendar opened. Press Save there.'),
+        SnackBar(
+          content: const Text(
+            'Private Google Calendar event created and marked entered.',
+          ),
           behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              appState.updateEntry(
+                entry.copyWith(googleCalendarEntered: false),
+              );
+            },
+          ),
         ),
       );
     } catch (error) {
@@ -852,8 +870,12 @@ class _EntryCard extends StatelessWidget {
                   },
                 ),
                 _EntryActionTile(
-                  icon: Icons.calendar_month_outlined,
-                  label: 'Open in Google Calendar',
+                  icon: entry.googleCalendarEntered
+                      ? Icons.event_available_outlined
+                      : Icons.calendar_month_outlined,
+                  label: entry.googleCalendarEntered
+                      ? 'Private calendar event entered'
+                      : 'Create private Calendar event',
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     _openGoogleCalendar(context);
@@ -925,6 +947,14 @@ class _EntryCard extends StatelessWidget {
                   ],
                 ),
               ),
+            if (entry.googleCalendarEntered) ...[
+              const Chip(
+                avatar: Icon(Icons.event_available_outlined, size: 18),
+                label: Text('Calendar entered'),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(height: 10),
+            ],
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(

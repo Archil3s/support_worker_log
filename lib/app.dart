@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -14,7 +16,6 @@ class SupportWorkerLogApp extends StatefulWidget {
 
 class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
   late final AppState _appState;
-  late Future<void> _loadFuture;
 
   static const bg = Color(0xFF090E17);
   static const panel = Color(0xFF151B29);
@@ -28,7 +29,7 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
   void initState() {
     super.initState();
     _appState = AppState();
-    _loadFuture = _appState.load();
+    unawaited(_appState.load().catchError((_) {}));
   }
 
   @override
@@ -226,75 +227,7 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
             displayColor: Colors.white,
           ),
         ),
-        home: FutureBuilder<void>(
-          future: _loadFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const _LoadingScreen();
-            }
-
-            if (snapshot.hasError) {
-              return _LoadErrorScreen(
-                onRetry: () {
-                  setState(() {
-                    _loadFuture = _appState.load();
-                  });
-                },
-              );
-            }
-
-            return const AuthGate();
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadingScreen extends StatelessWidget {
-  const _LoadingScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
-}
-
-class _LoadErrorScreen extends StatelessWidget {
-  const _LoadErrorScreen({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Support Worker Log')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'The app could not load saved data.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        home: const AuthGate(),
       ),
     );
   }

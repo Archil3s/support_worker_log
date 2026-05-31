@@ -6,6 +6,9 @@ import '../../core/utils/formatters.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../core/utils/totals.dart';
 
+const double _annualPayeIncome = 69000;
+const double _fortnightsPerYear = 365 / 14;
+
 class TaxScreen extends StatefulWidget {
   const TaxScreen({super.key});
 
@@ -49,6 +52,8 @@ class _TaxScreenState extends State<TaxScreen> {
     final gross = totalEarnings(periodEntries, settings);
     final acc = gross * settings.accRate;
     final gst = gross * settings.gstRate;
+    final annualPaye = _nzIncomeTax(_annualPayeIncome);
+    final paye = annualPaye / _fortnightsPerYear;
     final kiwiSaver = settings.kiwiSaverEnabled
         ? gross * settings.kiwiSaverRate
         : 0.0;
@@ -137,6 +142,15 @@ class _TaxScreenState extends State<TaxScreen> {
                     '-${money(gst)} (${(settings.gstRate * 100).toStringAsFixed(1)}%)',
               ),
               _TaxLine(
+                label: 'PAYE threshold check',
+                value: '${money(_annualPayeIncome)} salary',
+              ),
+              _TaxLine(
+                label: 'PAYE already taxed by job',
+                value: '${money(paye)} / fortnight',
+              ),
+              _TaxLine(label: 'PAYE yearly estimate', value: money(annualPaye)),
+              _TaxLine(
                 label: 'KiwiSaver',
                 value: settings.kiwiSaverEnabled
                     ? '-${money(kiwiSaver)} (${(settings.kiwiSaverRate * 100).toStringAsFixed(1)}%)'
@@ -188,6 +202,39 @@ class _TaxScreenState extends State<TaxScreen> {
       ],
     );
   }
+}
+
+double _nzIncomeTax(double annualIncome) {
+  final brackets = <_TaxBracket>[
+    const _TaxBracket(limit: 15600, rate: 0.105),
+    const _TaxBracket(limit: 53500, rate: 0.175),
+    const _TaxBracket(limit: 78100, rate: 0.30),
+    const _TaxBracket(limit: 180000, rate: 0.33),
+    const _TaxBracket(limit: double.infinity, rate: 0.39),
+  ];
+
+  var remaining = annualIncome < 0 ? 0.0 : annualIncome;
+  var previousLimit = 0.0;
+  var tax = 0.0;
+
+  for (final bracket in brackets) {
+    if (remaining <= 0) break;
+
+    final width = bracket.limit - previousLimit;
+    final taxable = remaining < width ? remaining : width;
+    tax += taxable * bracket.rate;
+    remaining -= taxable;
+    previousLimit = bracket.limit;
+  }
+
+  return tax;
+}
+
+class _TaxBracket {
+  const _TaxBracket({required this.limit, required this.rate});
+
+  final double limit;
+  final double rate;
 }
 
 class _Panel extends StatelessWidget {

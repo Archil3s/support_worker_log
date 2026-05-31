@@ -133,6 +133,9 @@ class _AuthScreenState extends State<AuthScreen> {
     if (text.contains('popup-closed-by-user')) {
       return 'Google sign-in was cancelled.';
     }
+    if (text.contains('unauthorized-domain')) {
+      return 'This desktop app address is not authorized for Google sign-in.';
+    }
     if (text.contains('account-exists-with-different-credential')) {
       return 'An account already exists with a different sign-in method.';
     }
@@ -261,7 +264,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     OutlinedButton.icon(
                       onPressed: busy ? null : _signInWithGoogle,
                       icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                      label: const Text('Sign in with Google'),
+                      label: const Text('Continue with Google'),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
