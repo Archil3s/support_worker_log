@@ -541,7 +541,10 @@ class _NoteEntryCard extends StatefulWidget {
 }
 
 class _NoteEntryCardState extends State<_NoteEntryCard> {
+  final GoogleDriveService driveService = GoogleDriveService();
+
   EntrySupportNoteMeta? meta;
+  EntryDriveSupportNoteMeta? driveMeta;
 
   @override
   void initState() {
@@ -560,11 +563,13 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
   Future<void> _load() async {
     final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    final loadedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
 
     if (!mounted) return;
 
     setState(() {
       meta = loaded;
+      driveMeta = loadedDrive;
     });
   }
 
@@ -579,15 +584,53 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     await _load();
   }
 
+  Future<void> _openLocalFile() async {
+    final current = meta;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    if (current == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Create the local note file first.')),
+      );
+      return;
+    }
+
+    try {
+      await LocalSupportNoteService.openNote(current);
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not open local note: $error')),
+      );
+    }
+  }
+
+  Future<void> _openDriveFile() async {
+    final link = driveMeta?.openLink;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    if (link == null || link.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Create the Google Docs note first.')),
+      );
+      return;
+    }
+
+    await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+  }
+
   @override
   Widget build(BuildContext context) {
     final filter = widget.statusFilter;
 
-    if (filter != null && meta?.status != filter) {
+    final status =
+        meta?.status ?? driveMeta?.status ?? EntrySupportNoteStatus.incomplete;
+
+    if (filter != null && status != filter) {
       return const SizedBox.shrink();
     }
 
-    final status = meta?.status ?? EntrySupportNoteStatus.incomplete;
+    final hasLocal = meta?.fileName.isNotEmpty == true;
+    final hasGoogleDocs = driveMeta?.openLink?.isNotEmpty == true;
 
     return Card(
       child: Padding(
@@ -612,11 +655,38 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
               ),
               trailing: _StatusPill(status: status),
             ),
-            if (meta?.fileName.isNotEmpty == true) ...[
-              const SizedBox(height: 6),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _NoteFileChip(
+                  icon: Icons.folder_outlined,
+                  label: hasLocal ? 'Local file' : 'No local file',
+                  ready: hasLocal,
+                  onPressed: hasLocal ? _openLocalFile : null,
+                ),
+                _NoteFileChip(
+                  icon: Icons.cloud_done_outlined,
+                  label: hasGoogleDocs ? 'Google Docs' : 'No Google Docs',
+                  ready: hasGoogleDocs,
+                  onPressed: hasGoogleDocs ? _openDriveFile : null,
+                ),
+              ],
+            ),
+            if (hasLocal || driveMeta?.fileName.isNotEmpty == true) ...[
+              const SizedBox(height: 8),
               SelectableText(
-                meta!.fileName,
-                style: const TextStyle(color: Color(0xFF8396C7), fontSize: 12),
+                [
+                  if (hasLocal) 'Local: ${meta!.fileName}',
+                  if (driveMeta?.fileName.isNotEmpty == true)
+                    'Google Docs: ${driveMeta!.fileName}',
+                ].join('\n'),
+                style: const TextStyle(
+                  color: Color(0xFF8396C7),
+                  fontSize: 12,
+                  height: 1.35,
+                ),
               ),
             ],
             if (widget.entry.supportNoteBreakdown.trim().isNotEmpty) ...[
@@ -649,13 +719,45 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                 TextButton.icon(
                   onPressed: _openSheet,
                   icon: const Icon(Icons.edit_note_outlined),
-                  label: Text(meta == null ? 'Create Note' : 'Open Note'),
+                  label: Text(
+                    meta == null && driveMeta == null
+                        ? 'Create Note'
+                        : 'Open Note',
+                  ),
                 ),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NoteFileChip extends StatelessWidget {
+  const _NoteFileChip({
+    required this.icon,
+    required this.label,
+    required this.ready,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool ready;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ready ? const Color(0xFF31E981) : const Color(0xFF8396C7);
+
+    return ActionChip(
+      avatar: Icon(icon, size: 18, color: color),
+      label: Text(label),
+      side: BorderSide(color: color),
+      backgroundColor: color.withValues(alpha: 0.12),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.w900),
+      onPressed: onPressed,
     );
   }
 }
@@ -986,7 +1088,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   Future<void> _openDriveFile() async {
     final current = driveMeta;
-    final link = current?.webViewLink;
+    final link = current?.openLink;
 
     if (current == null || link == null || link.isEmpty) {
       setState(() {

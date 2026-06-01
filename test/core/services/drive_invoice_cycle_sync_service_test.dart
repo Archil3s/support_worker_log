@@ -141,6 +141,7 @@ class _FakeGoogleDriveService extends GoogleDriveService {
     required String name,
     required String mimeType,
     required List<int> bytes,
+    String? contentMimeType,
   }) async {
     uploads.add(
       _DriveUpload(

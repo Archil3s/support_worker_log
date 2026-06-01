@@ -14,6 +14,7 @@ class StoredAppData {
     required this.entries,
     this.activeVisit,
     this.invoiceStatuses = const {},
+    this.invoiceBaselineTotals = const {},
   });
 
   final AppSettings settings;
@@ -21,6 +22,7 @@ class StoredAppData {
   final List<WorkEntry> entries;
   final ActiveVisit? activeVisit;
   final Map<String, InvoiceStatus> invoiceStatuses;
+  final Map<String, double> invoiceBaselineTotals;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -39,6 +41,7 @@ class StoredAppData {
       'invoiceStatuses': invoiceStatuses.map(
         (key, status) => MapEntry(key, status.name),
       ),
+      'invoiceBaselineTotals': invoiceBaselineTotals,
     };
   }
 
@@ -83,6 +86,19 @@ class StoredAppData {
       }
     }
 
+    final invoiceBaselineTotals = <String, double>{};
+    final rawInvoiceBaselineTotals = json['invoiceBaselineTotals'];
+
+    if (rawInvoiceBaselineTotals is Map) {
+      for (final entry in rawInvoiceBaselineTotals.entries) {
+        final key = entry.key?.toString() ?? '';
+        final value = entry.value;
+        if (key.trim().isEmpty || value is! num) continue;
+
+        invoiceBaselineTotals[key] = value.toDouble();
+      }
+    }
+
     ActiveVisit? activeVisit;
     final rawActiveVisit = json['activeVisit'];
 
@@ -100,6 +116,7 @@ class StoredAppData {
       entries: entries,
       activeVisit: activeVisit,
       invoiceStatuses: invoiceStatuses,
+      invoiceBaselineTotals: invoiceBaselineTotals,
     );
   }
 }

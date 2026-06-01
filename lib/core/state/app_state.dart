@@ -35,6 +35,7 @@ class AppState extends ChangeNotifier {
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
+  final Map<String, double> _invoiceBaselineTotals = {};
 
   StreamSubscription<StoredAppData?>? _cloudDataSubscription;
   String? _cloudDataSubscriptionUserId;
@@ -50,6 +51,8 @@ class AppState extends ChangeNotifier {
   List<WorkEntry> get entries => List.unmodifiable(_entries);
   Map<String, InvoiceStatus> get invoiceStatuses =>
       Map.unmodifiable(_invoiceStatuses);
+  Map<String, double> get invoiceBaselineTotals =>
+      Map.unmodifiable(_invoiceBaselineTotals);
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get cloudSyncReady => _cloudSyncReady;
@@ -142,9 +145,9 @@ class AppState extends ChangeNotifier {
     return _cloudStorageService.requireGoogleCalendarAccessToken();
   }
 
-  Future<String> connectGoogleCalendar() async {
+  Future<String> connectGoogleCalendar({bool forceRefresh = false}) async {
     await _cloudStorageService.connectGoogleServicesForCurrentUser(
-      forceRefresh: true,
+      forceRefresh: forceRefresh,
       allowPopup: true,
     );
     final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
@@ -180,7 +183,7 @@ class AppState extends ChangeNotifier {
       }
 
       try {
-        final refreshedToken = await connectGoogleCalendar();
+        final refreshedToken = await connectGoogleCalendar(forceRefresh: true);
         await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
           entry,
           accessToken: refreshedToken,
@@ -235,19 +238,38 @@ class AppState extends ChangeNotifier {
     return _invoiceStatuses[key] ?? InvoiceStatus.notSubmitted;
   }
 
-  void updateInvoiceStatus(String key, InvoiceStatus status) {
+  double? invoiceBaselineTotalForKey(String key) {
+    return _invoiceBaselineTotals[key];
+  }
+
+  void updateInvoiceStatus(
+    String key,
+    InvoiceStatus status, {
+    double? currentTotal,
+  }) {
     if (key.trim().isEmpty) return;
 
     final current = _invoiceStatuses[key] ?? InvoiceStatus.notSubmitted;
-    if (current == status) return;
+    final currentBaseline = _invoiceBaselineTotals[key];
+    final baselineChanged =
+        currentTotal != null &&
+        status != InvoiceStatus.notSubmitted &&
+        currentBaseline != currentTotal;
+
+    if (current == status && !baselineChanged) return;
 
     if (status == InvoiceStatus.notSubmitted) {
       _invoiceStatuses.remove(key);
+      _invoiceBaselineTotals.remove(key);
     } else {
       _invoiceStatuses[key] = status;
+      if (currentTotal != null) {
+        _invoiceBaselineTotals[key] = currentTotal;
+      }
     }
 
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   Future<void> restoreFromBackup(StoredAppData data) async {
@@ -269,6 +291,7 @@ class AppState extends ChangeNotifier {
 
     _entries.clear();
     _invoiceStatuses.clear();
+    _invoiceBaselineTotals.clear();
 
     await _save();
     notifyListeners();
@@ -645,6 +668,9 @@ class AppState extends ChangeNotifier {
     _invoiceStatuses
       ..clear()
       ..addAll(data.invoiceStatuses);
+    _invoiceBaselineTotals
+      ..clear()
+      ..addAll(data.invoiceBaselineTotals);
   }
 
   StoredAppData _mergeStoredData({
@@ -670,6 +696,10 @@ class AppState extends ChangeNotifier {
         ...cloudData.invoiceStatuses,
         ...localData.invoiceStatuses,
       },
+      invoiceBaselineTotals: {
+        ...cloudData.invoiceBaselineTotals,
+        ...localData.invoiceBaselineTotals,
+      },
     );
   }
 
@@ -680,6 +710,7 @@ class AppState extends ChangeNotifier {
       entries: _entries,
       activeVisit: _activeVisit,
       invoiceStatuses: _invoiceStatuses,
+      invoiceBaselineTotals: _invoiceBaselineTotals,
     );
   }
 

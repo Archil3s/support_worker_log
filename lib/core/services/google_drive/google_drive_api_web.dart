@@ -1,9 +1,12 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
 
 import '../../models/google_drive_file.dart';
+
+const _desktopDriveProxyPort = 51243;
 
 class GoogleDriveApiPlatform {
   Future<GoogleDriveFile> createFolder({
@@ -11,6 +14,21 @@ class GoogleDriveApiPlatform {
     required String name,
     String? parentId,
   }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/create_folder',
+        {'accessToken': accessToken, 'name': name, 'parentId': parentId},
+        failureMessage: 'Google Drive folder creation failed',
+      );
+      final file = _fileFromJson(decoded);
+      if (file == null) {
+        throw StateError(
+          'Google Drive folder creation failed: invalid response.',
+        );
+      }
+      return file;
+    }
+
     final body = <String, Object?>{
       'name': name,
       'mimeType': 'application/vnd.google-apps.folder',
@@ -37,7 +55,28 @@ class GoogleDriveApiPlatform {
     required String mimeType,
     required List<int> bytes,
     required String parentId,
+    String? contentMimeType,
   }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/upload_file',
+        {
+          'accessToken': accessToken,
+          'name': name,
+          'mimeType': mimeType,
+          'parentId': parentId,
+          'contentMimeType': contentMimeType,
+          'bytesBase64': base64Encode(bytes),
+        },
+        failureMessage: 'Google Drive upload failed',
+      );
+      final file = _fileFromJson(decoded);
+      if (file == null) {
+        throw StateError('Google Drive upload failed: invalid response.');
+      }
+      return file;
+    }
+
     final boundary =
         'support_worker_log_${DateTime.now().microsecondsSinceEpoch}';
     final metadata = <String, Object?>{
@@ -52,7 +91,7 @@ class GoogleDriveApiPlatform {
           'Content-Type: application/json; charset=utf-8\r\n\r\n'
           '${jsonEncode(metadata)}\r\n'
           '--$boundary\r\n'
-          'Content-Type: $mimeType\r\n\r\n',
+          'Content-Type: ${contentMimeType ?? mimeType}\r\n\r\n',
         ),
       )
       ..add(bytes)
@@ -78,7 +117,28 @@ class GoogleDriveApiPlatform {
     required String name,
     required String mimeType,
     required List<int> bytes,
+    String? contentMimeType,
   }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/update_file',
+        {
+          'accessToken': accessToken,
+          'fileId': fileId,
+          'name': name,
+          'mimeType': mimeType,
+          'contentMimeType': contentMimeType,
+          'bytesBase64': base64Encode(bytes),
+        },
+        failureMessage: 'Google Drive file update failed',
+      );
+      final file = _fileFromJson(decoded);
+      if (file == null) {
+        throw StateError('Google Drive file update failed: invalid response.');
+      }
+      return file;
+    }
+
     final boundary =
         'support_worker_log_${DateTime.now().microsecondsSinceEpoch}';
     final metadata = <String, Object?>{'name': name, 'mimeType': mimeType};
@@ -89,7 +149,7 @@ class GoogleDriveApiPlatform {
           'Content-Type: application/json; charset=utf-8\r\n\r\n'
           '${jsonEncode(metadata)}\r\n'
           '--$boundary\r\n'
-          'Content-Type: $mimeType\r\n\r\n',
+          'Content-Type: ${contentMimeType ?? mimeType}\r\n\r\n',
         ),
       )
       ..add(bytes)
@@ -113,6 +173,23 @@ class GoogleDriveApiPlatform {
     required String accessToken,
     required String parentId,
   }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/list_children',
+        {'accessToken': accessToken, 'parentId': parentId},
+        failureMessage: 'Google Drive file listing failed',
+      );
+      final files = decoded['files'];
+      if (files is! List) return const [];
+
+      return files
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .map(_fileFromJson)
+          .whereType<GoogleDriveFile>()
+          .toList();
+    }
+
     final uri = Uri.https('www.googleapis.com', '/drive/v3/files', {
       'fields': 'files(id,name,mimeType,webViewLink)',
       'orderBy': 'folder,name',
@@ -160,6 +237,29 @@ class GoogleDriveApiPlatform {
     });
   }
 
+  bool get _useDesktopProxy {
+    final location = html.window.location;
+    final host = location.hostname;
+
+    return host == 'localhost' || host == '127.0.0.1' || host == '::1';
+  }
+
+  Future<Map<String, dynamic>> _proxyJson(
+    String path,
+    Map<String, Object?> payload, {
+    required String failureMessage,
+  }) async {
+    final response = await _request(
+      '$_desktopDriveProxyOrigin$path',
+      method: 'POST',
+      requestHeaders: const {'Content-Type': 'application/json; charset=utf-8'},
+      sendData: jsonEncode(payload),
+      failureMessage: failureMessage,
+    );
+
+    return _decodeJsonResponse(response, failureMessage: failureMessage);
+  }
+
   GoogleDriveFile _fileFromResponse(
     html.HttpRequest response,
     String failureMessage,
@@ -180,23 +280,34 @@ class GoogleDriveApiPlatform {
     required String failureMessage,
     Object? sendData,
   }) async {
-    try {
-      return await html.HttpRequest.request(
-        url,
-        method: method,
-        requestHeaders: requestHeaders,
-        sendData: sendData,
-      );
-    } catch (error) {
-      if (error is html.ProgressEvent) {
-        throw StateError(
-          '$failureMessage. The browser could not reach the Google Drive API. '
-          'Check that Google Drive API is enabled for this Firebase/Google project.',
+    final completer = Completer<html.HttpRequest>();
+    final request = html.HttpRequest()
+      ..open(method, url)
+      ..timeout = 15000;
+
+    for (final entry in requestHeaders.entries) {
+      request.setRequestHeader(entry.key, entry.value);
+    }
+
+    request.onLoad.first.then((_) {
+      if (!completer.isCompleted) completer.complete(request);
+    });
+    request.onError.first.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          StateError(_networkFailure(url, failureMessage)),
         );
       }
+    });
+    request.onTimeout.first.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('$failureMessage timed out.'));
+      }
+    });
 
-      throw StateError('$failureMessage: ${_readableError(error)}');
-    }
+    request.send(sendData);
+
+    return completer.future;
   }
 
   Map<String, dynamic> _decodeJsonResponse(
@@ -265,10 +376,25 @@ class GoogleDriveApiPlatform {
     return null;
   }
 
-  String _readableError(Object error) {
-    final text = error.toString();
-    if (!text.startsWith('Instance of ')) return text;
+  String get _desktopDriveProxyOrigin {
+    final location = html.window.location;
 
-    return 'Google returned an unreadable browser error. Reconnect Drive and try again. If it repeats, enable Google Drive API in the Google Cloud project used by Firebase.';
+    if (location.port != '$_desktopDriveProxyPort' ||
+        location.hostname == '127.0.0.1' ||
+        location.hostname == '::1') {
+      return 'http://localhost:$_desktopDriveProxyPort';
+    }
+
+    return location.origin;
+  }
+
+  String _networkFailure(String url, String failureMessage) {
+    if (url.contains('/__google_drive/')) {
+      return '$failureMessage. The desktop Google Drive proxy could not be '
+          'reached. Restart the Support Worker Log desktop app and try again.';
+    }
+
+    return '$failureMessage. The browser could not reach the Google Drive API. '
+        'Check that Google Drive API is enabled for this Firebase/Google project.';
   }
 }

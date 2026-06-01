@@ -33,9 +33,7 @@ class _DriveScreenState extends State<DriveScreen> {
   List<GoogleDriveFile> templateFiles = const [];
 
   Future<String> _connectDrive() async {
-    final token = await context.read<AppState>().connectGoogleDrive(
-      forceRefresh: true,
-    );
+    final token = await context.read<AppState>().connectGoogleDrive();
     return token;
   }
 

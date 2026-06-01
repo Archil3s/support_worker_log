@@ -667,6 +667,11 @@ double _invoiceTotal(List<WorkEntry> entries, AppSettings settings) {
       (totalKilometres(entries) * settings.fuelRate);
 }
 
+String _signedMoney(double value) {
+  final prefix = value >= 0 ? '+' : '-';
+  return '$prefix${money(value.abs())}';
+}
+
 Color _invoiceStatusColor(InvoiceStatus status) {
   switch (status) {
     case InvoiceStatus.notSubmitted:
@@ -814,6 +819,10 @@ class _InvoicePeriodTile extends StatelessWidget {
     final invoiceKey = _invoiceKey(row.range);
     final invoiceStatus = appState.invoiceStatusForKey(invoiceKey);
     final invoiceTotal = _invoiceTotal(row.entries, settings);
+    final invoiceBaseline = appState.invoiceBaselineTotalForKey(invoiceKey);
+    final invoiceDelta = invoiceBaseline == null
+        ? null
+        : invoiceTotal - invoiceBaseline;
     final hours = totalHours(row.entries);
     final km = totalKilometres(row.entries);
     final hoursText = hours.toStringAsFixed(2);
@@ -868,6 +877,22 @@ class _InvoicePeriodTile extends StatelessWidget {
                     '$kmText km travel = $travelMoney',
                     style: const TextStyle(color: Color(0xFF8396C7)),
                   ),
+                  if (invoiceDelta != null &&
+                      invoiceStatus != InvoiceStatus.notSubmitted &&
+                      invoiceDelta.abs() >= 0.01) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Change since marked ${invoiceStatus.label.toLowerCase()}: '
+                      '${_signedMoney(invoiceDelta)}',
+                      style: TextStyle(
+                        color: invoiceDelta >= 0
+                            ? const Color(0xFFFFC857)
+                            : const Color(0xFF31E981),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                   if (isSelected) ...[
                     const SizedBox(height: 4),
                     const Text(
@@ -1041,6 +1066,10 @@ class _InvoiceStatusEditor extends StatelessWidget {
     final appState = context.watch<AppState>();
     final invoiceKey = _invoiceKey(range);
     final status = appState.invoiceStatusForKey(invoiceKey);
+    final baselineTotal = appState.invoiceBaselineTotalForKey(invoiceKey);
+    final invoiceDelta = baselineTotal == null
+        ? null
+        : invoiceTotal - baselineTotal;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1054,11 +1083,34 @@ class _InvoiceStatusEditor extends StatelessWidget {
             color: Colors.white,
           ),
         ),
+        if (baselineTotal != null && status != InvoiceStatus.notSubmitted) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Marked ${status.label.toLowerCase()} at ${money(baselineTotal)}',
+            style: const TextStyle(
+              color: Color(0xFF8396C7),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (invoiceDelta != null && invoiceDelta.abs() >= 0.01)
+            Text(
+              'Current change: ${_signedMoney(invoiceDelta)}',
+              style: TextStyle(
+                color: invoiceDelta >= 0
+                    ? const Color(0xFFFFC857)
+                    : const Color(0xFF31E981),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+        ],
         const SizedBox(height: 12),
         _InvoiceStatusButtons(
           status: status,
-          onChanged: (next) =>
-              context.read<AppState>().updateInvoiceStatus(invoiceKey, next),
+          onChanged: (next) => context.read<AppState>().updateInvoiceStatus(
+            invoiceKey,
+            next,
+            currentTotal: invoiceTotal,
+          ),
         ),
       ],
     );

@@ -348,12 +348,17 @@ class LocalSupportNoteService {
       noteText.trim().isEmpty ? fallbackNoteText : noteText,
     );
 
-    final paragraphPattern = RegExp(r'<w:p[\s\S]*?<\/w:p>');
+    final paragraphPattern = RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>');
+    final paragraphMatches = paragraphPattern.allMatches(xml).toList();
+    final hasNextActionsSection = paragraphMatches.any((match) {
+      final text = _paragraphText(match.group(0)!).trim().toLowerCase();
+      return text.startsWith('next action');
+    });
     final buffer = StringBuffer();
     var cursor = 0;
     var pendingBlankFill = '';
 
-    for (final match in paragraphPattern.allMatches(xml)) {
+    for (final match in paragraphMatches) {
       buffer.write(xml.substring(cursor, match.start));
       var paragraph = match.group(0)!;
       final text = _paragraphText(paragraph).trim();
@@ -378,7 +383,11 @@ class LocalSupportNoteService {
       } else if (text.startsWith('Main topic')) {
         pendingBlankFill = sections.mainTopic;
       } else if (text.startsWith('Outcome')) {
-        pendingBlankFill = sections.outcomesWithActions;
+        pendingBlankFill = hasNextActionsSection
+            ? sections.outcomes
+            : sections.outcomesWithActions;
+      } else if (text.startsWith('Next action')) {
+        pendingBlankFill = sections.nextActions;
       } else if (text.startsWith('Overall impression')) {
         pendingBlankFill = sections.overallImpression;
       } else if (pendingBlankFill.isNotEmpty && text.isEmpty) {
@@ -406,7 +415,7 @@ class LocalSupportNoteService {
     bool bold = false,
   }) {
     final withoutRuns = paragraphXml.replaceAll(
-      RegExp(r'<w:r[\s\S]*?<\/w:r>'),
+      RegExp(r'<w:r(?:\s|>)[\s\S]*?<\/w:r>'),
       '',
     );
 

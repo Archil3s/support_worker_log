@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/work_entry.dart';
+import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
+import '../../core/state/app_state.dart';
 
 class LocalSupportNoteButton extends StatefulWidget {
   const LocalSupportNoteButton({super.key, required this.entry});
@@ -71,9 +75,11 @@ class LocalSupportNoteSheet extends StatefulWidget {
 class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   final initialsController = TextEditingController();
   final noteController = TextEditingController();
+  final GoogleDriveService driveService = GoogleDriveService();
 
   EntrySupportNoteStatus status = EntrySupportNoteStatus.incomplete;
   EntrySupportNoteMeta? meta;
+  EntryDriveSupportNoteMeta? driveMeta;
   bool busy = false;
   String? message;
 
@@ -92,19 +98,25 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   Future<void> _load() async {
     final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    final loadedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
 
     if (!mounted) return;
 
     setState(() {
       meta = loaded;
+      driveMeta = loadedDrive;
 
       if (loaded == null) {
-        initialsController.text =
-            LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
-        noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
-          entry: widget.entry,
-          status: status,
-        );
+        initialsController.text = loadedDrive?.initials.isNotEmpty == true
+            ? loadedDrive!.initials
+            : LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
+        noteController.text = loadedDrive?.noteText.trim().isNotEmpty == true
+            ? loadedDrive!.noteText
+            : LocalSupportNoteService.defaultNoteTextForEntry(
+                entry: widget.entry,
+                status: loadedDrive?.status ?? status,
+              );
+        status = loadedDrive?.status ?? status;
       } else {
         initialsController.text = loaded.initials;
         noteController.text = loaded.noteText;
@@ -177,6 +189,64 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
   }
 
+  Future<String> _clientNotesFolderId(
+    AppState appState,
+    String accessToken,
+  ) async {
+    final existing = appState.settings.googleDriveClientNotesFolderId;
+
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final setup = await driveService.createFolderSetup(
+      accessToken: accessToken,
+    );
+    appState.updateSettings(setup.applyTo(appState.settings));
+
+    return setup.clientNotesFolder.id;
+  }
+
+  Future<void> _saveGoogleDriveNote() async {
+    setState(() {
+      busy = true;
+      message = 'Saving Google Drive note file...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      final token = await appState.connectGoogleDrive();
+      final clientNotesFolderId = await _clientNotesFolderId(appState, token);
+      final updated = await driveService.saveSupportNote(
+        accessToken: token,
+        clientNotesFolderId: clientNotesFolderId,
+        entry: widget.entry,
+        initials: initialsController.text,
+        status: status,
+        noteText: noteController.text,
+        payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+        existingMeta: driveMeta,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updated;
+        message = 'Saved to Google Drive as ${updated.fileName}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not save to Google Drive: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _changeStatus(EntrySupportNoteStatus next) async {
     setState(() {
       status = next;
@@ -221,6 +291,83 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
       setState(() {
         message = 'Could not open note: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openGoogleDriveNote() async {
+    final current = driveMeta;
+    final link = current?.openLink;
+
+    if (current == null || link == null || link.isEmpty) {
+      setState(() {
+        message = 'Save the Google Drive note file first.';
+      });
+      return;
+    }
+
+    await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+  }
+
+  Future<void> _openGoogleDriveFolder() async {
+    final current = driveMeta;
+    final link = current?.folderOpenLink;
+
+    if (current == null) {
+      setState(() {
+        message = 'Save the Google Drive note file first.';
+      });
+      return;
+    }
+
+    if (link != null && link.isNotEmpty) {
+      await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      message = 'Opening client notes folder...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      final token = await appState.connectGoogleDrive();
+      final clientNotesFolderId = await _clientNotesFolderId(appState, token);
+      final folder = await driveService.findOrCreateSupportNoteFolder(
+        accessToken: token,
+        clientNotesFolderId: clientNotesFolderId,
+        entry: widget.entry,
+        payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+      );
+      final folderLink =
+          'https://drive.google.com/drive/folders/'
+          '${Uri.encodeComponent(folder.id)}';
+
+      await launchUrl(Uri.parse(folderLink), webOnlyWindowName: '_blank');
+
+      if (!mounted) return;
+
+      final updatedMeta = current.copyWith(parentFolderId: folder.id);
+      await driveService.saveSupportNoteMeta(updatedMeta);
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updatedMeta;
+        message = 'Opened client notes folder.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not open client notes folder: $error';
       });
     } finally {
       if (mounted) {
@@ -321,6 +468,16 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
                 ),
               ),
             ),
+          if (driveMeta != null)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: SelectableText(
+                  'Editable Google Drive note:\n${driveMeta!.fileName}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -350,9 +507,31 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             icon: const Icon(Icons.open_in_new),
             label: const Text('Open Attached Local File'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _saveGoogleDriveNote,
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: Text(
+              driveMeta == null
+                  ? 'Create Editable Google Drive Note'
+                  : 'Update Editable Google Drive Note',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _openGoogleDriveNote,
+            icon: const Icon(Icons.open_in_new_outlined),
+            label: const Text('Open Editable Google Drive Note'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _openGoogleDriveFolder,
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('Load Client Folder'),
+          ),
           const SizedBox(height: 12),
           const Text(
-            'Local only. This note is attached to this entry card and saved only to the folder you choose. Changing status renames the attached local file.',
+            'Local notes stay attached to this entry card. Drive notes are editable and save under Client Notes.',
             style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],

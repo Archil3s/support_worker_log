@@ -5,7 +5,7 @@ const path = require('path');
 
 const PORT = Number(process.env.SUPPORT_WORKER_WEB_PORT || 51243);
 const ROOT = path.resolve(__dirname, 'build', 'web');
-const SERVER_VERSION = '2026-06-01-calendar-proxy-v3';
+const SERVER_VERSION = '2026-06-02-drive-proxy-v1';
 
 const TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -37,7 +37,7 @@ function readBody(req) {
     req.on('data', (chunk) => {
       body += chunk;
 
-      if (body.length > 1024 * 1024) {
+      if (body.length > 25 * 1024 * 1024) {
         reject(new Error('Request body is too large.'));
         req.destroy();
       }
@@ -208,6 +208,324 @@ function listGoogleCalendarEvents(accessToken, timeMin, timeMax) {
   });
 }
 
+function googleDriveJsonRequest({ accessToken, method, path: requestPath, body }) {
+  return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
+    const bodyText = body == null ? '' : JSON.stringify(body);
+
+    const request = https.request(
+      {
+        hostname: 'www.googleapis.com',
+        path: requestPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=utf-8',
+          ...(bodyText
+            ? { 'Content-Length': Buffer.byteLength(bodyText) }
+            : {}),
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                responseBody.trim() || `Google Drive returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch (error) {
+            reject(new Error('Google Drive returned invalid JSON.'));
+          }
+        });
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Drive: ${error.message}`
+            : 'Could not reach Google Drive.',
+        ),
+      );
+    });
+
+    if (bodyText) request.write(bodyText);
+    request.end();
+  });
+}
+
+function googleDriveMultipartRequest({
+  accessToken,
+  method,
+  path: requestPath,
+  metadata,
+  bytesBase64,
+  contentMimeType,
+}) {
+  return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
+    const boundary = `support_worker_log_${Date.now()}`;
+    const fileBytes = Buffer.from(String(bytesBase64 || ''), 'base64');
+    const head = Buffer.from(
+      `--${boundary}\r\n` +
+        'Content-Type: application/json; charset=utf-8\r\n\r\n' +
+        `${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Type: ${contentMimeType}\r\n\r\n`,
+      'utf8',
+    );
+    const tail = Buffer.from(`\r\n--${boundary}--`, 'utf8');
+    const body = Buffer.concat([head, fileBytes, tail]);
+
+    const request = https.request(
+      {
+        hostname: 'www.googleapis.com',
+        path: requestPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+          'Content-Length': body.length,
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                responseBody.trim() || `Google Drive returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch (error) {
+            reject(new Error('Google Drive returned invalid JSON.'));
+          }
+        });
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Drive: ${error.message}`
+            : 'Could not reach Google Drive.',
+        ),
+      );
+    });
+
+    request.write(body);
+    request.end();
+  });
+}
+
+async function readJsonBody(req) {
+  const body = await readBody(req);
+  return body.trim() ? JSON.parse(body) : {};
+}
+
+async function createGoogleDriveFolder(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const name = String(payload.name || '').trim();
+    const parentId = String(payload.parentId || '').trim();
+
+    if (!name) {
+      send(res, 400, 'Missing folder name.');
+      return;
+    }
+
+    const created = await googleDriveJsonRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'POST',
+      path: '/drive/v3/files?fields=id,name,mimeType,webViewLink',
+      body: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        ...(parentId ? { parents: [parentId] } : {}),
+      },
+    });
+
+    send(res, 200, JSON.stringify(created), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive folder creation failed.',
+    );
+  }
+}
+
+async function listGoogleDriveChildren(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const parentId = String(payload.parentId || '').trim();
+
+    if (!parentId) {
+      send(res, 400, 'Missing parent folder id.');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      fields: 'files(id,name,mimeType,webViewLink)',
+      orderBy: 'folder,name',
+      q: `'${parentId.replace(/'/g, "\\'")}' in parents and trashed = false`,
+    });
+    const listed = await googleDriveJsonRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'GET',
+      path: `/drive/v3/files?${params.toString()}`,
+    });
+
+    send(res, 200, JSON.stringify(listed), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive file listing failed.',
+    );
+  }
+}
+
+async function uploadGoogleDriveFile(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const name = String(payload.name || '').trim();
+    const mimeType = String(payload.mimeType || '').trim();
+    const parentId = String(payload.parentId || '').trim();
+    const contentMimeType = String(payload.contentMimeType || mimeType).trim();
+
+    if (!name || !mimeType || !parentId || !contentMimeType) {
+      send(res, 400, 'Missing Drive upload details.');
+      return;
+    }
+
+    const uploaded = await googleDriveMultipartRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'POST',
+      path: '/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink',
+      metadata: { name, mimeType, parents: [parentId] },
+      bytesBase64: String(payload.bytesBase64 || ''),
+      contentMimeType,
+    });
+
+    send(res, 200, JSON.stringify(uploaded), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive upload failed.',
+    );
+  }
+}
+
+async function updateGoogleDriveFile(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+    const name = String(payload.name || '').trim();
+    const mimeType = String(payload.mimeType || '').trim();
+    const contentMimeType = String(payload.contentMimeType || mimeType).trim();
+
+    if (!fileId || !name || !mimeType || !contentMimeType) {
+      send(res, 400, 'Missing Drive update details.');
+      return;
+    }
+
+    const updated = await googleDriveMultipartRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'PATCH',
+      path: `/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=multipart&fields=id,name,mimeType,webViewLink`,
+      metadata: { name, mimeType },
+      bytesBase64: String(payload.bytesBase64 || ''),
+      contentMimeType,
+    });
+
+    send(res, 200, JSON.stringify(updated), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive file update failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -322,6 +640,26 @@ function handleRequest(req, res) {
 
   if ((req.url || '').split('?')[0] === '/__google_calendar/events') {
     listPrivateCalendarEvents(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/create_folder') {
+    createGoogleDriveFolder(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/list_children') {
+    listGoogleDriveChildren(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/upload_file') {
+    uploadGoogleDriveFile(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/update_file') {
+    updateGoogleDriveFile(req, res);
     return;
   }
 

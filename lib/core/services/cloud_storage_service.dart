@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'storage_service.dart';
 
@@ -80,7 +81,9 @@ class CloudStorageService {
   }
 
   Future<User> signInWithGoogle() async {
-    final credential = await _auth.signInWithPopup(_googleServicesProvider());
+    final credential = await _signInWithGoogleProvider(
+      _googleServicesProvider(),
+    );
     final user = credential.user;
 
     if (user == null) {
@@ -115,14 +118,11 @@ class CloudStorageService {
       final user = currentUser;
       if (user == null) return;
       final currentUserId = user.uid;
+      final provider = _googleServicesProvider(forceConsent: forceRefresh);
 
       credential = isGoogleBackedUser
-          ? await _auth.signInWithPopup(
-              _googleServicesProvider(forceConsent: forceRefresh),
-            )
-          : await user.linkWithPopup(
-              _googleServicesProvider(forceConsent: forceRefresh),
-            );
+          ? await _refreshGoogleBackedCredential(user, provider)
+          : await _linkWithGoogleProvider(user, provider);
 
       if (credential.user?.uid != currentUserId) {
         throw StateError(
@@ -140,6 +140,29 @@ class CloudStorageService {
     _storeGoogleServicesToken(credential);
   }
 
+  Future<UserCredential> _signInWithGoogleProvider(
+    GoogleAuthProvider provider,
+  ) {
+    if (kIsWeb) return _auth.signInWithPopup(provider);
+    return _auth.signInWithProvider(provider);
+  }
+
+  Future<UserCredential> _linkWithGoogleProvider(
+    User user,
+    GoogleAuthProvider provider,
+  ) {
+    if (kIsWeb) return user.linkWithPopup(provider);
+    return user.linkWithProvider(provider);
+  }
+
+  Future<UserCredential> _refreshGoogleBackedCredential(
+    User user,
+    GoogleAuthProvider provider,
+  ) {
+    if (kIsWeb) return _auth.signInWithPopup(provider);
+    return user.reauthenticateWithProvider(provider);
+  }
+
   Future<String> requireGoogleCalendarAccessToken() async {
     final current = _googleCalendarAccessToken;
 
@@ -147,7 +170,7 @@ class CloudStorageService {
       return current;
     }
 
-    await connectGoogleServicesForCurrentUser(forceRefresh: true);
+    await connectGoogleServicesForCurrentUser();
 
     final updated = _googleCalendarAccessToken;
 
@@ -199,7 +222,7 @@ class CloudStorageService {
   GoogleAuthProvider _googleServicesProvider({bool forceConsent = false}) {
     final parameters = <String, String>{
       'include_granted_scopes': 'true',
-      if (forceConsent) 'prompt': 'consent select_account',
+      if (forceConsent) 'prompt': 'consent',
     };
 
     return GoogleAuthProvider()
