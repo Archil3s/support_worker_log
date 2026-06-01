@@ -182,7 +182,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Your existing local data will be merged and saved to Firebase after login.',
+                      'Your existing local data will be merged and saved to Firebase after login. Google sign-in also connects Calendar and Drive.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
                     ),
@@ -264,7 +264,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     OutlinedButton.icon(
                       onPressed: busy ? null : _signInWithGoogle,
                       icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                      label: const Text('Continue with Google'),
+                      label: const Text('Continue with Google Sync'),
                     ),
                     const SizedBox(height: 8),
                     TextButton(

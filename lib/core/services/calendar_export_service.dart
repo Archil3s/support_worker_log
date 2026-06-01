@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/entry_type.dart';
 import '../models/google_calendar_event.dart';
@@ -22,19 +23,28 @@ class CalendarExportService {
     WorkEntry entry, {
     required String accessToken,
   }) async {
+    return openGoogleCalendarDraftForEntry(entry);
+  }
+
+  static Future<bool> openGoogleCalendarDraftForEntry(WorkEntry entry) {
+    return launchUrl(
+      googleCalendarDraftUriForEntry(entry),
+      webOnlyWindowName: '_blank',
+    );
+  }
+
+  static Uri googleCalendarDraftUriForEntry(WorkEntry entry) {
     final start = _entryStart(entry);
     final end = _entryEnd(entry);
-    await _googleCalendarApi.insertPrivateEvent(
-      accessToken: accessToken,
-      summary: _calendarTitle(entry),
-      description: _detailsForEntry(entry, start, end),
-      location: entry.client,
-      start: start,
-      end: end,
-      colorId: _googleCalendarColorId(entry),
-    );
 
-    return true;
+    return Uri.https('calendar.google.com', '/calendar/render', {
+      'action': 'TEMPLATE',
+      'text': _calendarTitle(entry),
+      'dates': '${_googleDate(start.toUtc())}/${_googleDate(end.toUtc())}',
+      'details': _detailsForEntry(entry, start, end),
+      'location': entry.client,
+      'trp': 'true',
+    });
   }
 
   static Future<List<GoogleCalendarEvent>> listPrimaryEvents({
@@ -121,53 +131,16 @@ class CalendarExportService {
     DateTime start,
     DateTime end,
   ) {
-    final breakdown = entry.supportNoteBreakdown.trim().isEmpty
-        ? supportNoteBreakdownTemplate.trim()
-        : entry.supportNoteBreakdown.trim();
-
     final buffer = StringBuffer()
       ..writeln(_sentenceForEntry(entry, start, end))
       ..writeln()
-      ..writeln(breakdown)
-      ..writeln()
-      ..writeln('Client initials: ${entry.client}')
-      ..writeln('Support type: ${entry.type.label}')
-      ..writeln('Date: ${_formatDate(entry.date)}')
-      ..writeln('Start time: ${_formatClock(start)}')
-      ..writeln('End time: ${_formatClock(end)}')
       ..writeln('Visit duration: ${entry.minutes} minutes')
-      ..writeln('Note allowance: ${entry.billingTime.noteTimeText}')
       ..writeln('Billable time: ${entry.hours.toStringAsFixed(2)} hours');
 
     if (entry.kilometres > 0) {
-      buffer.writeln('Kilometres: ${entry.kilometres.toStringAsFixed(1)} km');
-    }
-
-    if (entry.notes.isNotEmpty) {
-      final sortedNotes = entry.notes.toList()..sort();
-
-      buffer
-        ..writeln()
-        ..writeln('Notes / topics:');
-
-      for (final note in sortedNotes) {
-        buffer.writeln('- $note');
-      }
-    }
-
-    if (entry.nextActions.isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln('Next actions:');
-
-      for (final item in entry.nextActions) {
-        final completed = item.completedAt == null
-            ? ''
-            : ' (completed ${_formatDate(item.completedAt!)} '
-                  '${_formatClock(item.completedAt!)})';
-
-        buffer.writeln('- ${item.text}$completed');
-      }
+      buffer.writeln(
+        'Kilometres travelled: ${entry.kilometres.toStringAsFixed(1)} km',
+      );
     }
 
     return buffer.toString().trim();
@@ -180,14 +153,7 @@ class CalendarExportService {
   ) {
     return '${entry.client} ${entry.type.label} on ${_formatDate(entry.date)} '
         'from ${_formatClock(start)} to ${_formatClock(end)} '
-        'for ${entry.minutes} minutes plus ${entry.billingTime.noteTimeText} '
-        'notes (${entry.hours.toStringAsFixed(2)} billable hours).';
-  }
-
-  static String? _googleCalendarColorId(WorkEntry entry) {
-    if (entry.type != EntryType.textNote) return null;
-
-    return entry.importantText ? '11' : '7';
+        'for ${entry.minutes} minutes.';
   }
 
   static String _calendarTitle(WorkEntry entry) {
@@ -207,6 +173,19 @@ class CalendarExportService {
   }
 
   static String _icsDate(DateTime value) {
+    final utc = value.toUtc();
+
+    return '${utc.year}'
+        '${_two(utc.month)}'
+        '${_two(utc.day)}'
+        'T'
+        '${_two(utc.hour)}'
+        '${_two(utc.minute)}'
+        '${_two(utc.second)}'
+        'Z';
+  }
+
+  static String _googleDate(DateTime value) {
     final utc = value.toUtc();
 
     return '${utc.year}'

@@ -362,7 +362,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                       style: TextStyle(fontWeight: FontWeight.w900),
                     ),
                     subtitle: const Text(
-                      'Important texts export to Google Calendar in red.',
+                      'Important texts are marked in invoice text summaries.',
                       style: TextStyle(color: Color(0xFF8396C7)),
                     ),
                   ),

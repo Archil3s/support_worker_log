@@ -7,6 +7,8 @@ import '../models/app_settings.dart';
 import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
 import '../services/cloud_storage_service.dart';
+import '../services/drive_invoice_cycle_sync_service.dart';
+import '../services/google_drive_service.dart';
 import '../services/storage_service.dart';
 import '../utils/sample_invoice_data.dart';
 
@@ -20,6 +22,9 @@ class RemovedEntry {
 class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
   final CloudStorageService _cloudStorageService = CloudStorageService();
+  final GoogleDriveService _googleDriveService = GoogleDriveService();
+  final DriveInvoiceCycleSyncService _driveInvoiceSyncService =
+      DriveInvoiceCycleSyncService();
 
   AppSettings _settings = const AppSettings();
   ActiveVisit? _activeVisit;
@@ -28,6 +33,11 @@ class AppState extends ChangeNotifier {
   final List<WorkEntry> _entries = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
 
+  StreamSubscription<StoredAppData?>? _cloudDataSubscription;
+  String? _cloudDataSubscriptionUserId;
+  Timer? _driveInvoiceSyncDebounce;
+  bool _driveInvoiceSyncRunning = false;
+  bool _driveInvoiceSyncQueued = false;
   bool _cloudSyncReady = false;
   String? _cloudSyncError;
 
@@ -47,6 +57,9 @@ class AppState extends ChangeNotifier {
       _cloudStorageService.googleCalendarAccessToken;
   String? get googleDriveAccessToken =>
       _cloudStorageService.googleDriveAccessToken;
+  bool get googleServicesConnected =>
+      _cloudStorageService.googleCalendarAccessToken != null &&
+      _cloudStorageService.googleDriveAccessToken != null;
 
   String get existingGoogleCalendarAccessToken {
     final token = _cloudStorageService.googleCalendarAccessToken;
@@ -115,6 +128,7 @@ class AppState extends ChangeNotifier {
     _cloudSyncError = null;
     notifyListeners();
     unawaited(_syncLocalAndCloudSafely());
+    _scheduleDriveInvoiceSync();
   }
 
   Future<void> sendPasswordResetEmail(String email) {
@@ -126,8 +140,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> connectGoogleCalendar() async {
+    await _cloudStorageService.connectGoogleServicesForCurrentUser(
+      forceRefresh: true,
+      allowPopup: true,
+    );
     final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
     notifyListeners();
+    _scheduleDriveInvoiceSync();
     return token;
   }
 
@@ -138,14 +157,18 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> connectGoogleDrive({bool forceRefresh = false}) async {
-    final token = await _cloudStorageService.requireGoogleDriveAccessToken(
+    await _cloudStorageService.connectGoogleServicesForCurrentUser(
       forceRefresh: forceRefresh,
+      allowPopup: true,
     );
+    final token = await _cloudStorageService.requireGoogleDriveAccessToken();
     notifyListeners();
+    _scheduleDriveInvoiceSync();
     return token;
   }
 
   Future<void> signOut() async {
+    await _stopCloudDataSubscription();
     await _cloudStorageService.signOut();
     _cloudSyncReady = false;
     _cloudSyncError = null;
@@ -156,6 +179,7 @@ class AppState extends ChangeNotifier {
     if (!_cloudStorageService.isSignedIn) return;
 
     await _syncLocalAndCloudSafely();
+    _scheduleDriveInvoiceSync();
     notifyListeners();
   }
 
@@ -181,6 +205,7 @@ class AppState extends ChangeNotifier {
   Future<void> restoreFromBackup(StoredAppData data) async {
     _replaceInMemory(data);
     await _save();
+    _scheduleDriveInvoiceSync();
     notifyListeners();
   }
 
@@ -204,6 +229,7 @@ class AppState extends ChangeNotifier {
   void updateSettings(AppSettings settings) {
     _settings = settings;
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   void startActiveVisit(ActiveVisit visit) {
@@ -229,11 +255,13 @@ class AppState extends ChangeNotifier {
     _entries.insert(0, entry);
     _activeVisit = null;
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   void addEntry(WorkEntry entry) {
     _entries.insert(0, entry);
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   void addEntries(List<WorkEntry> entries) {
@@ -241,6 +269,7 @@ class AppState extends ChangeNotifier {
 
     _entries.insertAll(0, entries);
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   void updateEntry(WorkEntry updatedEntry) {
@@ -249,6 +278,7 @@ class AppState extends ChangeNotifier {
 
     _entries[index] = updatedEntry;
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   RemovedEntry? deleteEntry(WorkEntry entry) {
@@ -257,6 +287,7 @@ class AppState extends ChangeNotifier {
 
     final removed = _entries.removeAt(index);
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
 
     return RemovedEntry(entry: removed, index: index);
   }
@@ -265,6 +296,7 @@ class AppState extends ChangeNotifier {
     final index = _boundedIndex(removedEntry.index);
     _entries.insert(index, removedEntry.entry);
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   void duplicateEntry(WorkEntry entry) {
@@ -278,6 +310,7 @@ class AppState extends ChangeNotifier {
       ),
     );
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
   }
 
   bool addClient(String client) {
@@ -340,6 +373,7 @@ class AppState extends ChangeNotifier {
     }
 
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
 
     return true;
   }
@@ -365,6 +399,7 @@ class AppState extends ChangeNotifier {
     _settings = _settings.copyWith(payPeriodAnchorDate: DateTime(2025, 12, 14));
 
     _persistAndNotify();
+    _scheduleDriveInvoiceSync();
 
     return invoiceEntries.length;
   }
@@ -377,6 +412,8 @@ class AppState extends ChangeNotifier {
       await _cloudStorageService.save(localData);
       _cloudSyncReady = true;
       _cloudSyncError = null;
+      _startCloudDataSubscription();
+      _scheduleDriveInvoiceSync();
       return;
     }
 
@@ -392,6 +429,8 @@ class AppState extends ChangeNotifier {
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
+    _startCloudDataSubscription();
+    _scheduleDriveInvoiceSync();
   }
 
   Future<void> _syncLocalAndCloudSafely() async {
@@ -402,6 +441,132 @@ class AppState extends ChangeNotifier {
       _cloudSyncError = error.toString();
     }
 
+    notifyListeners();
+  }
+
+  void _startCloudDataSubscription() {
+    final userId = _cloudStorageService.userId;
+
+    if (userId == null || userId.isEmpty) {
+      unawaited(_stopCloudDataSubscription());
+      return;
+    }
+
+    if (_cloudDataSubscriptionUserId == userId &&
+        _cloudDataSubscription != null) {
+      return;
+    }
+
+    unawaited(_stopCloudDataSubscription());
+    _cloudDataSubscriptionUserId = userId;
+    _cloudDataSubscription = _cloudStorageService.watch().listen(
+      (cloudData) {
+        unawaited(_applyCloudData(cloudData));
+      },
+      onError: (Object error) {
+        _cloudSyncReady = false;
+        _cloudSyncError = error.toString();
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> _stopCloudDataSubscription() async {
+    _cloudDataSubscriptionUserId = null;
+    await _cloudDataSubscription?.cancel();
+    _cloudDataSubscription = null;
+  }
+
+  Future<void> _applyCloudData(StoredAppData? cloudData) async {
+    if (cloudData == null) return;
+
+    _replaceInMemory(cloudData);
+    await _storageService.save(cloudData);
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+    _scheduleDriveInvoiceSync();
+  }
+
+  void _scheduleDriveInvoiceSync() {
+    if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
+    if (_cloudStorageService.googleDriveAccessToken == null) return;
+
+    _driveInvoiceSyncDebounce?.cancel();
+    _driveInvoiceSyncDebounce = Timer(const Duration(seconds: 2), () {
+      unawaited(_syncDriveInvoicesSafely());
+    });
+  }
+
+  Future<void> _syncDriveInvoicesSafely() async {
+    if (_driveInvoiceSyncRunning) {
+      _driveInvoiceSyncQueued = true;
+      return;
+    }
+
+    _driveInvoiceSyncRunning = true;
+
+    try {
+      await _syncDriveInvoices();
+    } catch (error) {
+      _cloudSyncError = error.toString();
+      notifyListeners();
+    } finally {
+      _driveInvoiceSyncRunning = false;
+
+      if (_driveInvoiceSyncQueued) {
+        _driveInvoiceSyncQueued = false;
+        _scheduleDriveInvoiceSync();
+      }
+    }
+  }
+
+  Future<void> _syncDriveInvoices() async {
+    if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
+
+    final accessToken = await _cloudStorageService
+        .requireGoogleDriveAccessToken();
+    var syncSettings = _settings;
+    var clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+    var invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
+
+    if (clientNotesFolderId == null ||
+        clientNotesFolderId.isEmpty ||
+        invoicesFolderId == null ||
+        invoicesFolderId.isEmpty) {
+      final folderSetup = await _googleDriveService.createFolderSetup(
+        accessToken: accessToken,
+      );
+
+      _settings = folderSetup.applyTo(_settings);
+      syncSettings = _settings;
+      clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+      invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
+
+      final data = _currentStoredData();
+      await _storageService.save(data);
+      await _cloudStorageService.save(data);
+      notifyListeners();
+    }
+
+    if (clientNotesFolderId == null ||
+        clientNotesFolderId.isEmpty ||
+        invoicesFolderId == null ||
+        invoicesFolderId.isEmpty) {
+      return;
+    }
+
+    await _driveInvoiceSyncService.syncInvoiceCycles(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      invoicesFolderId: invoicesFolderId,
+      entries: _entries,
+      settings: syncSettings,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
     notifyListeners();
   }
 
@@ -526,5 +691,12 @@ class AppState extends ChangeNotifier {
       _cloudSyncReady = false;
       _cloudSyncError = error.toString();
     }
+  }
+
+  @override
+  void dispose() {
+    _driveInvoiceSyncDebounce?.cancel();
+    unawaited(_stopCloudDataSubscription());
+    super.dispose();
   }
 }

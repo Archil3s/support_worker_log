@@ -22,7 +22,7 @@ class InvoicePdfService {
     required List<WorkEntry> entries,
     required AppSettings settings,
   }) async {
-    final actualInvoiceNumber = await _invoiceNumberForPeriod(period);
+    final actualInvoiceNumber = await invoiceNumberForPeriod(period);
 
     final bytes = await buildInvoicePdf(
       invoiceNumber: actualInvoiceNumber,
@@ -36,7 +36,7 @@ class InvoicePdfService {
     await Printing.sharePdf(bytes: bytes, filename: fileName);
   }
 
-  static Future<int> _invoiceNumberForPeriod(PayPeriodRange period) async {
+  static Future<int> invoiceNumberForPeriod(PayPeriodRange period) async {
     final prefs = await SharedPreferences.getInstance();
     final periodKey =
         'invoice_pdf_number_${_fileDate(period.start)}_${_fileDate(period.end)}';

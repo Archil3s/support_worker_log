@@ -1,4 +1,5 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 
@@ -49,11 +50,17 @@ class GoogleCalendarApiPlatform {
     required DateTime start,
     required DateTime end,
   }) async {
-    final decoded = await _listEventsDirectly(
-      accessToken: accessToken,
-      start: start,
-      end: end,
-    );
+    final decoded = _isDesktopLocalApp
+        ? await _listEventsViaDesktopProxy(
+            accessToken: accessToken,
+            start: start,
+            end: end,
+          )
+        : await _listEventsDirectly(
+            accessToken: accessToken,
+            start: start,
+            end: end,
+          );
 
     final items = decoded['items'];
     if (items is! List) return const [];
@@ -73,7 +80,7 @@ class GoogleCalendarApiPlatform {
     required DateTime start,
   }) async {
     try {
-      final response = await html.HttpRequest.request(
+      final response = await _sendRequest(
         'https://www.googleapis.com/calendar/v3/calendars/primary/events',
         method: 'POST',
         requestHeaders: {
@@ -104,12 +111,19 @@ class GoogleCalendarApiPlatform {
     required String accessToken,
     required Map<String, Object?> event,
   }) async {
-    final response = await html.HttpRequest.request(
-      _desktopCalendarProxyUrl,
-      method: 'POST',
-      requestHeaders: {'Content-Type': 'application/json; charset=utf-8'},
-      sendData: jsonEncode({'accessToken': accessToken, 'event': event}),
-    );
+    late final html.HttpRequest response;
+
+    try {
+      response = await _sendRequest(
+        _desktopCalendarProxyUrl,
+        method: 'POST',
+        requestHeaders: {'Content-Type': 'text/plain;charset=UTF-8'},
+        sendData: jsonEncode({'accessToken': accessToken, 'event': event}),
+      );
+    } catch (error) {
+      if (error is StateError) rethrow;
+      throw StateError('Could not reach the desktop Google Calendar proxy.');
+    }
 
     final decoded = _decodeSuccessfulResponse(response);
     final htmlLink = decoded['htmlLink'];
@@ -134,11 +148,47 @@ class GoogleCalendarApiPlatform {
       params,
     );
 
-    final response = await html.HttpRequest.request(
-      uri.toString(),
-      method: 'GET',
-      requestHeaders: {'Authorization': 'Bearer $accessToken'},
+    late final html.HttpRequest response;
+
+    try {
+      response = await _sendRequest(
+        uri.toString(),
+        method: 'GET',
+        requestHeaders: {'Authorization': 'Bearer $accessToken'},
+      );
+    } catch (error) {
+      if (error is StateError) rethrow;
+      throw StateError('Could not load Google Calendar events.');
+    }
+
+    return _decodeJsonResponse(
+      response,
+      failureMessage: 'Google Calendar events fetch failed',
     );
+  }
+
+  Future<Map<String, dynamic>> _listEventsViaDesktopProxy({
+    required String accessToken,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    late final html.HttpRequest response;
+
+    try {
+      response = await _sendRequest(
+        _desktopCalendarEventsProxyUrl,
+        method: 'POST',
+        requestHeaders: {'Content-Type': 'text/plain;charset=UTF-8'},
+        sendData: jsonEncode({
+          'accessToken': accessToken,
+          'timeMin': start.toUtc().toIso8601String(),
+          'timeMax': end.toUtc().toIso8601String(),
+        }),
+      );
+    } catch (error) {
+      if (error is StateError) rethrow;
+      throw StateError('Could not reach the desktop Google Calendar proxy.');
+    }
 
     return _decodeJsonResponse(
       response,
@@ -170,17 +220,89 @@ class GoogleCalendarApiPlatform {
 
     if (status < 200 || status >= 300) {
       throw StateError(
-        raw.trim().isEmpty ? '$failureMessage with HTTP $status.' : raw,
+        _failureText(raw: raw, fallback: '$failureMessage with HTTP $status.'),
       );
     }
 
-    final decoded = jsonDecode(raw);
+    return _decodeJson(raw);
+  }
 
-    if (decoded is! Map<String, dynamic>) {
-      throw StateError('Google Calendar returned invalid JSON.');
+  Future<html.HttpRequest> _sendRequest(
+    String url, {
+    required String method,
+    Map<String, String>? requestHeaders,
+    Object? sendData,
+  }) {
+    final completer = Completer<html.HttpRequest>();
+    final request = html.HttpRequest()
+      ..open(method, url)
+      ..timeout = 15000;
+
+    for (final entry in (requestHeaders ?? const <String, String>{}).entries) {
+      request.setRequestHeader(entry.key, entry.value);
     }
 
-    return decoded;
+    request.onLoad.first.then((_) {
+      if (!completer.isCompleted) completer.complete(request);
+    });
+    request.onError.first.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('Network request failed.'));
+      }
+    });
+    request.onTimeout.first.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('Network request timed out.'));
+      }
+    });
+
+    request.send(sendData);
+
+    return completer.future;
+  }
+
+  Map<String, dynamic> _decodeJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+
+      if (decoded is! Map<String, dynamic>) {
+        throw StateError('Google Calendar returned invalid JSON.');
+      }
+
+      return decoded;
+    } catch (error) {
+      if (error is StateError) rethrow;
+      throw StateError('Google Calendar returned invalid JSON.');
+    }
+  }
+
+  String _failureText({required String raw, required String fallback}) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return fallback;
+
+    try {
+      final decoded = jsonDecode(trimmed);
+
+      if (decoded is Map) {
+        final error = decoded['error'];
+
+        if (error is Map) {
+          final message = error['message'];
+          if (message is String && message.trim().isNotEmpty) {
+            return message.trim();
+          }
+        }
+
+        final message = decoded['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          return message.trim();
+        }
+      }
+    } catch (_) {
+      return trimmed;
+    }
+
+    return trimmed;
   }
 
   GoogleCalendarEvent? _eventFromJson(Map<String, dynamic> json) {
@@ -229,7 +351,21 @@ class GoogleCalendarApiPlatform {
   }
 
   String get _desktopCalendarProxyUrl {
-    return '/__google_calendar/private_event';
+    return '$_desktopCalendarProxyOrigin/__google_calendar/private_event';
+  }
+
+  String get _desktopCalendarEventsProxyUrl {
+    return '$_desktopCalendarProxyOrigin/__google_calendar/events';
+  }
+
+  String get _desktopCalendarProxyOrigin {
+    final location = html.window.location;
+
+    if (location.hostname == '127.0.0.1') {
+      return 'http://localhost:$_desktopCalendarProxyPort';
+    }
+
+    return location.origin;
   }
 
   String _calendarDayLink(DateTime start) {

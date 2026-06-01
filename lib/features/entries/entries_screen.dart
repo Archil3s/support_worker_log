@@ -742,15 +742,11 @@ class _EntryCard extends StatelessWidget {
     final appState = context.read<AppState>();
 
     try {
-      final token = appState.existingGoogleCalendarAccessToken;
       final opened =
-          await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
-            entry,
-            accessToken: token,
-          );
+          await CalendarExportService.openGoogleCalendarDraftForEntry(entry);
 
       if (!opened) {
-        throw Exception('Private calendar event was not confirmed.');
+        throw Exception('Google Calendar draft could not be opened.');
       }
 
       appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
@@ -758,7 +754,7 @@ class _EntryCard extends StatelessWidget {
       messenger.showSnackBar(
         SnackBar(
           content: const Text(
-            'Private Google Calendar event created and marked entered.',
+            'Google Calendar draft opened and marked entered.',
           ),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
@@ -872,8 +868,8 @@ class _EntryCard extends StatelessWidget {
                       ? Icons.event_available_outlined
                       : Icons.calendar_month_outlined,
                   label: entry.googleCalendarEntered
-                      ? 'Private calendar event entered'
-                      : 'Create private Calendar event',
+                      ? 'Calendar event entered'
+                      : 'Open Google Calendar draft',
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     _openGoogleCalendar(context);

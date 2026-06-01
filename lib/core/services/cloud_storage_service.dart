@@ -23,6 +23,13 @@ class CloudStorageService {
 
   String? get googleDriveAccessToken => _googleDriveAccessToken;
 
+  bool get isGoogleBackedUser {
+    final user = currentUser;
+    if (user == null) return false;
+
+    return user.providerData.any((item) => item.providerId == 'google.com');
+  }
+
   bool get isSignedIn {
     final user = currentUser;
     return user != null && !user.isAnonymous;
@@ -73,23 +80,64 @@ class CloudStorageService {
   }
 
   Future<User> signInWithGoogle() async {
-    final provider = GoogleAuthProvider()
-      ..addScope('https://www.googleapis.com/auth/calendar.events')
-      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
-      ..setCustomParameters({'include_granted_scopes': 'true'});
-    final credential = await _auth.signInWithPopup(provider);
+    final credential = await _auth.signInWithPopup(_googleServicesProvider());
     final user = credential.user;
 
     if (user == null) {
       throw StateError('Google sign-in returned no user.');
     }
 
-    final oauth = credential.credential;
-    _googleCalendarAccessToken = oauth is OAuthCredential
-        ? oauth.accessToken
-        : null;
+    _storeGoogleServicesToken(credential);
 
     return user;
+  }
+
+  Future<void> connectGoogleServicesForCurrentUser({
+    bool forceRefresh = false,
+    bool allowPopup = false,
+  }) async {
+    if (!isSignedIn) return;
+    if (!forceRefresh &&
+        _googleCalendarAccessToken != null &&
+        _googleDriveAccessToken != null) {
+      return;
+    }
+
+    if (!allowPopup) {
+      throw StateError(
+        'Google Drive and Calendar need an active Google access token. Sign in with Continue with Google Sync, or use Connect Drive + Calendar once.',
+      );
+    }
+
+    late final UserCredential credential;
+
+    try {
+      final user = currentUser;
+      if (user == null) return;
+      final currentUserId = user.uid;
+
+      credential = isGoogleBackedUser
+          ? await _auth.signInWithPopup(
+              _googleServicesProvider(forceConsent: forceRefresh),
+            )
+          : await user.linkWithPopup(
+              _googleServicesProvider(forceConsent: forceRefresh),
+            );
+
+      if (credential.user?.uid != currentUserId) {
+        throw StateError(
+          'Google services sign-in used a different account. Choose the same account as the app sign-in.',
+        );
+      }
+    } on FirebaseAuthException catch (error) {
+      throw StateError(_authErrorMessage('Google services sign-in', error));
+    }
+
+    if (credential.user == null) {
+      throw StateError('Google services sign-in returned no user.');
+    }
+
+    _storeGoogleServicesToken(credential);
   }
 
   Future<String> requireGoogleCalendarAccessToken() async {
@@ -99,21 +147,7 @@ class CloudStorageService {
       return current;
     }
 
-    final provider = GoogleAuthProvider()
-      ..addScope('https://www.googleapis.com/auth/calendar.events')
-      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
-      ..setCustomParameters({'include_granted_scopes': 'true'});
-    final credential = await _auth.signInWithPopup(provider);
-    final user = credential.user;
-    final oauth = credential.credential;
-
-    if (user == null) {
-      throw StateError('Google Calendar sign-in returned no user.');
-    }
-
-    _googleCalendarAccessToken = oauth is OAuthCredential
-        ? oauth.accessToken
-        : null;
+    await connectGoogleServicesForCurrentUser(forceRefresh: true);
 
     final updated = _googleCalendarAccessToken;
 
@@ -135,27 +169,7 @@ class CloudStorageService {
       return current;
     }
 
-    late final UserCredential credential;
-
-    try {
-      final provider = GoogleAuthProvider()
-        ..addScope('https://www.googleapis.com/auth/drive.file')
-        ..setCustomParameters({'include_granted_scopes': 'true'});
-      credential = await _auth.signInWithPopup(provider);
-    } on FirebaseAuthException catch (error) {
-      throw StateError(_authErrorMessage('Google Drive sign-in', error));
-    }
-
-    final user = credential.user;
-    final oauth = credential.credential;
-
-    if (user == null) {
-      throw StateError('Google Drive sign-in returned no user.');
-    }
-
-    _googleDriveAccessToken = oauth is OAuthCredential
-        ? oauth.accessToken
-        : null;
+    await connectGoogleServicesForCurrentUser(forceRefresh: forceRefresh);
 
     final updated = _googleDriveAccessToken;
 
@@ -180,6 +194,27 @@ class CloudStorageService {
 
   Future<void> sendPasswordResetEmail(String email) {
     return _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  GoogleAuthProvider _googleServicesProvider({bool forceConsent = false}) {
+    final parameters = <String, String>{
+      'include_granted_scopes': 'true',
+      if (forceConsent) 'prompt': 'consent select_account',
+    };
+
+    return GoogleAuthProvider()
+      ..addScope('https://www.googleapis.com/auth/calendar.events')
+      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
+      ..addScope('https://www.googleapis.com/auth/drive.file')
+      ..setCustomParameters(parameters);
+  }
+
+  void _storeGoogleServicesToken(UserCredential credential) {
+    final oauth = credential.credential;
+    final token = oauth is OAuthCredential ? oauth.accessToken : null;
+
+    _googleCalendarAccessToken = token;
+    _googleDriveAccessToken = token;
   }
 
   Future<void> signOut() {
@@ -214,6 +249,20 @@ class CloudStorageService {
     }
 
     return StoredAppData.fromJson(data);
+  }
+
+  Stream<StoredAppData?> watch() {
+    if (!isSignedIn) return Stream.value(null);
+
+    return _appDataDoc.snapshots().map((snapshot) {
+      final data = snapshot.data();
+
+      if (!snapshot.exists || data == null) {
+        return null;
+      }
+
+      return StoredAppData.fromJson(data);
+    });
   }
 
   Future<void> save(StoredAppData data) async {

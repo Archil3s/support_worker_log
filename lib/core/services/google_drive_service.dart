@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_settings.dart';
 import '../models/google_drive_file.dart';
 import '../models/work_entry.dart';
+import '../utils/pay_period_utils.dart';
 import 'google_drive/google_drive_api_platform.dart';
+import 'invoice_pdf_service.dart';
 import 'local_support_note_service.dart';
 
 class GoogleDriveFolderSetup {
@@ -53,6 +55,7 @@ class EntryDriveSupportNoteMeta {
     required this.fileId,
     required this.fileName,
     required this.noteText,
+    this.parentFolderId,
     this.webViewLink,
   });
 
@@ -62,6 +65,7 @@ class EntryDriveSupportNoteMeta {
   final String fileId;
   final String fileName;
   final String noteText;
+  final String? parentFolderId;
   final String? webViewLink;
 
   Map<String, dynamic> toJson() {
@@ -72,6 +76,7 @@ class EntryDriveSupportNoteMeta {
       'fileId': fileId,
       'fileName': fileName,
       'noteText': noteText,
+      'parentFolderId': parentFolderId,
       'webViewLink': webViewLink,
     };
   }
@@ -90,6 +95,7 @@ class EntryDriveSupportNoteMeta {
       fileId: json['fileId'] as String? ?? '',
       fileName: json['fileName'] as String? ?? '',
       noteText: json['noteText'] as String? ?? '',
+      parentFolderId: json['parentFolderId'] as String?,
       webViewLink: json['webViewLink'] as String?,
     );
   }
@@ -216,6 +222,90 @@ class GoogleDriveService {
     return _api.listChildren(accessToken: accessToken, parentId: folderId);
   }
 
+  Future<GoogleDriveFile> findOrCreateFolder({
+    required String accessToken,
+    required String parentId,
+    required String name,
+  }) async {
+    final cleanedName = name.trim();
+    if (cleanedName.isEmpty) {
+      throw StateError('Google Drive folder name cannot be empty.');
+    }
+
+    final existing = await _findChild(
+      accessToken: accessToken,
+      parentId: parentId,
+      name: cleanedName,
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+
+    if (existing != null) return existing;
+
+    return _api.createFolder(
+      accessToken: accessToken,
+      name: cleanedName,
+      parentId: parentId,
+    );
+  }
+
+  Future<GoogleDriveFile> uploadOrUpdateFile({
+    required String accessToken,
+    required String parentId,
+    required String name,
+    required String mimeType,
+    required List<int> bytes,
+  }) async {
+    final cleanedName = name.trim();
+    if (cleanedName.isEmpty) {
+      throw StateError('Google Drive file name cannot be empty.');
+    }
+
+    final existing = await _findChild(
+      accessToken: accessToken,
+      parentId: parentId,
+      name: cleanedName,
+      mimeType: mimeType,
+    );
+
+    if (existing == null) {
+      return _api.uploadFile(
+        accessToken: accessToken,
+        name: cleanedName,
+        mimeType: mimeType,
+        bytes: bytes,
+        parentId: parentId,
+      );
+    }
+
+    return _api.updateFile(
+      accessToken: accessToken,
+      fileId: existing.id,
+      name: cleanedName,
+      mimeType: mimeType,
+      bytes: bytes,
+    );
+  }
+
+  Future<GoogleDriveFile?> _findChild({
+    required String accessToken,
+    required String parentId,
+    required String name,
+    required String mimeType,
+  }) async {
+    final children = await listFolder(
+      accessToken: accessToken,
+      folderId: parentId,
+    );
+
+    for (final child in children) {
+      if (child.name == name && child.mimeType == mimeType) {
+        return child;
+      }
+    }
+
+    return null;
+  }
+
   Future<EntryDriveSupportNoteMeta> saveSupportNote({
     required String accessToken,
     required String clientNotesFolderId,
@@ -223,6 +313,8 @@ class GoogleDriveService {
     required String initials,
     required EntrySupportNoteStatus status,
     required String noteText,
+    DateTime? payPeriodAnchorDate,
+    EntryDriveSupportNoteMeta? existingMeta,
   }) async {
     final cleanedInitials = initials.trim().toUpperCase();
 
@@ -235,21 +327,47 @@ class GoogleDriveService {
       initials: cleanedInitials,
       status: status,
     );
-    final driveFileName = localFileName.replaceAll('/', '_');
+    final driveFileName = localFileName.split('/').last;
+    final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(range);
+    final clientFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _folderName(entry.client),
+    );
+    final periodFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientFolder.id,
+      name: _cycleFolderName(invoiceNumber: invoiceNumber, range: range),
+    );
     final bytes = await LocalSupportNoteService.buildNoteDocx(
       entry: entry,
       initials: cleanedInitials,
       status: status,
       noteText: noteText,
     );
-    final file = await _api.uploadFile(
-      accessToken: accessToken,
-      name: driveFileName,
-      mimeType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      bytes: bytes,
-      parentId: clientNotesFolderId,
-    );
+    const mimeType =
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    final existingFileId = existingMeta?.fileId;
+    final canUpdateExisting =
+        existingFileId != null &&
+        existingFileId.isNotEmpty &&
+        existingMeta?.parentFolderId == periodFolder.id;
+    final file = !canUpdateExisting
+        ? await _api.uploadFile(
+            accessToken: accessToken,
+            name: driveFileName,
+            mimeType: mimeType,
+            bytes: bytes,
+            parentId: periodFolder.id,
+          )
+        : await _api.updateFile(
+            accessToken: accessToken,
+            fileId: existingFileId,
+            name: driveFileName,
+            mimeType: mimeType,
+            bytes: bytes,
+          );
 
     final meta = EntryDriveSupportNoteMeta(
       entryId: entry.id,
@@ -258,6 +376,7 @@ class GoogleDriveService {
       fileId: file.id,
       fileName: file.name,
       noteText: noteText,
+      parentFolderId: periodFolder.id,
       webViewLink: file.webViewLink,
     );
     final prefs = await SharedPreferences.getInstance();
@@ -267,6 +386,26 @@ class GoogleDriveService {
     );
 
     return meta;
+  }
+
+  String _folderName(String value) {
+    final cleaned = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '-');
+    return cleaned.isEmpty ? 'Unknown Client' : cleaned;
+  }
+
+  String _cycleFolderName({
+    required int invoiceNumber,
+    required PayPeriodRange range,
+  }) {
+    return 'Invoice $invoiceNumber - ${_dateKey(range.start)} to ${_dateKey(range.end)}';
+  }
+
+  String _dateKey(DateTime value) {
+    final year = value.year.toString().padLeft(4, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+
+    return '$year-$month-$day';
   }
 
   static const _textTemplates = [

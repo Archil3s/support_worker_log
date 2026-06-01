@@ -28,6 +28,30 @@ void main() {
     expect(ics, contains('END:VEVENT'));
   });
 
+  test('ICS export keeps support notes out of the calendar description', () {
+    final entry = WorkEntry(
+      id: 'entry-4',
+      client: 'EF',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 5, 31),
+      startTime: const TimeOfDay(hour: 10, minute: 0),
+      minutes: 45,
+      notes: const ['Sensitive topic'],
+      supportNoteBreakdown: 'Outcome(s)\nSensitive support detail.',
+      odometerStart: 100,
+      odometerEnd: 112.5,
+    );
+
+    final ics = CalendarExportService.buildIcsForEntry(entry);
+
+    expect(ics, contains('Visit duration: 45 minutes'));
+    expect(ics, contains('Billable time:'));
+    expect(ics, contains('Kilometres travelled: 12.5 km'));
+    expect(ics, isNot(contains('Sensitive topic')));
+    expect(ics, isNot(contains('Sensitive support detail')));
+    expect(ics, isNot(contains('Notes / topics')));
+  });
+
   test('ICS export escapes text fields for calendar imports', () {
     final entry = WorkEntry(
       id: 'entry,2',
@@ -61,5 +85,29 @@ void main() {
 
     expect(ics, contains('SUMMARY:IMPORTANT TEXT CD'));
     expect(ics, contains('COLOR:#D50000'));
+  });
+
+  test('Google Calendar draft URL uses safe visit details without notes', () {
+    final entry = WorkEntry(
+      id: 'entry-5',
+      client: 'GH',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 5, 31),
+      startTime: const TimeOfDay(hour: 12, minute: 30),
+      minutes: 60,
+      notes: const ['Sensitive topic'],
+      supportNoteBreakdown: 'Outcome(s)\nPrivate support note.',
+    );
+
+    final uri = CalendarExportService.googleCalendarDraftUriForEntry(entry);
+
+    expect(uri.host, 'calendar.google.com');
+    expect(uri.path, '/calendar/render');
+    expect(uri.queryParameters['action'], 'TEMPLATE');
+    expect(uri.queryParameters['text'], 'GH Home Visit');
+    expect(uri.queryParameters['dates'], contains('/'));
+    expect(uri.queryParameters['details'], contains('Visit duration: 60'));
+    expect(uri.queryParameters['details'], isNot(contains('Sensitive topic')));
+    expect(uri.queryParameters['details'], isNot(contains('Private support')));
   });
 }

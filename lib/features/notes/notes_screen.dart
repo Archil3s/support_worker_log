@@ -678,19 +678,37 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   EntrySupportNoteMeta? meta;
   EntryDriveSupportNoteMeta? driveMeta;
   bool busy = false;
+  bool autoSaving = false;
+  bool suppressAutoSave = false;
+  Timer? autoSaveDebounce;
+  int autoSaveVersion = 0;
   String? message;
 
   @override
   void initState() {
     super.initState();
+    initialsController.addListener(_onAttachedNoteChanged);
+    noteController.addListener(_onAttachedNoteChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    autoSaveDebounce?.cancel();
+    initialsController.removeListener(_onAttachedNoteChanged);
+    noteController.removeListener(_onAttachedNoteChanged);
     initialsController.dispose();
     noteController.dispose();
     super.dispose();
+  }
+
+  void _onAttachedNoteChanged() {
+    if (suppressAutoSave || (meta == null && driveMeta == null)) return;
+
+    autoSaveDebounce?.cancel();
+    autoSaveDebounce = Timer(const Duration(milliseconds: 900), () {
+      unawaited(_autoSaveAttachedFiles());
+    });
   }
 
   Future<void> _load() async {
@@ -699,11 +717,17 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
     if (!mounted) return;
 
+    suppressAutoSave = true;
+
     setState(() {
       meta = loaded;
       driveMeta = loadedDrive;
 
-      if (loaded == null) {
+      if (loaded == null && loadedDrive != null) {
+        initialsController.text = loadedDrive.initials;
+        noteController.text = loadedDrive.noteText;
+        status = loadedDrive.status;
+      } else if (loaded == null) {
         initialsController.text =
             LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
         noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
@@ -715,13 +739,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         noteController.text = loaded.noteText;
         status = loaded.status;
       }
-
-      if (loaded == null && loadedDrive != null) {
-        initialsController.text = loadedDrive.initials;
-        noteController.text = loadedDrive.noteText;
-        status = loadedDrive.status;
-      }
     });
+
+    suppressAutoSave = false;
   }
 
   Future<void> _chooseFolder() async {
@@ -812,6 +832,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         initials: initialsController.text,
         status: status,
         noteText: noteController.text,
+        payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+        existingMeta: driveMeta,
       );
 
       if (!mounted) return;
@@ -836,19 +858,92 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   }
 
   Future<void> _changeStatus(EntrySupportNoteStatus next) async {
+    if (status == next) return;
+
     setState(() {
       status = next;
     });
 
-    if (meta == null) {
+    if (meta == null && driveMeta == null) {
+      suppressAutoSave = true;
       noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
         entry: widget.entry,
         status: next,
       );
+      suppressAutoSave = false;
       return;
     }
 
-    await _save();
+    await _autoSaveAttachedFiles();
+  }
+
+  Future<void> _autoSaveAttachedFiles() async {
+    if (meta == null && driveMeta == null) return;
+
+    autoSaveDebounce?.cancel();
+    final version = ++autoSaveVersion;
+
+    setState(() {
+      autoSaving = true;
+      message = 'Auto-saving attached note files...';
+    });
+
+    try {
+      EntrySupportNoteMeta? updatedLocal;
+      EntryDriveSupportNoteMeta? updatedDrive;
+      final appState = driveMeta == null ? null : context.read<AppState>();
+
+      if (meta != null) {
+        updatedLocal = await LocalSupportNoteService.saveNote(
+          entry: widget.entry,
+          initials: initialsController.text,
+          status: status,
+          noteText: noteController.text,
+        );
+      }
+
+      if (driveMeta != null && appState != null) {
+        final folderId = appState.settings.googleDriveClientNotesFolderId;
+
+        if (folderId == null || folderId.isEmpty) {
+          throw StateError(
+            'Create Google Drive app folders first, then save this note to Drive.',
+          );
+        }
+
+        final token = await appState.connectGoogleDrive();
+        updatedDrive = await driveService.saveSupportNote(
+          accessToken: token,
+          clientNotesFolderId: folderId,
+          entry: widget.entry,
+          initials: initialsController.text,
+          status: status,
+          noteText: noteController.text,
+          payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+          existingMeta: driveMeta,
+        );
+      }
+
+      if (!mounted || version != autoSaveVersion) return;
+
+      setState(() {
+        meta = updatedLocal ?? meta;
+        driveMeta = updatedDrive ?? driveMeta;
+        message = 'Auto-saved attached note files.';
+      });
+    } catch (error) {
+      if (!mounted || version != autoSaveVersion) return;
+
+      setState(() {
+        message = 'Auto-save failed: ${_friendlyError(error)}';
+      });
+    } finally {
+      if (mounted && version == autoSaveVersion) {
+        setState(() {
+          autoSaving = false;
+        });
+      }
+    }
   }
 
   Future<void> _openFile() async {
@@ -1018,12 +1113,18 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               message!,
               style: TextStyle(
                 color:
-                    message!.startsWith('Could') || message!.contains('failed')
+                    message!.startsWith('Could') ||
+                        message!.contains('failed') ||
+                        message!.contains('Failed')
                     ? const Color(0xFFFF6B6B)
                     : const Color(0xFF31E981),
                 fontWeight: FontWeight.w700,
               ),
             ),
+          ],
+          if (autoSaving) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(minHeight: 4),
           ],
           const SizedBox(height: 16),
           FilledButton.icon(

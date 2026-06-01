@@ -21,6 +21,16 @@ String _cleanHeaderText(String value) {
       .trim();
 }
 
+String _calendarErrorText(Object error) {
+  final text = error.toString().trim();
+
+  if (text.startsWith('Bad state: ')) {
+    return text.replaceFirst('Bad state: ', '').trim();
+  }
+
+  return text.isEmpty ? 'Google Calendar sync failed.' : text;
+}
+
 List<NextActionItem> _nextActionsFromBreakdown(String value) {
   final lines = value.split(RegExp(r'\r?\n'));
   final actions = <NextActionItem>[];
@@ -814,7 +824,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                   subtitle: const Text(
-                    'Important texts export to Google Calendar in red.',
+                    'Important texts are marked in invoice text summaries.',
                     style: TextStyle(color: Color(0xFF8396C7)),
                   ),
                 ),
@@ -1461,19 +1471,19 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Creating private calendar event...';
+      calendarMessage = 'Opening Google Calendar draft...';
       calendarError = false;
     });
 
     try {
-      final token = appState.existingGoogleCalendarAccessToken;
       final opened =
-          await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+          await CalendarExportService.openGoogleCalendarDraftForEntry(
             widget.entry,
-            accessToken: token,
           );
 
-      if (!opened) throw Exception('Private calendar event was not confirmed.');
+      if (!opened) {
+        throw Exception('Google Calendar draft could not be opened.');
+      }
 
       final updatedEntry = widget.entry.copyWith(googleCalendarEntered: true);
       appState.updateEntry(updatedEntry);
@@ -1481,11 +1491,12 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
       setState(() {
         calendarEntered = true;
-        calendarMessage = 'Private Google Calendar event created.';
+        calendarMessage = 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {
-        calendarMessage = 'Calendar export failed: $error';
+        calendarMessage =
+            'Calendar export failed: ${_calendarErrorText(error)}';
         calendarError = true;
       });
     } finally {

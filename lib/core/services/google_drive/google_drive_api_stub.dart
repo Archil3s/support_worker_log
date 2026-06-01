@@ -23,6 +23,18 @@ class GoogleDriveApiPlatform {
     );
   }
 
+  Future<GoogleDriveFile> updateFile({
+    required String accessToken,
+    required String fileId,
+    required String name,
+    required String mimeType,
+    required List<int> bytes,
+  }) {
+    throw UnsupportedError(
+      'Google Drive file updates are only available in the web app.',
+    );
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,

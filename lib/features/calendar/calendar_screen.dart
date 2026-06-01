@@ -27,9 +27,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime selectedDate = _dateOnly(DateTime.now());
   _CalendarMode mode = _CalendarMode.week;
   List<GoogleCalendarEvent> googleEvents = const [];
-  bool loadingGoogleEvents = false;
-  bool connectingGoogleCalendar = false;
-  String? googleEventsError;
 
   static DateTime _dateOnly(DateTime value) {
     return DateTime(value.year, value.month, value.day);
@@ -89,68 +86,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
           last.day,
           (index) => DateTime(first.year, first.month, index + 1),
         );
-    }
-  }
-
-  Future<void> _loadGoogleEvents() async {
-    final appState = context.read<AppState>();
-    final days = _visibleDays();
-    final start = days.first;
-    final end = days.last.add(const Duration(days: 1));
-
-    setState(() {
-      loadingGoogleEvents = true;
-      googleEventsError = null;
-    });
-
-    try {
-      final token = appState.existingGoogleCalendarAccessToken;
-      final events = await CalendarExportService.listPrimaryEvents(
-        accessToken: token,
-        start: start,
-        end: end,
-      );
-
-      if (!mounted) return;
-
-      setState(() => googleEvents = events);
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        googleEvents = const [];
-        googleEventsError = error.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() => loadingGoogleEvents = false);
-      }
-    }
-  }
-
-  Future<void> _connectGoogleCalendar() async {
-    final appState = context.read<AppState>();
-
-    setState(() {
-      connectingGoogleCalendar = true;
-      googleEventsError = null;
-    });
-
-    try {
-      await appState.connectGoogleCalendar();
-      if (!mounted) return;
-      await _loadGoogleEvents();
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        googleEvents = const [];
-        googleEventsError = error.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() => connectingGoogleCalendar = false);
-      }
     }
   }
 
@@ -296,17 +231,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        SectionCard(
+        const SectionCard(
           title: 'Google Calendar',
-          child: _GoogleCalendarPanel(
-            connected: appState.googleCalendarAccessToken != null,
-            loading: loadingGoogleEvents,
-            connecting: connectingGoogleCalendar,
-            error: googleEventsError,
-            events: selectedGoogleEvents,
-            onConnect: _connectGoogleCalendar,
-            onSync: _loadGoogleEvents,
-          ),
+          child: _GoogleCalendarPanel(),
         ),
         const SizedBox(height: 12),
         SectionCard(
@@ -336,6 +263,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ],
     );
   }
+}
+
+String _calendarErrorText(Object error) {
+  final text = error.toString().trim();
+
+  if (text.startsWith('Bad state: ')) {
+    return text.replaceFirst('Bad state: ', '').trim();
+  }
+
+  if (text.startsWith("Instance of 'minified:")) {
+    return 'Google Calendar sync failed. Reconnect Google, then try Sync Google again.';
+  }
+
+  if (_needsGoogleReconnect(text)) {
+    return 'Google needs Calendar permission. Reconnect Calendar + Drive, allow Calendar access, then sync again.';
+  }
+
+  return text.isEmpty ? 'Google Calendar sync failed.' : text;
+}
+
+bool _needsGoogleReconnect(String? error) {
+  final text = (error ?? '').toLowerCase();
+
+  return text.contains('insufficient authentication scopes') ||
+      text.contains('insufficient permission') ||
+      text.contains('calendar permission') ||
+      text.contains('reconnect calendar') ||
+      text.contains('calendar scope');
 }
 
 class _CalendarDayGrid extends StatelessWidget {
@@ -553,160 +508,14 @@ class _SelectedDaySummary extends StatelessWidget {
 }
 
 class _GoogleCalendarPanel extends StatelessWidget {
-  const _GoogleCalendarPanel({
-    required this.connected,
-    required this.loading,
-    required this.connecting,
-    required this.error,
-    required this.events,
-    required this.onConnect,
-    required this.onSync,
-  });
-
-  final bool connected;
-  final bool loading;
-  final bool connecting;
-  final String? error;
-  final List<GoogleCalendarEvent> events;
-  final VoidCallback onConnect;
-  final VoidCallback onSync;
+  const _GoogleCalendarPanel();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (!connected)
-          FilledButton.icon(
-            onPressed: connecting ? null : onConnect,
-            icon: connecting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.link),
-            label: Text(
-              connecting
-                  ? 'Connecting Google Calendar'
-                  : 'Connect Google Calendar',
-            ),
-          )
-        else
-          FilledButton.icon(
-            onPressed: loading ? null : onSync,
-            icon: loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.sync),
-            label: Text(loading ? 'Syncing Google Calendar' : 'Sync Google'),
-          ),
-        if (connected) ...[
-          const SizedBox(height: 8),
-          const Text(
-            'Connected. Creating private calendar events will not open a popup.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF31E981),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-        if (error != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            error!,
-            style: const TextStyle(
-              color: Color(0xFFFF6B6B),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        if (events.isEmpty)
-          const EmptyState(message: 'No Google events loaded for this day.')
-        else
-          for (final event in events) _GoogleEventTile(event: event),
-      ],
-    );
-  }
-}
-
-class _GoogleEventTile extends StatelessWidget {
-  const _GoogleEventTile({required this.event});
-
-  final GoogleCalendarEvent event;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFF102A1C),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF34A853)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.event_available_outlined, color: Color(0xFF34A853)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_clockText(event.start)} - ${_clockText(event.end)}',
-                  style: const TextStyle(
-                    color: Color(0xFFD8E2FF),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (event.colorId != null) _GoogleColorPill(colorId: event.colorId!),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoogleColorPill extends StatelessWidget {
-  const _GoogleColorPill({required this.colorId});
-
-  final String colorId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: _googleEventColor(colorId).withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _googleEventColor(colorId)),
-      ),
-      child: Text(
-        colorId,
-        style: TextStyle(
-          color: _googleEventColor(colorId),
-          fontWeight: FontWeight.w900,
-          fontSize: 11,
-        ),
-      ),
+    return const Text(
+      'Use Open Google Calendar Draft on a visit. Google Calendar opens with the visit details already filled in; review it and save.',
+      textAlign: TextAlign.center,
+      style: TextStyle(color: Color(0xFF31E981), fontWeight: FontWeight.w800),
     );
   }
 }
@@ -753,30 +562,29 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Creating private calendar event...';
+      calendarMessage = 'Opening Google Calendar draft...';
       calendarError = false;
     });
 
     try {
-      final token = appState.existingGoogleCalendarAccessToken;
       final opened =
-          await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+          await CalendarExportService.openGoogleCalendarDraftForEntry(
             widget.entry,
-            accessToken: token,
           );
 
       if (!opened) {
-        throw Exception('Private calendar event was not confirmed.');
+        throw Exception('Google Calendar draft could not be opened.');
       }
 
       appState.updateEntry(widget.entry.copyWith(googleCalendarEntered: true));
       setState(() {
         calendarEntered = true;
-        calendarMessage = 'Private calendar event created.';
+        calendarMessage = 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {
-        calendarMessage = 'Calendar export failed: $error';
+        calendarMessage =
+            'Calendar export failed: ${_calendarErrorText(error)}';
         calendarError = true;
       });
     } finally {
@@ -897,8 +705,8 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
                   calendarEntered
                       ? 'Calendar Entered'
                       : calendarBusy
-                      ? 'Creating Event'
-                      : 'Create Private Calendar Event',
+                      ? 'Opening Calendar'
+                      : 'Open Google Calendar Draft',
                 ),
               ),
             ),
@@ -913,7 +721,7 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
               if (calendarMessage != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  calendarMessage!,
+                  _calendarMessageText(calendarMessage!),
                   style: TextStyle(
                     color: calendarError
                         ? const Color(0xFFFF6B6B)
@@ -928,6 +736,14 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
       ),
     );
   }
+}
+
+String _calendarMessageText(String message) {
+  if (_needsGoogleReconnect(message)) {
+    return 'Calendar export failed: ${_calendarErrorText(message)}';
+  }
+
+  return message;
 }
 
 class _StatusChip extends StatelessWidget {
@@ -1068,24 +884,6 @@ String _rangeLabel(List<DateTime> days) {
 String _weekdayLabel(DateTime day) {
   const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return labels[day.weekday - 1];
-}
-
-String _clockText(DateTime value) {
-  final hour = value.hour.toString().padLeft(2, '0');
-  final minute = value.minute.toString().padLeft(2, '0');
-
-  return '$hour:$minute';
-}
-
-Color _googleEventColor(String colorId) {
-  switch (colorId) {
-    case '11':
-      return const Color(0xFFD50000);
-    case '7':
-      return const Color(0xFF039BE5);
-    default:
-      return const Color(0xFF34A853);
-  }
 }
 
 String _dayKey(DateTime value) {

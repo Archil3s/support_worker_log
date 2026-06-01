@@ -43,7 +43,7 @@ class _DriveScreenState extends State<DriveScreen> {
     await _run(
       busy: () => connecting = true,
       idle: () => connecting = false,
-      successMessage: 'Google Drive connected.',
+      successMessage: 'Google Drive and Calendar connected.',
       action: _connectDrive,
     );
   }
@@ -190,7 +190,6 @@ class _DriveScreenState extends State<DriveScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final settings = appState.settings;
-    final driveConnected = appState.googleDriveAccessToken != null;
     final foldersReady =
         settings.googleDriveRootFolderId != null &&
         settings.googleDriveTemplatesFolderId != null;
@@ -207,9 +206,11 @@ class _DriveScreenState extends State<DriveScreen> {
             children: [
               _StatusRow(
                 icon: Icons.cloud_done_outlined,
-                label: 'Drive connection',
-                value: driveConnected ? 'Connected' : 'Not connected',
-                color: driveConnected
+                label: 'Drive + Calendar connection',
+                value: appState.googleServicesConnected
+                    ? 'Connected'
+                    : 'Not connected',
+                color: appState.googleServicesConnected
                     ? const Color(0xFF31E981)
                     : const Color(0xFFFFC857),
               ),
@@ -230,7 +231,11 @@ class _DriveScreenState extends State<DriveScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.add_to_drive_outlined),
-                label: Text(connecting ? 'Connecting Drive' : 'Connect Drive'),
+                label: Text(
+                  connecting
+                      ? 'Connecting Google Services'
+                      : 'Connect Drive + Calendar',
+                ),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(

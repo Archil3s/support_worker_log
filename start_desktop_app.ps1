@@ -6,6 +6,7 @@ $WriterPath = "C:\Users\Danie\support_worker_log\mr_notes_node_writer.js"
 $Port = 51239
 $WebPort = 51243
 $ServerPath = "C:\Users\Danie\support_worker_log\desktop_static_server.js"
+$ServerVersion = "2026-06-01-calendar-proxy-v3"
 $BuildStamp = "C:\Users\Danie\support_worker_log\build\web\.desktop_build_stamp"
 $ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 $ChromeProfile = "C:\Users\Danie\support_worker_log\.desktop_chrome_profile"
@@ -28,15 +29,32 @@ function Test-Writer {
 
 function Test-WebServer {
     try {
-        $Response = Invoke-WebRequest `
+        $Response = Invoke-RestMethod `
             -Uri "http://localhost:$WebPort/__health" `
-            -UseBasicParsing `
             -TimeoutSec 2
 
-        return $Response.StatusCode -eq 200
+        return $Response.ok -eq $true -and $Response.version -eq $ServerVersion
     }
     catch {
         return $false
+    }
+}
+
+function Stop-StaleWebServer {
+    $Connections = Get-NetTCPConnection `
+        -LocalPort $WebPort `
+        -State Listen `
+        -ErrorAction SilentlyContinue
+
+    $ProcessIds = $Connections |
+        Select-Object -ExpandProperty OwningProcess -Unique
+
+    foreach ($ProcessId in $ProcessIds) {
+        if ($ProcessId -le 0 -or $ProcessId -eq $PID) {
+            continue
+        }
+
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -114,6 +132,7 @@ else {
 }
 
 if (-not (Test-WebServer)) {
+    Stop-StaleWebServer
     Write-Host "Starting desktop app server..."
 
     Start-Process `

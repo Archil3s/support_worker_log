@@ -72,6 +72,43 @@ class GoogleDriveApiPlatform {
     return _fileFromResponse(response, 'Google Drive upload failed');
   }
 
+  Future<GoogleDriveFile> updateFile({
+    required String accessToken,
+    required String fileId,
+    required String name,
+    required String mimeType,
+    required List<int> bytes,
+  }) async {
+    final boundary =
+        'support_worker_log_${DateTime.now().microsecondsSinceEpoch}';
+    final metadata = <String, Object?>{'name': name, 'mimeType': mimeType};
+    final body = BytesBuilder()
+      ..add(
+        utf8.encode(
+          '--$boundary\r\n'
+          'Content-Type: application/json; charset=utf-8\r\n\r\n'
+          '${jsonEncode(metadata)}\r\n'
+          '--$boundary\r\n'
+          'Content-Type: $mimeType\r\n\r\n',
+        ),
+      )
+      ..add(bytes)
+      ..add(utf8.encode('\r\n--$boundary--'));
+
+    final response = await _request(
+      _driveUpdateUri(fileId).toString(),
+      method: 'PATCH',
+      requestHeaders: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'multipart/related; boundary=$boundary',
+      },
+      sendData: body.takeBytes(),
+      failureMessage: 'Google Drive file update failed',
+    );
+
+    return _fileFromResponse(response, 'Google Drive file update failed');
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -111,6 +148,13 @@ class GoogleDriveApiPlatform {
 
   Uri get _driveUploadUri {
     return Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
+      'uploadType': 'multipart',
+      'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveUpdateUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/upload/drive/v3/files/$fileId', {
       'uploadType': 'multipart',
       'fields': 'id,name,mimeType,webViewLink',
     });

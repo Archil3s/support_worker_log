@@ -3,9 +3,9 @@ const https = require('https');
 const http = require('http');
 const path = require('path');
 
-const HOST = process.env.SUPPORT_WORKER_WEB_HOST || 'localhost';
 const PORT = Number(process.env.SUPPORT_WORKER_WEB_PORT || 51243);
 const ROOT = path.resolve(__dirname, 'build', 'web');
+const SERVER_VERSION = '2026-06-01-calendar-proxy-v3';
 
 const TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -20,9 +20,10 @@ const TYPES = {
 
 function send(res, code, body, type = 'text/plain; charset=utf-8') {
   res.writeHead(code, {
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Requested-With',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Private-Network': 'true',
     'Cache-Control': 'no-store',
     'Content-Type': type,
   });
@@ -144,6 +145,11 @@ function postGoogleCalendarEvent(accessToken, event) {
 
 function listGoogleCalendarEvents(accessToken, timeMin, timeMax) {
   return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
     const params = new URLSearchParams({
       singleEvents: 'true',
       orderBy: 'startTime',
@@ -189,7 +195,15 @@ function listGoogleCalendarEvents(accessToken, timeMin, timeMax) {
       },
     );
 
-    request.on('error', reject);
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Calendar: ${error.message}`
+            : 'Could not reach Google Calendar.',
+        ),
+      );
+    });
     request.end();
   });
 }
@@ -296,9 +310,14 @@ function filePathFor(urlPath) {
   return target;
 }
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   if (req.url === '/__health') {
-    send(res, 200, 'ok');
+    send(
+      res,
+      200,
+      JSON.stringify({ ok: true, version: SERVER_VERSION }),
+      'application/json; charset=utf-8',
+    );
     return;
   }
 
@@ -338,9 +357,24 @@ const server = http.createServer((req, res) => {
     });
     res.end(data);
   });
-});
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`Support Worker Log desktop server: http://${HOST}:${PORT}`);
-  console.log(`Serving: ${ROOT}`);
-});
+function listen(host) {
+  const server = http.createServer(handleRequest);
+
+  server.on('error', (error) => {
+    if (error && error.code === 'EADDRINUSE') return;
+    console.error(
+      `Support Worker Log desktop server failed on ${host}:${PORT}:`,
+      error,
+    );
+  });
+
+  server.listen(PORT, host, () => {
+    console.log(`Support Worker Log desktop server: http://${host}:${PORT}`);
+    console.log(`Serving: ${ROOT}`);
+  });
+}
+
+listen(process.env.SUPPORT_WORKER_WEB_HOST || 'localhost');
+listen('127.0.0.1');

@@ -246,9 +246,49 @@ class LocalSupportNoteService {
       );
       return _docxFromTemplate(
         bytes: bytes,
-        entry: entry,
-        initials: initials,
-        status: status,
+        clientInitials: initials.trim().toUpperCase(),
+        dateText: formatDate(entry.date),
+        interactionText:
+            '${formatDate(entry.date)} / ${formatTime(entry.startTime)} / '
+            '${entry.baseMinutes} minutes '
+            '(${entry.hours.toStringAsFixed(2)} hours). '
+            '${entry.type.label}.${_kilometresText(entry)}',
+        fallbackNoteText: defaultNoteTextForEntry(entry: entry, status: status),
+        noteText: noteText,
+      );
+    } catch (error) {
+      throw StateError(
+        'Gold-standard support note template could not be loaded: $error',
+      );
+    }
+  }
+
+  static Future<List<int>> buildInvoicePeriodNoteDocx({
+    required int invoiceNumber,
+    required DateTime start,
+    required DateTime end,
+    required int entryCount,
+    required double hours,
+    required double kilometres,
+    required String noteText,
+    String? title,
+  }) async {
+    try {
+      final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+
+      return _docxFromTemplate(
+        bytes: bytes,
+        clientInitials: title ?? 'Invoice $invoiceNumber',
+        dateText: '${formatDate(start)} - ${formatDate(end)}',
+        interactionText:
+            'Invoice period ${formatDate(start)} - ${formatDate(end)}. '
+            '$entryCount entries. ${hours.toStringAsFixed(2)} hours. '
+            '${kilometres.toStringAsFixed(1)} kilometres.',
+        fallbackNoteText: supportNoteBreakdownTemplate,
         noteText: noteText,
       );
     } catch (error) {
@@ -260,9 +300,10 @@ class LocalSupportNoteService {
 
   static List<int> _docxFromTemplate({
     required Uint8List bytes,
-    required WorkEntry entry,
-    required String initials,
-    required EntrySupportNoteStatus status,
+    required String clientInitials,
+    required String dateText,
+    required String interactionText,
+    required String fallbackNoteText,
     required String noteText,
   }) {
     final source = ZipDecoder().decodeBytes(bytes);
@@ -276,9 +317,10 @@ class LocalSupportNoteService {
         final documentBytes = utf8.encode(
           _filledTemplateDocumentXml(
             xml: xml,
-            entry: entry,
-            initials: initials,
-            status: status,
+            clientInitials: clientInitials,
+            dateText: dateText,
+            interactionText: interactionText,
+            fallbackNoteText: fallbackNoteText,
             noteText: noteText,
           ),
         );
@@ -296,22 +338,15 @@ class LocalSupportNoteService {
 
   static String _filledTemplateDocumentXml({
     required String xml,
-    required WorkEntry entry,
-    required String initials,
-    required EntrySupportNoteStatus status,
+    required String clientInitials,
+    required String dateText,
+    required String interactionText,
+    required String fallbackNoteText,
     required String noteText,
   }) {
     final sections = _SupportNoteSections.fromNoteText(
-      noteText.trim().isEmpty
-          ? defaultNoteTextForEntry(entry: entry, status: status)
-          : noteText,
+      noteText.trim().isEmpty ? fallbackNoteText : noteText,
     );
-    final clientInitials = initials.trim().toUpperCase();
-    final interactionText =
-        '${formatDate(entry.date)} / ${formatTime(entry.startTime)} / '
-        '${entry.baseMinutes} minutes '
-        '(${entry.hours.toStringAsFixed(2)} hours). '
-        '${entry.type.label}.${_kilometresText(entry)}';
 
     final paragraphPattern = RegExp(r'<w:p[\s\S]*?<\/w:p>');
     final buffer = StringBuffer();
@@ -326,10 +361,7 @@ class LocalSupportNoteService {
       if (text.startsWith('Name of client.')) {
         paragraph = _appendTextToParagraph(paragraph, clientInitials);
       } else if (text == 'Date:') {
-        paragraph = _appendTextToParagraph(
-          paragraph,
-          ' ${formatDate(entry.date)}',
-        );
+        paragraph = _appendTextToParagraph(paragraph, ' $dateText');
       } else if (text.startsWith('Date/time/length of interaction.')) {
         pendingBlankFill = interactionText;
       } else if (text.startsWith('Main topic')) {
