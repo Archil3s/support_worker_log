@@ -79,15 +79,7 @@ class EntryDriveSupportNoteMeta {
     final id = fileId.trim();
     if (id.isNotEmpty) {
       final encodedId = Uri.encodeComponent(id);
-      final file = fileName.trim().toLowerCase();
-
-      if (mimeType == googleDocsMimeType ||
-          contentFormat == stableContentFormat ||
-          !file.endsWith('.docx')) {
-        return 'https://docs.google.com/document/d/$encodedId/edit';
-      }
-
-      return 'https://drive.google.com/file/d/$encodedId/view';
+      return 'https://docs.google.com/document/d/$encodedId/edit';
     }
 
     final link = webViewLink?.trim();

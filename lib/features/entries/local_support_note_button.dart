@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -312,7 +313,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       return;
     }
 
-    await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+    await _launchDriveLink(Uri.parse(link));
   }
 
   Future<void> _openGoogleDriveFolder() async {
@@ -327,7 +328,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
 
     if (link != null && link.isNotEmpty) {
-      await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+      await _launchDriveLink(Uri.parse(link));
       return;
     }
 
@@ -350,7 +351,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           'https://drive.google.com/drive/folders/'
           '${Uri.encodeComponent(folder.id)}';
 
-      await launchUrl(Uri.parse(folderLink), webOnlyWindowName: '_blank');
+      await _launchDriveLink(Uri.parse(folderLink));
 
       if (!mounted) return;
 
@@ -550,5 +551,15 @@ Color _statusColor(EntrySupportNoteStatus status) {
       return const Color(0xFF31E981);
     case EntrySupportNoteStatus.submitted:
       return const Color(0xFF8B5CF6);
+  }
+}
+
+Future<void> _launchDriveLink(Uri uri) async {
+  final launched = kIsWeb
+      ? await launchUrl(uri, webOnlyWindowName: '_blank')
+      : await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  if (!launched) {
+    await launchUrl(uri);
   }
 }
