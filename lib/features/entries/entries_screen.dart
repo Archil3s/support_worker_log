@@ -110,10 +110,21 @@ class _EntriesScreenState extends State<EntriesScreen> {
           entry: entry,
           clients: appState.clients,
           onSave: (updatedEntry) {
+            final calendarNeedsReentry =
+                entry.googleCalendarEntered &&
+                updatedEntry.googleCalendarEntered &&
+                !entry.hasSameCalendarEventDetails(updatedEntry);
+
             appState.updateEntry(updatedEntry);
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Entry updated')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  calendarNeedsReentry
+                      ? 'Entry updated. Create the calendar event again.'
+                      : 'Entry updated',
+                ),
+              ),
+            );
           },
         );
       },
@@ -742,19 +753,16 @@ class _EntryCard extends StatelessWidget {
     final appState = context.read<AppState>();
 
     try {
-      final opened =
-          await CalendarExportService.openGoogleCalendarDraftForEntry(entry);
-
-      if (!opened) {
-        throw Exception('Google Calendar draft could not be opened.');
-      }
+      final result = await appState.createPrivateGoogleCalendarEvent(entry);
 
       appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
 
       messenger.showSnackBar(
         SnackBar(
-          content: const Text(
-            'Google Calendar draft opened and marked entered.',
+          content: Text(
+            result == CalendarEntryExportResult.created
+                ? 'Google Calendar event created and marked entered.'
+                : 'Google Calendar draft opened and marked entered.',
           ),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
@@ -869,7 +877,7 @@ class _EntryCard extends StatelessWidget {
                       : Icons.calendar_month_outlined,
                   label: entry.googleCalendarEntered
                       ? 'Calendar event entered'
-                      : 'Open Google Calendar draft',
+                      : 'Create Calendar event',
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     _openGoogleCalendar(context);
@@ -950,20 +958,48 @@ class _EntryCard extends StatelessWidget {
               const SizedBox(height: 10),
             ],
             if (entry.type == EntryType.textNote) ...[
-              Chip(
-                avatar: Icon(
-                  entry.importantText
-                      ? Icons.priority_high_rounded
-                      : Icons.label_outline,
-                  size: 18,
-                  color: entry.importantText
-                      ? const Color(0xFFD50000)
-                      : const Color(0xFF039BE5),
-                ),
-                label: Text(
-                  entry.importantText ? 'Important text' : 'Normal text',
-                ),
-                visualDensity: VisualDensity.compact,
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  Chip(
+                    avatar: const Icon(Icons.sms_outlined, size: 18),
+                    label: Text(entry.textContactDirection.label),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Chip(
+                    avatar: Icon(
+                      entry.importantText
+                          ? Icons.priority_high_rounded
+                          : Icons.label_outline,
+                      size: 18,
+                      color: entry.importantText
+                          ? const Color(0xFFD50000)
+                          : const Color(0xFF039BE5),
+                    ),
+                    label: Text(
+                      entry.importantText ? 'Important text' : 'Normal text',
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Chip(
+                    avatar: Icon(
+                      entry.textReplyNeeded
+                          ? Icons.reply_outlined
+                          : Icons.check_circle_outline,
+                      size: 18,
+                      color: entry.textReplyNeeded
+                          ? const Color(0xFFFFD166)
+                          : const Color(0xFF31E981),
+                    ),
+                    label: Text(
+                      entry.textReplyNeeded
+                          ? 'Reply needed'
+                          : 'No reply needed',
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
             ],

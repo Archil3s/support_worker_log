@@ -23,7 +23,6 @@ class GoogleCalendarApiPlatform {
       'location': location,
       'start': {'dateTime': start.toUtc().toIso8601String()},
       'end': {'dateTime': end.toUtc().toIso8601String()},
-      'visibility': 'private',
       'transparency': 'opaque',
       'extendedProperties': {
         'private': {'createdBy': 'support_worker_log'},
@@ -197,18 +196,10 @@ class GoogleCalendarApiPlatform {
   }
 
   Map<String, dynamic> _decodeSuccessfulResponse(html.HttpRequest response) {
-    final decoded = _decodeJsonResponse(
+    return _decodeJsonResponse(
       response,
-      failureMessage: 'Google Calendar private event creation failed',
+      failureMessage: 'Google Calendar event creation failed',
     );
-
-    final visibility = decoded['visibility'];
-
-    if (visibility != null && visibility != 'private') {
-      throw StateError('Google Calendar did not confirm private visibility.');
-    }
-
-    return decoded;
   }
 
   Map<String, dynamic> _decodeJsonResponse(

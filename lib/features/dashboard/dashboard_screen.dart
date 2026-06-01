@@ -18,11 +18,13 @@ class DashboardScreen extends StatelessWidget {
     required this.onQuickEntry,
     required this.onPayPeriod,
     required this.onEntries,
+    required this.onAdminReview,
   });
 
   final VoidCallback onQuickEntry;
   final VoidCallback onPayPeriod;
   final VoidCallback onEntries;
+  final VoidCallback onAdminReview;
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +108,12 @@ class DashboardScreen extends StatelessWidget {
                 onPressed: onQuickEntry,
                 icon: const Icon(Icons.add_circle_outline),
                 label: const Text('Start / Finish Visit'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: onAdminReview,
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('Admin Review'),
               ),
               const SizedBox(height: 8),
               FilledButton.tonalIcon(

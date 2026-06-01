@@ -87,7 +87,7 @@ void main() {
     expect(ics, contains('COLOR:#D50000'));
   });
 
-  test('Google Calendar draft URL uses safe visit details without notes', () {
+  test('Google Calendar draft URL uses safe event details without notes', () {
     final entry = WorkEntry(
       id: 'entry-5',
       client: 'GH',

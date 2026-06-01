@@ -25,6 +25,27 @@ Safety concerns for sexual harm survivors and mental health
     No safety concerns noted.
 ''';
 
+enum TextContactDirection { received, sent, exchange }
+
+extension TextContactDirectionLabel on TextContactDirection {
+  String get label {
+    switch (this) {
+      case TextContactDirection.received:
+        return 'Text received';
+      case TextContactDirection.sent:
+        return 'Text sent';
+      case TextContactDirection.exchange:
+        return 'Text exchange';
+    }
+  }
+}
+
+bool _sameDate(DateTime left, DateTime right) {
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+}
+
 class NextActionItem {
   const NextActionItem({
     required this.id,
@@ -92,6 +113,8 @@ class WorkEntry {
     this.nextActions = const [],
     this.googleCalendarEntered = false,
     this.importantText = false,
+    this.textContactDirection = TextContactDirection.received,
+    this.textReplyNeeded = false,
     this.odometerStart,
     this.odometerEnd,
   });
@@ -107,6 +130,8 @@ class WorkEntry {
   final List<NextActionItem> nextActions;
   final bool googleCalendarEntered;
   final bool importantText;
+  final TextContactDirection textContactDirection;
+  final bool textReplyNeeded;
   final double? odometerStart;
   final double? odometerEnd;
 
@@ -140,6 +165,17 @@ class WorkEntry {
     return value < 0 ? 0 : value;
   }
 
+  bool hasSameCalendarEventDetails(WorkEntry other) {
+    return client == other.client &&
+        type == other.type &&
+        _sameDate(date, other.date) &&
+        startTime == other.startTime &&
+        minutes == other.minutes &&
+        hours == other.hours &&
+        kilometres == other.kilometres &&
+        importantText == other.importantText;
+  }
+
   double earnings(AppSettings settings) {
     return hours * settings.hourlyRate;
   }
@@ -160,6 +196,8 @@ class WorkEntry {
     List<NextActionItem>? nextActions,
     bool? googleCalendarEntered,
     bool? importantText,
+    TextContactDirection? textContactDirection,
+    bool? textReplyNeeded,
     double? odometerStart,
     double? odometerEnd,
   }) {
@@ -176,6 +214,8 @@ class WorkEntry {
       googleCalendarEntered:
           googleCalendarEntered ?? this.googleCalendarEntered,
       importantText: importantText ?? this.importantText,
+      textContactDirection: textContactDirection ?? this.textContactDirection,
+      textReplyNeeded: textReplyNeeded ?? this.textReplyNeeded,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
     );
@@ -195,6 +235,8 @@ class WorkEntry {
       'nextActions': nextActions.map((item) => item.toJson()).toList(),
       'googleCalendarEntered': googleCalendarEntered,
       'importantText': importantText,
+      'textContactDirection': textContactDirection.name,
+      'textReplyNeeded': textReplyNeeded,
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
     };
@@ -243,6 +285,11 @@ class WorkEntry {
               .where((item) => item.text.trim().isNotEmpty)
               .toList()
         : <NextActionItem>[];
+    final textDirectionName = json['textContactDirection'] as String?;
+    final textContactDirection = TextContactDirection.values.firstWhere(
+      (direction) => direction.name == textDirectionName,
+      orElse: () => TextContactDirection.received,
+    );
 
     return WorkEntry(
       id:
@@ -261,6 +308,8 @@ class WorkEntry {
       nextActions: nextActions,
       googleCalendarEntered: json['googleCalendarEntered'] == true,
       importantText: json['importantText'] == true,
+      textContactDirection: textContactDirection,
+      textReplyNeeded: json['textReplyNeeded'] == true,
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
     );
@@ -301,7 +350,9 @@ class WorkEntry {
     if (type == EntryType.textNote) {
       buffer
         ..writeln()
-        ..writeln('Text importance: ${importantText ? 'important' : 'normal'}');
+        ..writeln('Text direction: ${textContactDirection.label}')
+        ..writeln('Text importance: ${importantText ? 'important' : 'normal'}')
+        ..writeln('Reply needed: ${textReplyNeeded ? 'yes' : 'no'}');
     }
 
     if (nextActions.isNotEmpty) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -15,6 +16,7 @@ enum _Section {
   quick,
   notes,
   calendar,
+  admin,
   charts,
   more,
   home,
@@ -33,7 +35,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  _Section section = _Section.quick;
+  _Section section = _Section.admin;
 
   int get navIndex {
     switch (section) {
@@ -43,8 +45,10 @@ class _MainShellState extends State<MainShell> {
         return 1;
       case _Section.calendar:
         return 2;
-      case _Section.charts:
+      case _Section.admin:
         return 3;
+      case _Section.charts:
+        return 4;
       case _Section.more:
       case _Section.home:
       case _Section.entries:
@@ -64,6 +68,8 @@ class _MainShellState extends State<MainShell> {
         return 'Notes';
       case _Section.calendar:
         return 'Calendar';
+      case _Section.admin:
+        return 'Admin Review';
       case _Section.charts:
         return 'Charts';
       case _Section.home:
@@ -100,11 +106,65 @@ class _MainShellState extends State<MainShell> {
         _go(_Section.calendar);
         break;
       case 3:
-        _go(_Section.charts);
+        _go(_Section.admin);
         break;
       case 4:
         _go(_Section.more);
         break;
+    }
+  }
+
+  void _onRailTap(int index) {
+    switch (index) {
+      case 0:
+        _go(_Section.admin);
+        break;
+      case 1:
+        _go(_Section.quick);
+        break;
+      case 2:
+        _go(_Section.notes);
+        break;
+      case 3:
+        _go(_Section.calendar);
+        break;
+      case 4:
+        _go(_Section.entries);
+        break;
+      case 5:
+        _go(_Section.pay);
+        break;
+      case 6:
+        _go(_Section.drive);
+        break;
+      case 7:
+        _go(_Section.more);
+        break;
+    }
+  }
+
+  int get railIndex {
+    switch (section) {
+      case _Section.admin:
+        return 0;
+      case _Section.quick:
+        return 1;
+      case _Section.notes:
+        return 2;
+      case _Section.calendar:
+        return 3;
+      case _Section.entries:
+        return 4;
+      case _Section.pay:
+        return 5;
+      case _Section.drive:
+        return 6;
+      case _Section.more:
+      case _Section.home:
+      case _Section.charts:
+      case _Section.tax:
+      case _Section.settings:
+        return 7;
     }
   }
 
@@ -116,6 +176,13 @@ class _MainShellState extends State<MainShell> {
         return const NotesScreen();
       case _Section.calendar:
         return const CalendarScreen();
+      case _Section.admin:
+        return AdminReviewScreen(
+          onEntries: () => _go(_Section.entries),
+          onCalendar: () => _go(_Section.calendar),
+          onDrive: () => _go(_Section.drive),
+          onQuickEntry: () => _go(_Section.quick),
+        );
       case _Section.charts:
         return const ChartsScreen();
       case _Section.home:
@@ -123,6 +190,7 @@ class _MainShellState extends State<MainShell> {
           onQuickEntry: () => _go(_Section.quick),
           onPayPeriod: () => _go(_Section.pay),
           onEntries: () => _go(_Section.entries),
+          onAdminReview: () => _go(_Section.admin),
         );
       case _Section.entries:
         return const EntriesScreen();
@@ -131,9 +199,11 @@ class _MainShellState extends State<MainShell> {
       case _Section.more:
         return _MoreScreen(
           onHome: () => _go(_Section.home),
+          onAdmin: () => _go(_Section.admin),
           onEntries: () => _go(_Section.entries),
           onPay: () => _go(_Section.pay),
           onTax: () => _go(_Section.tax),
+          onCharts: () => _go(_Section.charts),
           onDrive: () => _go(_Section.drive),
           onSettings: () => _go(_Section.settings),
         );
@@ -148,23 +218,129 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title), centerTitle: false, toolbarHeight: 56),
-      body: SafeArea(
-        bottom: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: RepaintBoundary(child: _screen()),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 820;
+        final maxContentWidth = wide ? 980.0 : 430.0;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(title),
+            centerTitle: false,
+            toolbarHeight: wide ? 64 : 56,
           ),
-        ),
+          body: SafeArea(
+            bottom: false,
+            child: Row(
+              children: [
+                if (wide)
+                  _SideRail(selectedIndex: railIndex, onTap: _onRailTap),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxContentWidth),
+                      child: RepaintBoundary(child: _screen()),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          bottomNavigationBar: wide
+              ? null
+              : SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: _FastBottomNav(
+                      selectedIndex: navIndex,
+                      onTap: _onNavTap,
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _SideRail extends StatelessWidget {
+  const _SideRail({required this.selectedIndex, required this.onTap});
+
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 94,
+      margin: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF34405F)),
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          child: _FastBottomNav(selectedIndex: navIndex, onTap: _onNavTap),
+      child: NavigationRail(
+        backgroundColor: Colors.transparent,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onTap,
+        minWidth: 94,
+        labelType: NavigationRailLabelType.all,
+        groupAlignment: -0.88,
+        selectedIconTheme: const IconThemeData(color: Color(0xFF4F8DF7)),
+        unselectedIconTheme: const IconThemeData(color: Color(0xFF8396C7)),
+        selectedLabelTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
         ),
+        unselectedLabelTextStyle: const TextStyle(
+          color: Color(0xFF8396C7),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+        destinations: const [
+          NavigationRailDestination(
+            icon: Icon(Icons.fact_check_outlined),
+            selectedIcon: Icon(Icons.fact_check_rounded),
+            label: Text('Review'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.bolt_outlined),
+            selectedIcon: Icon(Icons.bolt_rounded),
+            label: Text('Quick'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.note_alt_outlined),
+            selectedIcon: Icon(Icons.note_alt_rounded),
+            label: Text('Notes'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: Text('Calendar'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.list_alt_outlined),
+            selectedIcon: Icon(Icons.list_alt_rounded),
+            label: Text('Entries'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long_rounded),
+            label: Text('Pay'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.add_to_drive_outlined),
+            selectedIcon: Icon(Icons.add_to_drive),
+            label: Text('Drive'),
+          ),
+          NavigationRailDestination(
+            icon: Icon(Icons.more_horiz_outlined),
+            selectedIcon: Icon(Icons.more_horiz_rounded),
+            label: Text('More'),
+          ),
+        ],
       ),
     );
   }
@@ -215,9 +391,9 @@ class _FastBottomNav extends StatelessWidget {
           _FastNavItem(
             index: 3,
             selectedIndex: selectedIndex,
-            icon: Icons.bar_chart_outlined,
-            selectedIcon: Icons.bar_chart_rounded,
-            label: 'Charts',
+            icon: Icons.fact_check_outlined,
+            selectedIcon: Icons.fact_check_rounded,
+            label: 'Review',
             onTap: onTap,
           ),
           _FastNavItem(
@@ -297,17 +473,21 @@ class _FastNavItem extends StatelessWidget {
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
     required this.onHome,
+    required this.onAdmin,
     required this.onEntries,
     required this.onPay,
     required this.onTax,
+    required this.onCharts,
     required this.onDrive,
     required this.onSettings,
   });
 
   final VoidCallback onHome;
+  final VoidCallback onAdmin;
   final VoidCallback onEntries;
   final VoidCallback onPay;
   final VoidCallback onTax;
+  final VoidCallback onCharts;
   final VoidCallback onDrive;
   final VoidCallback onSettings;
 
@@ -321,6 +501,13 @@ class _MoreScreen extends StatelessWidget {
           title: 'Dashboard',
           subtitle: 'Home overview, totals, and shortcuts',
           onTap: onHome,
+        ),
+        const SizedBox(height: 12),
+        _MoreTile(
+          icon: Icons.fact_check_outlined,
+          title: 'Admin Review',
+          subtitle: 'Replies, calendar gaps, note detail, and next actions',
+          onTap: onAdmin,
         ),
         const SizedBox(height: 12),
         _MoreTile(
@@ -342,6 +529,13 @@ class _MoreScreen extends StatelessWidget {
           title: 'Tax',
           subtitle: 'GST, ACC, KiwiSaver, and net estimate',
           onTap: onTax,
+        ),
+        const SizedBox(height: 12),
+        _MoreTile(
+          icon: Icons.bar_chart_outlined,
+          title: 'Charts',
+          subtitle: 'Hours, earnings, calendar completion, and trends',
+          onTap: onCharts,
         ),
         const SizedBox(height: 12),
         _MoreTile(

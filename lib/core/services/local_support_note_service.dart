@@ -358,12 +358,23 @@ class LocalSupportNoteService {
       var paragraph = match.group(0)!;
       final text = _paragraphText(paragraph).trim();
 
-      if (text.startsWith('Name of client.')) {
-        paragraph = _appendTextToParagraph(paragraph, clientInitials);
-      } else if (text == 'Date:') {
-        paragraph = _appendTextToParagraph(paragraph, ' $dateText');
-      } else if (text.startsWith('Date/time/length of interaction.')) {
-        pendingBlankFill = interactionText;
+      if (text.startsWith('Name of client')) {
+        paragraph = _replaceParagraphText(
+          paragraph,
+          'Name of client: $clientInitials',
+          bold: true,
+        );
+      } else if (text.startsWith('Date:')) {
+        paragraph = _replaceParagraphText(
+          paragraph,
+          'Date: $dateText',
+          bold: true,
+        );
+      } else if (text.startsWith('Date/time/length of interaction')) {
+        paragraph = _replaceParagraphText(
+          paragraph,
+          'Date/time/length of interaction: $interactionText',
+        );
       } else if (text.startsWith('Main topic')) {
         pendingBlankFill = sections.mainTopic;
       } else if (text.startsWith('Outcome')) {
@@ -389,10 +400,19 @@ class LocalSupportNoteService {
     ).allMatches(paragraphXml).map((match) => _unxml(match.group(1)!)).join();
   }
 
-  static String _appendTextToParagraph(String paragraphXml, String text) {
-    return paragraphXml.replaceFirst(
+  static String _replaceParagraphText(
+    String paragraphXml,
+    String text, {
+    bool bold = false,
+  }) {
+    final withoutRuns = paragraphXml.replaceAll(
+      RegExp(r'<w:r[\s\S]*?<\/w:r>'),
+      '',
+    );
+
+    return withoutRuns.replaceFirst(
       '</w:p>',
-      '${_runXml(text, bold: true)}</w:p>',
+      '${_runXml(text, bold: bold)}</w:p>',
     );
   }
 

@@ -23,7 +23,19 @@ class CalendarExportService {
     WorkEntry entry, {
     required String accessToken,
   }) async {
-    return openGoogleCalendarDraftForEntry(entry);
+    final start = _entryStart(entry);
+    final end = _entryEnd(entry);
+    await _googleCalendarApi.insertPrivateEvent(
+      accessToken: accessToken,
+      summary: _calendarTitle(entry),
+      description: _detailsForEntry(entry, start, end),
+      location: entry.client,
+      start: start,
+      end: end,
+      colorId: _googleCalendarColorId(entry),
+    );
+
+    return true;
   }
 
   static Future<bool> openGoogleCalendarDraftForEntry(WorkEntry entry) {
@@ -31,6 +43,15 @@ class CalendarExportService {
       googleCalendarDraftUriForEntry(entry),
       webOnlyWindowName: '_blank',
     );
+  }
+
+  static bool isCalendarPermissionError(Object error) {
+    final text = error.toString().toLowerCase();
+
+    return text.contains('insufficient authentication scopes') ||
+        text.contains('insufficient permission') ||
+        text.contains('calendar permission') ||
+        text.contains('calendar scope');
   }
 
   static Uri googleCalendarDraftUriForEntry(WorkEntry entry) {
@@ -162,6 +183,12 @@ class CalendarExportService {
     }
 
     return '${entry.client} ${entry.type.label}';
+  }
+
+  static String? _googleCalendarColorId(WorkEntry entry) {
+    if (entry.type != EntryType.textNote) return null;
+
+    return entry.importantText ? '11' : '7';
   }
 
   static String _icsCalendarColor(WorkEntry entry) {

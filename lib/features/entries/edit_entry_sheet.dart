@@ -56,9 +56,12 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   late TimeOfDay startTime;
   late int minutes;
   late bool importantText;
+  late TextContactDirection textContactDirection;
+  late bool textReplyNeeded;
 
   late final TextEditingController odometerStartController;
   late final TextEditingController odometerEndController;
+  late final TextEditingController kilometresController;
   late final TextEditingController customNoteController;
 
   final selectedNotes = <String>{};
@@ -78,6 +81,8 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     startTime = widget.entry.startTime;
     minutes = widget.entry.minutes <= 0 ? 5 : widget.entry.minutes;
     importantText = widget.entry.importantText;
+    textContactDirection = widget.entry.textContactDirection;
+    textReplyNeeded = widget.entry.textReplyNeeded;
 
     final knownNotes = noteOptions.toSet();
     final customNotes = <String>[];
@@ -96,6 +101,9 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     odometerEndController = TextEditingController(
       text: _numberText(widget.entry.odometerEnd),
     );
+    kilometresController = TextEditingController(
+      text: _initialKilometresText(widget.entry),
+    );
     customNoteController = TextEditingController(text: customNotes.join('\n'));
   }
 
@@ -103,6 +111,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   void dispose() {
     odometerStartController.dispose();
     odometerEndController.dispose();
+    kilometresController.dispose();
     customNoteController.dispose();
     super.dispose();
   }
@@ -119,6 +128,12 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     return double.tryParse(value);
   }
 
+  String _initialKilometresText(WorkEntry entry) {
+    if (entry.type != EntryType.homeVisit) return '';
+    if (entry.odometerStart == null || entry.odometerEnd == null) return '';
+    return _numberText(entry.kilometres);
+  }
+
   int get savedMinutes => minutes.clamp(1, 1440);
 
   BillingTimeBreakdown get previewBreakdown {
@@ -130,6 +145,20 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   }
 
   double get previewHours => previewBreakdown.billableHours;
+
+  double get previewKilometres {
+    if (selectedType != EntryType.homeVisit) return 0;
+
+    final directKilometres = _parseOdometer(kilometresController);
+    if (directKilometres != null) return directKilometres;
+
+    final odometerStart = _parseOdometer(odometerStartController);
+    final odometerEnd = _parseOdometer(odometerEndController);
+    if (odometerStart == null || odometerEnd == null) return 0;
+
+    final travelled = odometerEnd - odometerStart;
+    return travelled < 0 ? 0 : travelled;
+  }
 
   Future<void> pickDate() async {
     final picked = await showDatePicker(
@@ -173,6 +202,12 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   }
 
   void save() {
+    final directKilometres = selectedType == EntryType.homeVisit
+        ? _parseOdometer(kilometresController)
+        : null;
+    final directKilometresEntered =
+        selectedType == EntryType.homeVisit &&
+        kilometresController.text.trim().isNotEmpty;
     final odometerStart = selectedType == EntryType.homeVisit
         ? _parseOdometer(odometerStartController)
         : null;
@@ -180,7 +215,22 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
         ? _parseOdometer(odometerEndController)
         : null;
 
+    if (directKilometresEntered && directKilometres == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('KM travelled must be a number.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+      return;
+    }
+
     if (selectedType == EntryType.homeVisit &&
+        !directKilometresEntered &&
         odometerStart != null &&
         odometerEnd != null &&
         odometerEnd < odometerStart) {
@@ -197,6 +247,13 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       return;
     }
 
+    final savedOdometerStart = directKilometresEntered
+        ? odometerStart ?? 0.0
+        : odometerStart;
+    final savedOdometerEnd = directKilometresEntered
+        ? (odometerStart ?? 0.0) + directKilometres!
+        : odometerEnd;
+
     final updatedEntry = WorkEntry(
       id: widget.entry.id,
       client: selectedClient,
@@ -209,8 +266,12 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       nextActions: widget.entry.nextActions,
       googleCalendarEntered: widget.entry.googleCalendarEntered,
       importantText: selectedType == EntryType.textNote && importantText,
-      odometerStart: odometerStart,
-      odometerEnd: odometerEnd,
+      textContactDirection: selectedType == EntryType.textNote
+          ? textContactDirection
+          : TextContactDirection.received,
+      textReplyNeeded: selectedType == EntryType.textNote && textReplyNeeded,
+      odometerStart: savedOdometerStart,
+      odometerEnd: savedOdometerEnd,
     );
 
     widget.onSave(updatedEntry);
@@ -247,6 +308,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                   setState(() {
                     odometerStartController.clear();
                     odometerEndController.clear();
+                    kilometresController.clear();
                   });
                 },
               ),
@@ -289,7 +351,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               ),
               const SizedBox(height: 12),
               SectionCard(
-                title: 'Date & Start Time',
+                title: 'Date & Time',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -319,15 +381,30 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               if (selectedType == EntryType.homeVisit) ...[
                 const SizedBox(height: 12),
                 SectionCard(
-                  title: 'Odometer',
+                  title: 'Travel',
                   child: Column(
                     children: [
+                      TextField(
+                        controller: kilometresController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [_DecimalInputFormatter()],
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.route_outlined),
+                          labelText: 'KM travelled',
+                          hintText: 'Direct travel distance',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       TextField(
                         controller: odometerStartController,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
                         inputFormatters: const [_DecimalInputFormatter()],
+                        onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
                           labelText: 'Start odometer',
                         ),
@@ -339,6 +416,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                           decimal: true,
                         ),
                         inputFormatters: const [_DecimalInputFormatter()],
+                        onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
                           labelText: 'Finish odometer',
                         ),
@@ -350,21 +428,60 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               if (selectedType == EntryType.textNote) ...[
                 const SizedBox(height: 12),
                 SectionCard(
-                  title: 'Text Importance',
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: importantText,
-                    onChanged: (value) {
-                      setState(() => importantText = value);
-                    },
-                    title: const Text(
-                      'Important text',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    subtitle: const Text(
-                      'Important texts are marked in invoice text summaries.',
-                      style: TextStyle(color: Color(0xFF8396C7)),
-                    ),
+                  title: 'Text Details',
+                  child: Column(
+                    children: [
+                      SegmentedButton<TextContactDirection>(
+                        segments: const [
+                          ButtonSegment<TextContactDirection>(
+                            value: TextContactDirection.received,
+                            icon: Icon(Icons.call_received_outlined),
+                            label: Text('Received'),
+                          ),
+                          ButtonSegment<TextContactDirection>(
+                            value: TextContactDirection.sent,
+                            icon: Icon(Icons.call_made_outlined),
+                            label: Text('Sent'),
+                          ),
+                          ButtonSegment<TextContactDirection>(
+                            value: TextContactDirection.exchange,
+                            icon: Icon(Icons.sync_alt_outlined),
+                            label: Text('Exchange'),
+                          ),
+                        ],
+                        selected: {textContactDirection},
+                        onSelectionChanged: (values) {
+                          setState(() => textContactDirection = values.first);
+                        },
+                      ),
+                      const Divider(height: 18),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: importantText,
+                        onChanged: (value) {
+                          setState(() => importantText = value);
+                        },
+                        title: const Text(
+                          'Important text',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        subtitle: const Text(
+                          'Important texts are marked in invoice text summaries.',
+                          style: TextStyle(color: Color(0xFF8396C7)),
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: textReplyNeeded,
+                        onChanged: (value) {
+                          setState(() => textReplyNeeded = value);
+                        },
+                        title: const Text(
+                          'Reply needed',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -423,14 +540,29 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                     ),
                     if (selectedType == EntryType.homeVisit)
                       ReviewRow(
+                        label: 'KM',
+                        value: '${previewKilometres.toStringAsFixed(1)} km',
+                      ),
+                    if (selectedType == EntryType.homeVisit)
+                      ReviewRow(
                         label: 'Odometer',
                         value:
                             '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} -> ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
                       ),
                     if (selectedType == EntryType.textNote)
                       ReviewRow(
+                        label: 'Direction',
+                        value: textContactDirection.label,
+                      ),
+                    if (selectedType == EntryType.textNote)
+                      ReviewRow(
                         label: 'Importance',
-                        value: importantText ? 'Important' : 'Normal',
+                        value: importantText ? 'Important' : 'Not important',
+                      ),
+                    if (selectedType == EntryType.textNote)
+                      ReviewRow(
+                        label: 'Reply',
+                        value: textReplyNeeded ? 'Needed' : 'Not needed',
                       ),
                   ],
                 ),
@@ -506,7 +638,7 @@ class _QuickFixPanel extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onClearOdo,
             icon: const Icon(Icons.clear),
-            label: const Text('Clear Odo'),
+            label: const Text('Clear Travel'),
           ),
         ],
       ),

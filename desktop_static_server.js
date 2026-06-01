@@ -88,7 +88,7 @@ function sendCalendarRedirect(res, created) {
   send(
     res,
     200,
-    `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${escapedLink}"><title>Opening Google Calendar</title></head><body><p>Private calendar event created. <a href="${escapedLink}">Open Google Calendar</a>.</p><script>location.replace(${JSON.stringify(link)});</script></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${escapedLink}"><title>Opening Google Calendar</title></head><body><p>Calendar event created. <a href="${escapedLink}">Open Google Calendar</a>.</p><script>location.replace(${JSON.stringify(link)});</script></body></html>`,
     'text/html; charset=utf-8',
   );
 }
@@ -229,15 +229,9 @@ async function createPrivateCalendarEvent(req, res) {
       return;
     }
 
-    event.visibility = 'private';
     event.transparency = 'opaque';
 
     const created = await postGoogleCalendarEvent(accessToken, event);
-
-    if (created.visibility !== 'private') {
-      send(res, 502, 'Google Calendar did not confirm private visibility.');
-      return;
-    }
 
     if (payload.wantsRedirect) {
       sendCalendarRedirect(res, created);
@@ -251,7 +245,7 @@ async function createPrivateCalendarEvent(req, res) {
       502,
       error && error.message
         ? error.message
-        : 'Google Calendar private event creation failed.',
+        : 'Google Calendar event creation failed.',
     );
   }
 }

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/google_calendar_event.dart';
 import '../../core/models/work_entry.dart';
-import '../../core/services/calendar_export_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/totals.dart';
@@ -513,7 +512,7 @@ class _GoogleCalendarPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      'Use Open Google Calendar Draft on a visit. Google Calendar opens with the visit details already filled in; review it and save.',
+      'Use Create Calendar Event on a visit. The app creates a Google Calendar event from the saved billable entry.',
       textAlign: TextAlign.center,
       style: TextStyle(color: Color(0xFF31E981), fontWeight: FontWeight.w800),
     );
@@ -562,24 +561,21 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Opening Google Calendar draft...';
+      calendarMessage = 'Creating calendar event...';
       calendarError = false;
     });
 
     try {
-      final opened =
-          await CalendarExportService.openGoogleCalendarDraftForEntry(
-            widget.entry,
-          );
-
-      if (!opened) {
-        throw Exception('Google Calendar draft could not be opened.');
-      }
+      final result = await appState.createPrivateGoogleCalendarEvent(
+        widget.entry,
+      );
 
       appState.updateEntry(widget.entry.copyWith(googleCalendarEntered: true));
       setState(() {
         calendarEntered = true;
-        calendarMessage = 'Google Calendar draft opened. Review and save it.';
+        calendarMessage = result == CalendarEntryExportResult.created
+            ? 'Google Calendar event created.'
+            : 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {
@@ -675,6 +671,12 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
                   ),
                 if (entry.type == EntryType.textNote)
                   _StatusChip(
+                    icon: Icons.sms_outlined,
+                    label: entry.textContactDirection.label,
+                    color: const Color(0xFF8B5CF6),
+                  ),
+                if (entry.type == EntryType.textNote)
+                  _StatusChip(
                     icon: entry.importantText
                         ? Icons.priority_high_rounded
                         : Icons.label_outline,
@@ -684,6 +686,18 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
                     color: entry.importantText
                         ? const Color(0xFFD50000)
                         : const Color(0xFF039BE5),
+                  ),
+                if (entry.type == EntryType.textNote)
+                  _StatusChip(
+                    icon: entry.textReplyNeeded
+                        ? Icons.reply_outlined
+                        : Icons.check_circle_outline,
+                    label: entry.textReplyNeeded
+                        ? 'Reply needed'
+                        : 'No reply needed',
+                    color: entry.textReplyNeeded
+                        ? const Color(0xFFFFD166)
+                        : const Color(0xFF31E981),
                   ),
               ],
             ),
@@ -705,8 +719,8 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
                   calendarEntered
                       ? 'Calendar Entered'
                       : calendarBusy
-                      ? 'Opening Calendar'
-                      : 'Open Google Calendar Draft',
+                      ? 'Creating Event'
+                      : 'Create Calendar Event',
                 ),
               ),
             ),

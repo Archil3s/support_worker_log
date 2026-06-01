@@ -47,6 +47,13 @@ class DriveInvoiceCycleSyncService {
         settings: settings,
       );
     }
+
+    await _syncLivingTextNoteLog(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entries: entries,
+      settings: settings,
+    );
   }
 
   Future<void> _syncInvoicePeriod({
@@ -140,6 +147,57 @@ class DriveInvoiceCycleSyncService {
       mimeType: _docxMimeType,
       bytes: noteBytes,
     );
+  }
+
+  Future<void> _syncLivingTextNoteLog({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required List<WorkEntry> entries,
+    required AppSettings settings,
+  }) async {
+    final perClient = <String, List<WorkEntry>>{};
+
+    for (final entry in entries) {
+      if (entry.type != EntryType.textNote) continue;
+
+      perClient.putIfAbsent(_clientName(entry), () => <WorkEntry>[]).add(entry);
+    }
+
+    final clients = perClient.keys.toList()..sort();
+
+    for (final client in clients) {
+      final textEntries = perClient[client]!;
+      _sortEntries(textEntries);
+
+      final clientFolder = await _driveService.findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: clientNotesFolderId,
+        name: client,
+      );
+      final noteBytes =
+          await LocalSupportNoteService.buildInvoicePeriodNoteDocx(
+            invoiceNumber: 0,
+            start: textEntries.first.date,
+            end: textEntries.last.date,
+            entryCount: textEntries.length,
+            hours: totalHours(textEntries),
+            kilometres: totalKilometres(textEntries),
+            title: client,
+            noteText: _livingTextNoteLogText(
+              client: client,
+              textEntries: textEntries,
+              settings: settings,
+            ),
+          );
+
+      await _driveService.uploadOrUpdateFile(
+        accessToken: accessToken,
+        parentId: clientFolder.id,
+        name: 'Living_Text_Notes_Log.docx',
+        mimeType: _docxMimeType,
+        bytes: noteBytes,
+      );
+    }
   }
 
   List<_InvoicePeriodEntries> _groupEntriesByPeriod({
@@ -319,13 +377,105 @@ class DriveInvoiceCycleSyncService {
       buffer.writeln('- $client: ${items.length} text(s)');
 
       for (final entry in items) {
-        final importance = entry.importantText ? 'Important' : 'Normal';
+        final importance = entry.importantText ? 'Important' : 'Not important';
         buffer.writeln(
           '  - ${formatDate(entry.date)} ${formatTime(entry.startTime)} '
-          '($importance): ${_textSummary(entry)}',
+          '(${entry.textContactDirection.label}, $importance, '
+          '${entry.textReplyNeeded ? 'reply needed' : 'no reply needed'}): '
+          '${_textSummary(entry)}',
         );
       }
     }
+
+    return buffer.toString().trim();
+  }
+
+  String _livingTextNoteLogText({
+    required String client,
+    required List<WorkEntry> textEntries,
+    required AppSettings settings,
+  }) {
+    final totalTextHours = totalHours(textEntries);
+    final totalTextEarnings = totalEarnings(textEntries, settings);
+    final importantCount = textEntries
+        .where((entry) => entry.importantText)
+        .length;
+    final replyNeededCount = textEntries
+        .where((entry) => entry.textReplyNeeded)
+        .length;
+    final openActions = textEntries
+        .expand((entry) => entry.nextActions)
+        .where((action) => !action.isCompleted)
+        .length;
+    final firstDate = textEntries.first.date;
+    final lastDate = textEntries.last.date;
+    final buffer = StringBuffer()
+      ..writeln('Main topic(s)')
+      ..writeln(
+        '$client Living Text Notes Log for ${formatDate(firstDate)} - ${formatDate(lastDate)}.',
+      )
+      ..writeln()
+      ..writeln('Outcome(s)')
+      ..writeln('Text note summary')
+      ..writeln('- Text notes: ${textEntries.length}')
+      ..writeln('- Important: $importantCount')
+      ..writeln('- Not important: ${textEntries.length - importantCount}')
+      ..writeln('- Reply needed: $replyNeededCount')
+      ..writeln('- No reply needed: ${textEntries.length - replyNeededCount}')
+      ..writeln('- Billable text hours: ${totalTextHours.toStringAsFixed(2)}')
+      ..writeln('- Billable text earnings: ${money(totalTextEarnings)}')
+      ..writeln('- Open text actions: $openActions')
+      ..writeln()
+      ..writeln('Text note timeline');
+
+    for (final entry in textEntries) {
+      final importance = entry.importantText ? 'Important' : 'Not important';
+      buffer
+        ..writeln()
+        ..writeln(
+          '${formatDate(entry.date)} ${formatTime(entry.startTime)} - ${_clientName(entry)}',
+        )
+        ..writeln('- Date: ${formatDate(entry.date)}')
+        ..writeln('- Time: ${formatTime(entry.startTime)}')
+        ..writeln('- Direction: ${entry.textContactDirection.label}')
+        ..writeln('- Important: $importance')
+        ..writeln('- Reply needed: ${entry.textReplyNeeded ? 'Yes' : 'No'}')
+        ..writeln('- Billable minutes: ${entry.baseMinutes}')
+        ..writeln('- Billable hours: ${entry.hours.toStringAsFixed(2)}')
+        ..writeln('- Summary: ${_textSummary(entry)}');
+
+      final actions = entry.nextActions.where((action) => !action.isCompleted);
+      if (actions.isNotEmpty) {
+        buffer.writeln('- Next actions:');
+        for (final action in actions) {
+          buffer.writeln('  - ${action.text}');
+        }
+      }
+    }
+
+    final allOpenActions = textEntries
+        .expand((entry) => entry.nextActions)
+        .where((action) => !action.isCompleted)
+        .toList();
+
+    buffer
+      ..writeln()
+      ..writeln('Next action(s)');
+
+    if (allOpenActions.isEmpty) {
+      buffer.writeln('-');
+    } else {
+      for (final action in allOpenActions) {
+        buffer.writeln('- ${action.text}');
+      }
+    }
+
+    buffer
+      ..writeln()
+      ..writeln('Overall impression')
+      ..writeln(
+        'Single living Google Drive document generated from saved billable text notes.',
+      );
 
     return buffer.toString().trim();
   }

@@ -10,7 +10,6 @@ import '../../core/models/active_visit.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
-import '../../core/services/calendar_export_service.dart';
 import '../../core/utils/formatters.dart';
 
 String _cleanHeaderText(String value) {
@@ -135,16 +134,20 @@ String _buildSupportNoteBreakdown({
 }
 
 String _buildTextNoteBreakdown({
+  required TextContactDirection direction,
   required String summary,
   required String nextActions,
-  required bool noReplyNeeded,
+  required bool replyNeeded,
 }) {
   return [
+    'Text direction',
+    direction.label,
+    '',
     'Text contact summary',
     _cleanSupportNoteSection(summary),
     '',
     'Reply needed',
-    noReplyNeeded ? 'No full reply needed' : 'Reply or follow-up needed',
+    replyNeeded ? 'Reply or follow-up needed' : 'No full reply needed',
     '',
     'Next action(s)',
     _cleanSupportNoteSection(nextActions),
@@ -211,10 +214,14 @@ class _TextNoteCloseOut {
   const _TextNoteCloseOut({
     required this.breakdown,
     required this.importantText,
+    required this.textContactDirection,
+    required this.textReplyNeeded,
   });
 
   final String breakdown;
   final bool importantText;
+  final TextContactDirection textContactDirection;
+  final bool textReplyNeeded;
 }
 
 enum _ReferralType {
@@ -470,6 +477,9 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       supportNoteBreakdown: trimmedSupportNoteBreakdown,
       nextActions: _nextActionsFromBreakdown(trimmedSupportNoteBreakdown),
       importantText: textCloseOut?.importantText ?? false,
+      textContactDirection:
+          textCloseOut?.textContactDirection ?? TextContactDirection.received,
+      textReplyNeeded: textCloseOut?.textReplyNeeded ?? false,
       odometerStart: activeVisit.type == EntryType.homeVisit
           ? activeVisit.odometerStart
           : null,
@@ -709,7 +719,8 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
   final summaryController = TextEditingController();
   final nextActionsController = TextEditingController();
 
-  bool noReplyNeeded = true;
+  TextContactDirection textContactDirection = TextContactDirection.received;
+  bool replyNeeded = false;
   bool importantText = false;
 
   @override
@@ -727,9 +738,14 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
 
   void _save() {
     final summary = _cleanSupportNoteSection(summaryController.text);
-    final nextActions = noReplyNeeded
-        ? ''
-        : _cleanSupportNoteSection(nextActionsController.text);
+    final typedNextActions = _cleanSupportNoteSection(
+      nextActionsController.text,
+    );
+    final nextActions = replyNeeded
+        ? typedNextActions.isEmpty
+              ? 'Reply to ${widget.activeVisit.client}.'
+              : typedNextActions
+        : '';
 
     if (summary.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -750,11 +766,14 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
     Navigator.of(context).pop(
       _TextNoteCloseOut(
         breakdown: _buildTextNoteBreakdown(
+          direction: textContactDirection,
           summary: summary,
           nextActions: nextActions,
-          noReplyNeeded: noReplyNeeded,
+          replyNeeded: replyNeeded,
         ),
         importantText: importantText,
+        textContactDirection: textContactDirection,
+        textReplyNeeded: replyNeeded,
       ),
     );
   }
@@ -797,6 +816,33 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
           ),
           const SizedBox(height: 12),
           _Panel(
+            title: 'Text Direction',
+            child: SegmentedButton<TextContactDirection>(
+              segments: const [
+                ButtonSegment<TextContactDirection>(
+                  value: TextContactDirection.received,
+                  icon: Icon(Icons.call_received_outlined),
+                  label: Text('Received'),
+                ),
+                ButtonSegment<TextContactDirection>(
+                  value: TextContactDirection.sent,
+                  icon: Icon(Icons.call_made_outlined),
+                  label: Text('Sent'),
+                ),
+                ButtonSegment<TextContactDirection>(
+                  value: TextContactDirection.exchange,
+                  icon: Icon(Icons.sync_alt_outlined),
+                  label: Text('Exchange'),
+                ),
+              ],
+              selected: {textContactDirection},
+              onSelectionChanged: (values) {
+                setState(() => textContactDirection = values.first);
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          _Panel(
             title: 'Short Summary',
             child: TextField(
               controller: summaryController,
@@ -831,14 +877,14 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
                 const Divider(height: 18),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  value: noReplyNeeded,
-                  onChanged: (value) => setState(() => noReplyNeeded = value),
+                  value: replyNeeded,
+                  onChanged: (value) => setState(() => replyNeeded = value),
                   title: const Text(
-                    'No full reply needed',
+                    'Reply needed',
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
-                if (!noReplyNeeded) ...[
+                if (replyNeeded) ...[
                   const SizedBox(height: 10),
                   TextField(
                     controller: nextActionsController,
@@ -1471,19 +1517,14 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Opening Google Calendar draft...';
+      calendarMessage = 'Creating calendar event...';
       calendarError = false;
     });
 
     try {
-      final opened =
-          await CalendarExportService.openGoogleCalendarDraftForEntry(
-            widget.entry,
-          );
-
-      if (!opened) {
-        throw Exception('Google Calendar draft could not be opened.');
-      }
+      final result = await appState.createPrivateGoogleCalendarEvent(
+        widget.entry,
+      );
 
       final updatedEntry = widget.entry.copyWith(googleCalendarEntered: true);
       appState.updateEntry(updatedEntry);
@@ -1491,7 +1532,9 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
       setState(() {
         calendarEntered = true;
-        calendarMessage = 'Google Calendar draft opened. Review and save it.';
+        calendarMessage = result == CalendarEntryExportResult.created
+            ? 'Google Calendar event created.'
+            : 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {
@@ -1589,10 +1632,10 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
           ),
           label: Text(
             calendarEntered
-                ? 'Private calendar event entered'
+                ? 'Calendar event entered'
                 : calendarBusy
-                ? 'Creating private event'
-                : 'Create private Calendar event',
+                ? 'Creating event'
+                : 'Create Calendar event',
           ),
         ),
         if (calendarBusy || calendarMessage != null) ...[

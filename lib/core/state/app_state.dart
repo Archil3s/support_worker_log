@@ -6,6 +6,7 @@ import '../models/active_visit.dart';
 import '../models/app_settings.dart';
 import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
+import '../services/calendar_export_service.dart';
 import '../services/cloud_storage_service.dart';
 import '../services/drive_invoice_cycle_sync_service.dart';
 import '../services/google_drive_service.dart';
@@ -18,6 +19,8 @@ class RemovedEntry {
   final WorkEntry entry;
   final int index;
 }
+
+enum CalendarEntryExportResult { created, draftOpened }
 
 class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
@@ -150,6 +153,51 @@ class AppState extends ChangeNotifier {
     return token;
   }
 
+  Future<CalendarEntryExportResult> createPrivateGoogleCalendarEvent(
+    WorkEntry entry,
+  ) async {
+    try {
+      var token = _cloudStorageService.googleCalendarAccessToken;
+
+      if (token == null || token.isEmpty) {
+        token = await connectGoogleCalendar();
+      }
+
+      await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+        entry,
+        accessToken: token,
+      );
+
+      return CalendarEntryExportResult.created;
+    } catch (error) {
+      if (!CalendarExportService.isCalendarPermissionError(error)) {
+        final opened =
+            await CalendarExportService.openGoogleCalendarDraftForEntry(entry);
+
+        if (opened) return CalendarEntryExportResult.draftOpened;
+
+        rethrow;
+      }
+
+      try {
+        final refreshedToken = await connectGoogleCalendar();
+        await CalendarExportService.createPrivateGoogleCalendarEventForEntry(
+          entry,
+          accessToken: refreshedToken,
+        );
+
+        return CalendarEntryExportResult.created;
+      } catch (_) {
+        final opened =
+            await CalendarExportService.openGoogleCalendarDraftForEntry(entry);
+
+        if (opened) return CalendarEntryExportResult.draftOpened;
+
+        rethrow;
+      }
+    }
+  }
+
   Future<String> requireGoogleDriveAccessToken({bool forceRefresh = false}) {
     return _cloudStorageService.requireGoogleDriveAccessToken(
       forceRefresh: forceRefresh,
@@ -276,7 +324,15 @@ class AppState extends ChangeNotifier {
     final index = _entries.indexWhere((entry) => entry.id == updatedEntry.id);
     if (index == -1) return;
 
-    _entries[index] = updatedEntry;
+    final currentEntry = _entries[index];
+    final shouldResetCalendar =
+        currentEntry.googleCalendarEntered &&
+        updatedEntry.googleCalendarEntered &&
+        !currentEntry.hasSameCalendarEventDetails(updatedEntry);
+
+    _entries[index] = shouldResetCalendar
+        ? updatedEntry.copyWith(googleCalendarEntered: false)
+        : updatedEntry;
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
   }
