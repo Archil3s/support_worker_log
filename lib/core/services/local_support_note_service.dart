@@ -356,7 +356,9 @@ class LocalSupportNoteService {
     });
     final buffer = StringBuffer();
     var cursor = 0;
-    var pendingBlankFill = '';
+    String? pendingBlankFill;
+    var appendSupportChecksAfterFill = false;
+    var filledNextActions = false;
 
     for (final match in paragraphMatches) {
       buffer.write(xml.substring(cursor, match.start));
@@ -388,14 +390,23 @@ class LocalSupportNoteService {
             : sections.outcomesWithActions;
       } else if (text.startsWith('Next action')) {
         pendingBlankFill = sections.nextActions;
+        appendSupportChecksAfterFill = true;
       } else if (text.startsWith('Overall impression')) {
         pendingBlankFill = sections.overallImpression;
-      } else if (pendingBlankFill.isNotEmpty && text.isEmpty) {
-        paragraph = _fillBlankParagraph(paragraph, pendingBlankFill);
-        pendingBlankFill = '';
+      } else if (pendingBlankFill != null && text.isEmpty) {
+        if (pendingBlankFill.isNotEmpty) {
+          paragraph = _fillBlankParagraph(paragraph, pendingBlankFill);
+        }
+        filledNextActions = appendSupportChecksAfterFill;
+        pendingBlankFill = null;
       }
 
       buffer.write(paragraph);
+      if (filledNextActions) {
+        buffer.write(_supportCheckParagraphs(sections));
+        appendSupportChecksAfterFill = false;
+        filledNextActions = false;
+      }
       cursor = match.end;
     }
 
@@ -444,6 +455,35 @@ class LocalSupportNoteService {
         .join('<w:br/>');
 
     return '<w:r><w:rPr>$runProps</w:rPr>$textParts</w:r>';
+  }
+
+  static String _paragraphXml(String text, {bool bold = false}) {
+    return '<w:p>${_runXml(text, bold: bold)}</w:p>';
+  }
+
+  static String _supportCheckParagraphs(_SupportNoteSections sections) {
+    if (!sections.hasSupportChecks) return '';
+
+    final buffer = StringBuffer();
+
+    if (sections.referrals.isNotEmpty) {
+      buffer
+        ..write(_paragraphXml('Local referral tracking', bold: true))
+        ..write(_paragraphXml(sections.referrals));
+    }
+
+    if (sections.safetyConcerns.isNotEmpty) {
+      buffer
+        ..write(
+          _paragraphXml(
+            'Safety concerns for sexual harm survivors and mental health',
+            bold: true,
+          ),
+        )
+        ..write(_paragraphXml(sections.safetyConcerns));
+    }
+
+    return buffer.toString();
   }
 
   static String _kilometresText(WorkEntry entry) {
@@ -495,18 +535,41 @@ class _SupportNoteSections {
     required this.outcomes,
     required this.nextActions,
     required this.overallImpression,
+    required this.referrals,
+    required this.safetyConcerns,
   });
 
   final String mainTopic;
   final String outcomes;
   final String nextActions;
   final String overallImpression;
+  final String referrals;
+  final String safetyConcerns;
+
+  bool get hasSupportChecks =>
+      referrals.trim().isNotEmpty || safetyConcerns.trim().isNotEmpty;
 
   String get outcomesWithActions {
-    if (nextActions.isEmpty) return outcomes;
-    if (outcomes.isEmpty) return 'Next action(s)\n$nextActions';
+    final supportChecks = _supportChecksText;
+    final nextActionBlock = [
+      if (nextActions.isNotEmpty) nextActions,
+      if (supportChecks.isNotEmpty) supportChecks,
+    ].join('\n\n');
 
-    return '$outcomes\n\nNext action(s)\n$nextActions';
+    if (nextActionBlock.isEmpty) return outcomes;
+    if (outcomes.isEmpty) return 'Next action(s)\n$nextActionBlock';
+
+    return '$outcomes\n\nNext action(s)\n$nextActionBlock';
+  }
+
+  String get _supportChecksText {
+    return [
+      if (referrals.isNotEmpty) ...['Local referral tracking', referrals],
+      if (safetyConcerns.isNotEmpty) ...[
+        'Safety concerns for sexual harm survivors and mental health',
+        safetyConcerns,
+      ],
+    ].join('\n');
   }
 
   factory _SupportNoteSections.fromNoteText(String value) {
@@ -514,6 +577,8 @@ class _SupportNoteSections {
     final outcomes = <String>[];
     final nextActions = <String>[];
     final overall = <String>[];
+    final referrals = <String>[];
+    final safetyConcerns = <String>[];
     var section = _SupportNoteSection.main;
 
     for (final rawLine in value.split(RegExp(r'\r?\n'))) {
@@ -541,6 +606,16 @@ class _SupportNoteSections {
         continue;
       }
 
+      if (normalized.startsWith('local referral')) {
+        section = _SupportNoteSection.referrals;
+        continue;
+      }
+
+      if (normalized.startsWith('safety concerns')) {
+        section = _SupportNoteSection.safetyConcerns;
+        continue;
+      }
+
       switch (section) {
         case _SupportNoteSection.main:
           main.add(line);
@@ -553,6 +628,12 @@ class _SupportNoteSections {
           break;
         case _SupportNoteSection.overall:
           overall.add(line);
+          break;
+        case _SupportNoteSection.referrals:
+          referrals.add(line);
+          break;
+        case _SupportNoteSection.safetyConcerns:
+          safetyConcerns.add(line);
           break;
       }
     }
@@ -567,6 +648,8 @@ class _SupportNoteSections {
       outcomes: cleanOutcomes,
       nextActions: cleanNextActions,
       overallImpression: cleanOverall,
+      referrals: _cleanLines(referrals),
+      safetyConcerns: _cleanLines(safetyConcerns),
     );
   }
 
@@ -583,4 +666,11 @@ class _SupportNoteSections {
   }
 }
 
-enum _SupportNoteSection { main, outcomes, nextActions, overall }
+enum _SupportNoteSection {
+  main,
+  outcomes,
+  nextActions,
+  overall,
+  referrals,
+  safetyConcerns,
+}

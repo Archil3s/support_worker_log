@@ -71,12 +71,17 @@ void main() {
             'Main topic(s)\nTest note\n\n'
             'Outcome(s)\nSaved to Drive\n\n'
             'Next action(s)\nFollow up tomorrow\n\n'
-            'Overall impression\nSettled',
+            'Overall impression\nSettled\n\n'
+            'Local referral tracking\n'
+            'No referrals discussed or made this visit.\n\n'
+            'Safety concerns for sexual harm survivors and mental health\n'
+            'No safety concerns noted.',
       );
 
       final noteUpload = api.uploads.singleWhere(
         (upload) => upload.name.endsWith('_AB_in-progress.docx'),
       );
+      final documentXml = _docxXml(noteUpload.bytes);
       final documentText = _docxText(noteUpload.bytes);
 
       expect(meta.fileName, endsWith('.docx'));
@@ -97,6 +102,27 @@ void main() {
       expect(documentText, contains('Next actions  Max. 150 words)'));
       expect(documentText, contains('Follow up tomorrow'));
       expect(documentText, contains('Settled'));
+      expect(
+        documentText.indexOf('Local referral tracking'),
+        greaterThan(documentText.indexOf('Follow up tomorrow')),
+      );
+      expect(
+        documentText.indexOf(
+          'Safety concerns for sexual harm survivors and mental health',
+        ),
+        greaterThan(documentText.indexOf('No referrals discussed')),
+      );
+      expect(
+        _paragraphHasBoldText(documentXml, 'Local referral tracking'),
+        true,
+      );
+      expect(
+        _paragraphHasBoldText(
+          documentXml,
+          'Safety concerns for sexual harm survivors and mental health',
+        ),
+        true,
+      );
     },
   );
 
@@ -225,15 +251,33 @@ class _Upload {
 }
 
 String _docxText(List<int> bytes) {
-  final archive = ZipDecoder().decodeBytes(bytes);
-  final document = archive.files.firstWhere(
-    (file) => file.name == 'word/document.xml',
-  );
-  final xml = utf8.decode(document.content as List<int>);
+  final xml = _docxXml(bytes);
 
   return RegExp(
     r'<w:t[^>]*>(.*?)<\/w:t>',
   ).allMatches(xml).map((match) => _unxml(match.group(1)!)).join(' ');
+}
+
+String _docxXml(List<int> bytes) {
+  final archive = ZipDecoder().decodeBytes(bytes);
+  final document = archive.files.firstWhere(
+    (file) => file.name == 'word/document.xml',
+  );
+
+  return utf8.decode(document.content as List<int>);
+}
+
+bool _paragraphHasBoldText(String xml, String text) {
+  final encodedText = text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;');
+
+  return RegExp(
+    '<w:p[\\s\\S]*?<w:b[\\s\\S]*?<w:t[^>]*>$encodedText</w:t>[\\s\\S]*?</w:p>',
+  ).hasMatch(xml);
 }
 
 String _unxml(String value) {
