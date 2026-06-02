@@ -6,6 +6,7 @@ import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
+import '../notes/actions_screen.dart';
 import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
 import '../quick_entry/quick_entry_screen.dart';
@@ -15,6 +16,7 @@ import '../tax/tax_screen.dart';
 enum _Section {
   quick,
   notes,
+  actions,
   calendar,
   admin,
   charts,
@@ -35,7 +37,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  _Section section = _Section.admin;
+  _Section section = _Section.actions;
 
   int get navIndex {
     switch (section) {
@@ -45,8 +47,9 @@ class _MainShellState extends State<MainShell> {
         return 1;
       case _Section.calendar:
         return 2;
-      case _Section.admin:
+      case _Section.actions:
         return 3;
+      case _Section.admin:
       case _Section.charts:
         return 4;
       case _Section.more:
@@ -66,6 +69,8 @@ class _MainShellState extends State<MainShell> {
         return 'Quick Entry';
       case _Section.notes:
         return 'Notes';
+      case _Section.actions:
+        return 'Actions';
       case _Section.calendar:
         return 'Calendar';
       case _Section.admin:
@@ -106,7 +111,7 @@ class _MainShellState extends State<MainShell> {
         _go(_Section.calendar);
         break;
       case 3:
-        _go(_Section.admin);
+        _go(_Section.actions);
         break;
       case 4:
         _go(_Section.more);
@@ -117,7 +122,7 @@ class _MainShellState extends State<MainShell> {
   void _onRailTap(int index) {
     switch (index) {
       case 0:
-        _go(_Section.admin);
+        _go(_Section.actions);
         break;
       case 1:
         _go(_Section.quick);
@@ -145,7 +150,7 @@ class _MainShellState extends State<MainShell> {
 
   int get railIndex {
     switch (section) {
-      case _Section.admin:
+      case _Section.actions:
         return 0;
       case _Section.quick:
         return 1;
@@ -159,6 +164,7 @@ class _MainShellState extends State<MainShell> {
         return 5;
       case _Section.drive:
         return 6;
+      case _Section.admin:
       case _Section.more:
       case _Section.home:
       case _Section.charts:
@@ -174,6 +180,8 @@ class _MainShellState extends State<MainShell> {
         return QuickEntryScreen(onCalendar: () => _go(_Section.calendar));
       case _Section.notes:
         return const NotesScreen();
+      case _Section.actions:
+        return const ActionsScreen();
       case _Section.calendar:
         return const CalendarScreen();
       case _Section.admin:
@@ -301,9 +309,9 @@ class _SideRail extends StatelessWidget {
         ),
         destinations: const [
           NavigationRailDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check_rounded),
-            label: Text('Review'),
+            icon: Icon(Icons.checklist_rtl_outlined),
+            selectedIcon: Icon(Icons.checklist_rtl_rounded),
+            label: Text('Actions'),
           ),
           NavigationRailDestination(
             icon: Icon(Icons.bolt_outlined),
@@ -391,9 +399,9 @@ class _FastBottomNav extends StatelessWidget {
           _FastNavItem(
             index: 3,
             selectedIndex: selectedIndex,
-            icon: Icons.fact_check_outlined,
-            selectedIcon: Icons.fact_check_rounded,
-            label: 'Review',
+            icon: Icons.checklist_rtl_outlined,
+            selectedIcon: Icons.checklist_rtl_rounded,
+            label: 'Actions',
             onTap: onTap,
           ),
           _FastNavItem(

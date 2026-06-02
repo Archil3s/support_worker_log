@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/active_visit.dart';
 import '../models/app_settings.dart';
+import '../models/general_action.dart';
 import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
 import '../services/calendar_export_service.dart';
@@ -34,6 +35,7 @@ class AppState extends ChangeNotifier {
 
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
+  final List<GeneralActionItem> _generalActions = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
   final Map<String, double> _invoiceBaselineTotals = {};
 
@@ -49,6 +51,8 @@ class AppState extends ChangeNotifier {
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
+  List<GeneralActionItem> get generalActions =>
+      List.unmodifiable(_generalActions);
   Map<String, InvoiceStatus> get invoiceStatuses =>
       Map.unmodifiable(_invoiceStatuses);
   Map<String, double> get invoiceBaselineTotals =>
@@ -290,6 +294,7 @@ class AppState extends ChangeNotifier {
       ..addAll(['Client A', 'Client B', 'Client C']);
 
     _entries.clear();
+    _generalActions.clear();
     _invoiceStatuses.clear();
     _invoiceBaselineTotals.clear();
 
@@ -333,6 +338,36 @@ class AppState extends ChangeNotifier {
     _entries.insert(0, entry);
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+  }
+
+  void addGeneralAction(GeneralActionItem action) {
+    final title = action.title.trim();
+    if (title.isEmpty) return;
+
+    _generalActions.insert(
+      0,
+      action.copyWith(
+        title: title,
+        client: action.scope == GeneralActionScope.client
+            ? action.client?.trim()
+            : null,
+        clearClient: action.scope != GeneralActionScope.client,
+      ),
+    );
+    _persistAndNotify();
+  }
+
+  void updateGeneralAction(GeneralActionItem action) {
+    final index = _generalActions.indexWhere((item) => item.id == action.id);
+    if (index == -1) return;
+
+    _generalActions[index] = action;
+    _persistAndNotify();
+  }
+
+  void deleteGeneralAction(GeneralActionItem action) {
+    _generalActions.removeWhere((item) => item.id == action.id);
+    _persistAndNotify();
   }
 
   void addEntries(List<WorkEntry> entries) {
@@ -449,6 +484,13 @@ class AppState extends ChangeNotifier {
 
     if (_activeVisit?.client == oldName) {
       _activeVisit = _activeVisit!.copyWith(client: trimmed);
+    }
+
+    for (var index = 0; index < _generalActions.length; index++) {
+      final action = _generalActions[index];
+      if (action.client == oldName) {
+        _generalActions[index] = action.copyWith(client: trimmed);
+      }
     }
 
     _persistAndNotify();
@@ -668,6 +710,9 @@ class AppState extends ChangeNotifier {
     _invoiceStatuses
       ..clear()
       ..addAll(data.invoiceStatuses);
+    _generalActions
+      ..clear()
+      ..addAll(_dedupeGeneralActions(data.generalActions));
     _invoiceBaselineTotals
       ..clear()
       ..addAll(data.invoiceBaselineTotals);
@@ -686,12 +731,17 @@ class AppState extends ChangeNotifier {
       ...cloudData.entries,
       ...localData.entries,
     ]);
+    final mergedGeneralActions = _dedupeGeneralActions([
+      ...cloudData.generalActions,
+      ...localData.generalActions,
+    ]);
 
     return StoredAppData(
       settings: cloudData.settings,
       clients: mergedClients.isEmpty ? ['Client A'] : mergedClients,
       entries: mergedEntries,
       activeVisit: cloudData.activeVisit ?? localData.activeVisit,
+      generalActions: mergedGeneralActions,
       invoiceStatuses: {
         ...cloudData.invoiceStatuses,
         ...localData.invoiceStatuses,
@@ -709,6 +759,7 @@ class AppState extends ChangeNotifier {
       clients: _clients,
       entries: _entries,
       activeVisit: _activeVisit,
+      generalActions: _generalActions,
       invoiceStatuses: _invoiceStatuses,
       invoiceBaselineTotals: _invoiceBaselineTotals,
     );
@@ -748,6 +799,34 @@ class AppState extends ChangeNotifier {
       seenContent.add(contentKey);
       result.add(entry);
     }
+
+    return result;
+  }
+
+  List<GeneralActionItem> _dedupeGeneralActions(
+    List<GeneralActionItem> actions,
+  ) {
+    final seenIds = <String>{};
+    final result = <GeneralActionItem>[];
+
+    for (final action in actions) {
+      final id = action.id.trim();
+      final title = action.title.trim();
+      if (id.isEmpty || title.isEmpty || seenIds.contains(id)) continue;
+
+      seenIds.add(id);
+      result.add(action.copyWith(title: title));
+    }
+
+    result.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+
+      final left = a.completedAt ?? a.createdAt;
+      final right = b.completedAt ?? b.createdAt;
+      return right.compareTo(left);
+    });
 
     return result;
   }

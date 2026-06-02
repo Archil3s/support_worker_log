@@ -722,6 +722,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
   TextContactDirection textContactDirection = TextContactDirection.received;
   bool replyNeeded = false;
   bool importantText = false;
+  int stepIndex = 0;
 
   @override
   void initState() {
@@ -778,6 +779,128 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
     );
   }
 
+  void _nextStep() {
+    if (stepIndex >= 2) {
+      _save();
+      return;
+    }
+
+    setState(() => stepIndex += 1);
+  }
+
+  void _previousStep() {
+    if (stepIndex == 0) return;
+    setState(() => stepIndex -= 1);
+  }
+
+  Widget _stepBody() {
+    switch (stepIndex) {
+      case 0:
+        return _PromptStep(
+          title: 'Text Details',
+          subtitle: 'Set direction and flags before writing the summary.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Panel(
+                title: 'Text facts',
+                child: Column(
+                  children: [
+                    _InfoRow(label: 'Client', value: widget.activeVisit.client),
+                    _InfoRow(
+                      label: 'Type',
+                      value: widget.activeVisit.type.label,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<TextContactDirection>(
+                segments: const [
+                  ButtonSegment<TextContactDirection>(
+                    value: TextContactDirection.received,
+                    icon: Icon(Icons.call_received_outlined),
+                    label: Text('Received'),
+                  ),
+                  ButtonSegment<TextContactDirection>(
+                    value: TextContactDirection.sent,
+                    icon: Icon(Icons.call_made_outlined),
+                    label: Text('Sent'),
+                  ),
+                  ButtonSegment<TextContactDirection>(
+                    value: TextContactDirection.exchange,
+                    icon: Icon(Icons.sync_alt_outlined),
+                    label: Text('Exchange'),
+                  ),
+                ],
+                selected: {textContactDirection},
+                onSelectionChanged: (values) {
+                  setState(() => textContactDirection = values.first);
+                },
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: importantText,
+                onChanged: (value) => setState(() => importantText = value),
+                title: const Text(
+                  'Important text',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: const Text(
+                  'Important texts are marked in invoice text summaries.',
+                  style: TextStyle(color: Color(0xFF8396C7)),
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: replyNeeded,
+                onChanged: (value) => setState(() => replyNeeded = value),
+                title: const Text(
+                  'Reply needed',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        );
+      case 1:
+        return _PromptStep(
+          title: 'Message Summary',
+          subtitle: 'Write the short record that will appear in the log.',
+          child: _SupportNoteField(
+            controller: summaryController,
+            label: 'What was texted',
+            hint: 'Short factual summary only.',
+            helper: 'Keep this useful for a living communication log.',
+            wordCount: _wordCount(summaryController.text),
+            autofocus: true,
+            expanded: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        );
+      default:
+        return _PromptStep(
+          title: 'Reply / Follow-up',
+          subtitle: replyNeeded
+              ? 'Add the action that should stay open.'
+              : 'No reply is needed for this text.',
+          child: replyNeeded
+              ? _SupportNoteField(
+                  controller: nextActionsController,
+                  label: 'Reply or follow-up',
+                  hint: 'One action per line.',
+                  helper: 'These become trackable open actions.',
+                  wordCount: _wordCount(nextActionsController.text),
+                  autofocus: true,
+                  expanded: true,
+                  onChanged: (_) => setState(() {}),
+                )
+              : const _NoActionPanel(message: 'No reply needed.'),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -787,126 +910,29 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
         top: 16,
         bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Text Note',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                ),
-              ),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Text facts',
-            child: Column(
-              children: [
-                _InfoRow(label: 'Client', value: widget.activeVisit.client),
-                _InfoRow(label: 'Type', value: widget.activeVisit.type.label),
-              ],
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.88,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PromptHeader(
+              title: 'Text Note',
+              currentStep: stepIndex,
+              stepCount: 3,
+              onClose: () => Navigator.of(context).pop(),
             ),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Text Direction',
-            child: SegmentedButton<TextContactDirection>(
-              segments: const [
-                ButtonSegment<TextContactDirection>(
-                  value: TextContactDirection.received,
-                  icon: Icon(Icons.call_received_outlined),
-                  label: Text('Received'),
-                ),
-                ButtonSegment<TextContactDirection>(
-                  value: TextContactDirection.sent,
-                  icon: Icon(Icons.call_made_outlined),
-                  label: Text('Sent'),
-                ),
-                ButtonSegment<TextContactDirection>(
-                  value: TextContactDirection.exchange,
-                  icon: Icon(Icons.sync_alt_outlined),
-                  label: Text('Exchange'),
-                ),
-              ],
-              selected: {textContactDirection},
-              onSelectionChanged: (values) {
-                setState(() => textContactDirection = values.first);
-              },
+            const SizedBox(height: 12),
+            Expanded(child: SingleChildScrollView(child: _stepBody())),
+            const SizedBox(height: 14),
+            _PromptNavButtons(
+              isFirst: stepIndex == 0,
+              isLast: stepIndex == 2,
+              onBack: _previousStep,
+              onNext: _nextStep,
+              saveLabel: 'Save Text Note',
             ),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Short Summary',
-            child: TextField(
-              controller: summaryController,
-              minLines: 4,
-              maxLines: 8,
-              decoration: const InputDecoration(
-                labelText: 'What was texted',
-                hintText: 'Short summary only',
-                alignLabelWithHint: true,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Calendar & Reply',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: importantText,
-                  onChanged: (value) => setState(() => importantText = value),
-                  title: const Text(
-                    'Important text',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  subtitle: const Text(
-                    'Important texts are marked in invoice text summaries.',
-                    style: TextStyle(color: Color(0xFF8396C7)),
-                  ),
-                ),
-                const Divider(height: 18),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: replyNeeded,
-                  onChanged: (value) => setState(() => replyNeeded = value),
-                  title: const Text(
-                    'Reply needed',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                if (replyNeeded) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: nextActionsController,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Reply or follow-up',
-                      hintText: 'Add the next action if a reply is needed',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Text Note'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -925,6 +951,7 @@ class _SupportNoteBreakdownSheetState
   bool noReferrals = true;
   bool noNextAction = false;
   bool noSafetyConcerns = true;
+  int stepIndex = 0;
 
   @override
   void initState() {
@@ -941,6 +968,20 @@ class _SupportNoteBreakdownSheetState
     referralNotesController.dispose();
     safetyConcernsController.dispose();
     super.dispose();
+  }
+
+  void _nextStep() {
+    if (stepIndex >= 6) {
+      _save();
+      return;
+    }
+
+    setState(() => stepIndex += 1);
+  }
+
+  void _previousStep() {
+    if (stepIndex == 0) return;
+    setState(() => stepIndex -= 1);
   }
 
   void _save() {
@@ -1064,14 +1105,261 @@ class _SupportNoteBreakdownSheetState
     setState(() {});
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _stepBody() {
+    switch (stepIndex) {
+      case 0:
+        return _visitFactsStep();
+      case 1:
+        return _PromptStep(
+          title: 'Main Topic(s)',
+          subtitle: 'Capture what support was provided.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.notes.isNotEmpty) ...[
+                _Panel(
+                  title: 'Logged notes',
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final note in widget.notes)
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: Text(note),
+                          onPressed: () =>
+                              _appendLine(mainTopicController, note),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              _SupportNoteField(
+                controller: mainTopicController,
+                label: 'Main topic(s)',
+                hint: 'What support was provided?',
+                helper: 'Include the core support themes only.',
+                maxWords: _mainTopicMaxWords,
+                wordCount: _wordCount(mainTopicController.text),
+                autofocus: true,
+                expanded: true,
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+        );
+      case 2:
+        return _PromptStep(
+          title: 'Outcome(s)',
+          subtitle: 'Record the concrete result of the interaction.',
+          child: _SupportNoteField(
+            controller: outcomesController,
+            label: 'Outcome(s)',
+            hint: 'What changed, improved, or was completed?',
+            helper: 'Keep the result specific and factual.',
+            maxWords: _outcomeMaxWords,
+            wordCount: _wordCount(outcomesController.text),
+            autofocus: true,
+            expanded: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        );
+      case 3:
+        return _PromptStep(
+          title: 'Next Action(s)',
+          subtitle: 'Add follow-up items or mark none needed.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('No next action needed'),
+                subtitle: const Text(
+                  'Leave follow-up blank when there is nothing to track.',
+                ),
+                value: noNextAction,
+                onChanged: (value) {
+                  setState(() {
+                    noNextAction = value;
+                    if (value) nextActionsController.clear();
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              if (noNextAction)
+                const _NoActionPanel(message: 'No next action needed.')
+              else
+                _SupportNoteField(
+                  controller: nextActionsController,
+                  label: 'Next action(s)',
+                  hint: 'One follow-up per line.',
+                  helper: 'These become trackable open actions in Notes.',
+                  wordCount: _wordCount(nextActionsController.text),
+                  autofocus: true,
+                  expanded: true,
+                  onChanged: (_) => setState(() {}),
+                ),
+            ],
+          ),
+        );
+      case 4:
+        return _PromptStep(
+          title: 'Overall Impression',
+          subtitle: 'Add a concise professional impression.',
+          child: _SupportNoteField(
+            controller: impressionController,
+            label: 'Overall impression',
+            hint: 'Brief professional impression of the interaction.',
+            helper: 'Keep this factual and concise.',
+            maxWords: _impressionMaxWords,
+            wordCount: _wordCount(impressionController.text),
+            autofocus: true,
+            expanded: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        );
+      case 5:
+        return _referralStep();
+      default:
+        return _safetyStep();
+    }
+  }
+
+  Widget _visitFactsStep() {
     final startedAt = TimeOfDay.fromDateTime(
       widget.activeVisit.startedAt,
     ).format(context);
     final hours = widget.minutes / 60;
-    final notes = widget.notes;
 
+    return _PromptStep(
+      title: 'Visit Facts',
+      subtitle: 'Check the entry details before writing note sections.',
+      child: _Panel(
+        title: 'Entry details',
+        child: Column(
+          children: [
+            _InfoRow(label: 'Client', value: widget.activeVisit.client),
+            _InfoRow(label: 'Type', value: widget.activeVisit.type.label),
+            _InfoRow(label: 'Started', value: startedAt),
+            _InfoRow(
+              label: 'Length',
+              value: '${widget.minutes} min (${hours.toStringAsFixed(2)}h)',
+            ),
+            if (widget.activeVisit.type == EntryType.homeVisit)
+              _InfoRow(
+                label: 'KM',
+                value: widget.kilometres.toStringAsFixed(1),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _referralStep() {
+    return _PromptStep(
+      title: 'Local Referral Tracking',
+      subtitle: 'Track discussion, consent, and follow-up status.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'No referrals discussed or made',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: const Text(
+              'Turn this off to select agencies and referral status.',
+              style: TextStyle(color: Color(0xFF8396C7)),
+            ),
+            value: noReferrals,
+            onChanged: (value) {
+              setState(() {
+                noReferrals = value;
+                if (value) {
+                  referrals.clear();
+                  referralNotesController.clear();
+                }
+              });
+            },
+          ),
+          if (!noReferrals) ...[
+            const SizedBox(height: 8),
+            for (final type in _ReferralType.values) ...[
+              _ReferralTypePicker(
+                type: type,
+                selectedStatuses: referrals
+                    .where((item) => item.type == type)
+                    .map((item) => item.status)
+                    .toSet(),
+                onToggle: (status) => _toggleReferral(type, status),
+              ),
+              if (type != _ReferralType.values.last) const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 12),
+            _SupportNoteField(
+              controller: referralNotesController,
+              label: 'Referral notes',
+              hint: 'Consent, agency details, follow-up, or why declined.',
+              helper: 'Add only what is needed for follow-up.',
+              wordCount: _wordCount(referralNotesController.text),
+              expanded: true,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _safetyStep() {
+    return _PromptStep(
+      title: 'Safety Concerns',
+      subtitle: 'Complete the safety check before saving.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'No safety concerns noted',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: const Text(
+              'Use this for sexual harm survivor and mental health safety checks.',
+              style: TextStyle(color: Color(0xFF8396C7)),
+            ),
+            value: noSafetyConcerns,
+            onChanged: (value) {
+              setState(() {
+                noSafetyConcerns = value;
+                if (value) safetyConcernsController.clear();
+              });
+            },
+          ),
+          if (noSafetyConcerns)
+            const _NoActionPanel(message: 'No safety concerns noted.')
+          else
+            _SupportNoteField(
+              controller: safetyConcernsController,
+              label: 'Safety concerns',
+              hint:
+                  'Immediate safety, sexual harm, self-harm, risk escalation, or mental health concerns.',
+              helper: 'Keep wording factual. Include actions taken.',
+              wordCount: _wordCount(safetyConcernsController.text),
+              autofocus: true,
+              expanded: true,
+              onChanged: (_) => setState(() {}),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -1079,227 +1367,170 @@ class _SupportNoteBreakdownSheetState
         top: 16,
         bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Row(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.9,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PromptHeader(
+              title: 'Support Note',
+              currentStep: stepIndex,
+              stepCount: 7,
+              onClose: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: 12),
+            Expanded(child: SingleChildScrollView(child: _stepBody())),
+            const SizedBox(height: 14),
+            _PromptNavButtons(
+              isFirst: stepIndex == 0,
+              isLast: stepIndex == 6,
+              onBack: _previousStep,
+              onNext: _nextStep,
+              saveLabel: 'Save Visit',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PromptHeader extends StatelessWidget {
+  const _PromptHeader({
+    required this.title,
+    required this.currentStep,
+    required this.stepCount,
+    required this.onClose,
+  });
+
+  final String title;
+  final int currentStep;
+  final int stepCount;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: Text(
-                  'Support Note Breakdown',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
+              const SizedBox(height: 4),
+              Text(
+                'Step ${currentStep + 1} of $stepCount',
+                style: const TextStyle(color: Color(0xFF8396C7)),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Visit facts',
-            child: Column(
-              children: [
-                _InfoRow(label: 'Client', value: widget.activeVisit.client),
-                _InfoRow(label: 'Type', value: widget.activeVisit.type.label),
-                _InfoRow(label: 'Started', value: startedAt),
-                _InfoRow(
-                  label: 'Length',
-                  value: '${widget.minutes} min (${hours.toStringAsFixed(2)}h)',
-                ),
-                if (widget.activeVisit.type == EntryType.homeVisit)
-                  _InfoRow(
-                    label: 'KM',
-                    value: widget.kilometres.toStringAsFixed(1),
-                  ),
-              ],
-            ),
-          ),
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _Panel(
-              title: 'Logged notes',
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final note in notes)
-                    ActionChip(
-                      avatar: const Icon(Icons.add, size: 18),
-                      label: Text(note),
-                      onPressed: () => _appendLine(mainTopicController, note),
-                    ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          _SupportNoteField(
-            controller: mainTopicController,
-            label: 'Main topic(s)',
-            hint: 'What support was provided? Tap logged notes above to add.',
-            helper: 'Include the core support themes only.',
-            maxWords: _mainTopicMaxWords,
-            wordCount: _wordCount(mainTopicController.text),
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          _SupportNoteField(
-            controller: outcomesController,
-            label: 'Outcome(s)',
-            hint: 'What changed, improved, or was completed?',
-            helper: 'Record the concrete result of the interaction.',
-            maxWords: _outcomeMaxWords,
-            wordCount: _wordCount(outcomesController.text),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('No next action needed'),
-            subtitle: const Text(
-              'Leave follow-up blank when there is nothing to track.',
-            ),
-            value: noNextAction,
-            onChanged: (value) {
-              setState(() {
-                noNextAction = value;
-                if (value) nextActionsController.clear();
-              });
-            },
-          ),
-          if (!noNextAction) ...[
-            const SizedBox(height: 8),
-            _SupportNoteField(
-              controller: nextActionsController,
-              label: 'Next action(s)',
-              hint: 'One follow-up per line.',
-              helper: 'These become trackable open actions in Notes.',
-              wordCount: _wordCount(nextActionsController.text),
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
-          const SizedBox(height: 12),
-          _SupportNoteField(
-            controller: impressionController,
-            label: 'Overall impression',
-            hint: 'Brief professional impression of the interaction.',
-            helper: 'Keep this factual and concise.',
-            maxWords: _impressionMaxWords,
-            wordCount: _wordCount(impressionController.text),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Local Referral Tracking',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'No referrals discussed or made',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  subtitle: const Text(
-                    'Track local referral discussion, consent, and follow-up status.',
-                    style: TextStyle(color: Color(0xFF8396C7)),
-                  ),
-                  value: noReferrals,
-                  onChanged: (value) {
-                    setState(() {
-                      noReferrals = value;
-                      if (value) {
-                        referrals.clear();
-                        referralNotesController.clear();
-                      }
-                    });
-                  },
-                ),
-                if (!noReferrals) ...[
-                  const SizedBox(height: 8),
-                  for (final type in _ReferralType.values) ...[
-                    _ReferralTypePicker(
-                      type: type,
-                      selectedStatuses: referrals
-                          .where((item) => item.type == type)
-                          .map((item) => item.status)
-                          .toSet(),
-                      onToggle: (status) => _toggleReferral(type, status),
-                    ),
-                    if (type != _ReferralType.values.last)
-                      const SizedBox(height: 10),
-                  ],
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: referralNotesController,
-                    minLines: 2,
-                    maxLines: 4,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Referral notes',
-                      hintText:
-                          'Consent, agency details, who will follow up, or why declined.',
-                      alignLabelWithHint: true,
-                      prefixIcon: Icon(Icons.local_hospital_outlined),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            title: 'Safety Concerns',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'No safety concerns noted',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  subtitle: const Text(
-                    'Use this for sexual harm survivor and mental health safety checks.',
-                    style: TextStyle(color: Color(0xFF8396C7)),
-                  ),
-                  value: noSafetyConcerns,
-                  onChanged: (value) {
-                    setState(() {
-                      noSafetyConcerns = value;
-                      if (value) safetyConcernsController.clear();
-                    });
-                  },
-                ),
-                if (!noSafetyConcerns) ...[
-                  const SizedBox(height: 10),
-                  _SupportNoteField(
-                    controller: safetyConcernsController,
-                    label: 'Safety concerns',
-                    hint:
-                        'Record any immediate safety, sexual harm, self-harm, risk escalation, or mental health concerns.',
-                    helper:
-                        'Keep wording factual. Include actions taken or escalation needed.',
-                    wordCount: _wordCount(safetyConcernsController.text),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
-              ],
-            ),
+        ),
+        IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
+      ],
+    );
+  }
+}
+
+class _PromptStep extends StatelessWidget {
+  const _PromptStep({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            subtitle,
+            style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Required: main topic, outcome, overall impression, and safety concerns check. Next actions are optional.',
-            style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptNavButtons extends StatelessWidget {
+  const _PromptNavButtons({
+    required this.isFirst,
+    required this.isLast,
+    required this.onBack,
+    required this.onNext,
+    required this.saveLabel,
+  });
+
+  final bool isFirst;
+  final bool isLast;
+  final VoidCallback onBack;
+  final VoidCallback onNext;
+  final String saveLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: isFirst ? null : onBack,
+            icon: const Icon(Icons.arrow_back_outlined),
+            label: const Text('Back'),
           ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Visit'),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: onNext,
+            icon: Icon(
+              isLast ? Icons.save_outlined : Icons.arrow_forward_outlined,
+            ),
+            label: Text(isLast ? saveLabel : 'Next'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoActionPanel extends StatelessWidget {
+  const _NoActionPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline, color: Color(0xFF4ADE80)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -1317,6 +1548,7 @@ class _SupportNoteField extends StatelessWidget {
     this.maxWords,
     this.onChanged,
     this.autofocus = false,
+    this.expanded = false,
   });
 
   final TextEditingController controller;
@@ -1327,6 +1559,7 @@ class _SupportNoteField extends StatelessWidget {
   final int wordCount;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) {
@@ -1337,8 +1570,8 @@ class _SupportNoteField extends StatelessWidget {
     return TextField(
       controller: controller,
       autofocus: autofocus,
-      minLines: 2,
-      maxLines: 5,
+      minLines: expanded ? 8 : 3,
+      maxLines: expanded ? 18 : 7,
       textInputAction: TextInputAction.newline,
       onChanged: onChanged,
       decoration: InputDecoration(

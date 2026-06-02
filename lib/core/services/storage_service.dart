@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/active_visit.dart';
 import '../models/app_settings.dart';
+import '../models/general_action.dart';
 import '../models/invoice_status.dart';
 import '../models/work_entry.dart';
 
@@ -13,6 +14,7 @@ class StoredAppData {
     required this.clients,
     required this.entries,
     this.activeVisit,
+    this.generalActions = const [],
     this.invoiceStatuses = const {},
     this.invoiceBaselineTotals = const {},
   });
@@ -21,6 +23,7 @@ class StoredAppData {
   final List<String> clients;
   final List<WorkEntry> entries;
   final ActiveVisit? activeVisit;
+  final List<GeneralActionItem> generalActions;
   final Map<String, InvoiceStatus> invoiceStatuses;
   final Map<String, double> invoiceBaselineTotals;
 
@@ -38,6 +41,7 @@ class StoredAppData {
       'clients': clients,
       'entries': entries.map((entry) => entry.toJson()).toList(),
       'activeVisit': activeVisit?.toJson(),
+      'generalActions': generalActions.map((item) => item.toJson()).toList(),
       'invoiceStatuses': invoiceStatuses.map(
         (key, status) => MapEntry(key, status.name),
       ),
@@ -75,6 +79,24 @@ class StoredAppData {
     }
 
     final invoiceStatuses = <String, InvoiceStatus>{};
+    final rawGeneralActions = json['generalActions'];
+    final generalActions = <GeneralActionItem>[];
+
+    if (rawGeneralActions is List) {
+      for (final rawItem in rawGeneralActions) {
+        if (rawItem is Map<String, dynamic>) {
+          try {
+            final action = GeneralActionItem.fromJson(rawItem);
+            if (action.title.trim().isNotEmpty) {
+              generalActions.add(action);
+            }
+          } catch (_) {
+            // Strip malformed records during load/import.
+          }
+        }
+      }
+    }
+
     final rawInvoiceStatuses = json['invoiceStatuses'];
 
     if (rawInvoiceStatuses is Map) {
@@ -115,6 +137,7 @@ class StoredAppData {
       clients: clients.isEmpty ? ['Client A'] : clients,
       entries: entries,
       activeVisit: activeVisit,
+      generalActions: generalActions,
       invoiceStatuses: invoiceStatuses,
       invoiceBaselineTotals: invoiceBaselineTotals,
     );
