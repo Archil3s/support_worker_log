@@ -474,7 +474,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: SelectableText(
-                  'Editable Google Drive note:\n${driveMeta!.fileName}',
+                  'Google Drive DOCX note:\n${driveMeta!.fileName}',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -514,15 +514,15 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             icon: const Icon(Icons.cloud_upload_outlined),
             label: Text(
               driveMeta == null
-                  ? 'Create Editable Google Drive Note'
-                  : 'Update Editable Google Drive Note',
+                  ? 'Create Google Drive DOCX Note'
+                  : 'Update Google Drive DOCX Note',
             ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: busy ? null : _openGoogleDriveNote,
             icon: const Icon(Icons.open_in_new_outlined),
-            label: const Text('Open Editable Google Drive Note'),
+            label: const Text('Open Google Drive DOCX Note'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -532,7 +532,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Local notes stay attached to this entry card. Drive notes are editable and save under Client Notes.',
+            'Local notes stay attached to this entry card. Drive DOCX notes save under Client Notes.',
             style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],

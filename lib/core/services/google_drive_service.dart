@@ -62,7 +62,7 @@ class EntryDriveSupportNoteMeta {
   });
 
   static const googleDocsMimeType = 'application/vnd.google-apps.document';
-  static const stableContentFormat = 'drive-google-docs-from-docx-v1';
+  static const stableContentFormat = 'drive-docx-v2';
 
   final String entryId;
   final String initials;
@@ -76,14 +76,18 @@ class EntryDriveSupportNoteMeta {
   final String? contentFormat;
 
   String? get openLink {
+    final link = webViewLink?.trim();
+    if (link != null && link.isNotEmpty) return link;
+
     final id = fileId.trim();
-    if (id.isNotEmpty) {
-      final encodedId = Uri.encodeComponent(id);
+    if (id.isEmpty) return null;
+
+    final encodedId = Uri.encodeComponent(id);
+    if (mimeType == googleDocsMimeType) {
       return 'https://docs.google.com/document/d/$encodedId/edit';
     }
 
-    final link = webViewLink?.trim();
-    return link == null || link.isEmpty ? null : link;
+    return 'https://drive.google.com/file/d/$encodedId/view';
   }
 
   String? get folderOpenLink {
@@ -162,8 +166,6 @@ class GoogleDriveService {
   final GoogleDriveApiPlatform _api;
   static const String _docxMimeType =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  static const String _googleDocsMimeType =
-      EntryDriveSupportNoteMeta.googleDocsMimeType;
   static String _supportNoteMetaKey(String entryId) {
     return 'entry_google_drive_support_note_$entryId';
   }
@@ -478,22 +480,24 @@ class GoogleDriveService {
       noteText: noteText,
     );
     final existingFileId = existingMeta?.fileId.trim();
-    final file = existingFileId != null && existingFileId.isNotEmpty
+    final canUpdateExistingDocx =
+        existingMeta?.mimeType == _docxMimeType &&
+        existingFileId != null &&
+        existingFileId.isNotEmpty;
+    final file = canUpdateExistingDocx
         ? await _api.updateFile(
             accessToken: accessToken,
             fileId: existingFileId,
             name: driveFileName,
-            mimeType: _googleDocsMimeType,
+            mimeType: _docxMimeType,
             bytes: bytes,
-            contentMimeType: _docxMimeType,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,
             parentId: periodFolder.id,
             name: driveFileName,
-            mimeType: _googleDocsMimeType,
+            mimeType: _docxMimeType,
             bytes: bytes,
-            contentMimeType: _docxMimeType,
           );
 
     final meta = EntryDriveSupportNoteMeta(

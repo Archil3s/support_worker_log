@@ -48,7 +48,7 @@ void main() {
   });
 
   test(
-    'saveSupportNote imports template docx content as an editable Drive doc',
+    'saveSupportNote uploads template docx content as a Drive docx file',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
       final service = GoogleDriveService(api: api);
@@ -80,15 +80,15 @@ void main() {
       final documentText = _docxText(noteUpload.bytes);
 
       expect(meta.fileName, endsWith('.docx'));
-      expect(meta.mimeType, _googleDocsMimeType);
-      expect(meta.openLink, 'https://docs.google.com/document/d/new-doc/edit');
+      expect(meta.mimeType, _docxMimeType);
+      expect(meta.openLink, 'https://drive.google.com/file/d/new-doc/view');
       expect(
         meta.folderOpenLink,
         startsWith('https://drive.google.com/drive/folders/'),
       );
       expect(meta.folderOpenLink, contains('client-notes%2FAB%2FInvoice%2010'));
-      expect(noteUpload.mimeType, _googleDocsMimeType);
-      expect(noteUpload.contentMimeType, _docxMimeType);
+      expect(noteUpload.mimeType, _docxMimeType);
+      expect(noteUpload.contentMimeType, isNull);
       expect(documentText, contains('Name of client: AB'));
       expect(documentText, contains('Main topic(s)  (max. 200 words)'));
       expect(documentText, contains('Test note'));
@@ -99,11 +99,49 @@ void main() {
       expect(documentText, contains('Settled'));
     },
   );
+
+  test(
+    'saveSupportNote replaces legacy converted Docs metadata with docx',
+    () async {
+      final api = _FakeGoogleDriveApi(children: const []);
+      final service = GoogleDriveService(api: api);
+
+      final meta = await service.saveSupportNote(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entry: WorkEntry(
+          id: 'entry-1',
+          client: 'AB',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 2),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const [],
+        ),
+        initials: 'AB',
+        status: EntrySupportNoteStatus.inProgress,
+        noteText: 'Main topic(s)\nTest note',
+        existingMeta: const EntryDriveSupportNoteMeta(
+          entryId: 'entry-1',
+          initials: 'AB',
+          status: EntrySupportNoteStatus.inProgress,
+          fileId: 'legacy-google-doc',
+          fileName: '2026-06-02_AB_in-progress.docx',
+          noteText: 'Old note',
+          mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
+        ),
+      );
+
+      expect(api.updatedFileIds, isNot(contains('legacy-google-doc')));
+      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
+      expect(meta.mimeType, _docxMimeType);
+      expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
+    },
+  );
 }
 
 const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const _googleDocsMimeType = 'application/vnd.google-apps.document';
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({required this.children});
