@@ -420,7 +420,6 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   }
 
   Future<void> _finishVisit(AppState appState, ActiveVisit activeVisit) async {
-    final finishedAt = DateTime.now();
     final finishOdometer = activeVisit.type == EntryType.homeVisit
         ? _readDouble(finishOdometerController)
         : null;
@@ -438,7 +437,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       selectedNotes: [...activeVisit.notes, ...selectedNotes],
       typedNote: typedNote,
     );
-    final visitMinutes = _minutesBetween(activeVisit.startedAt, finishedAt);
+    final previewMinutes = _minutesBetween(
+      activeVisit.startedAt,
+      DateTime.now(),
+    );
     final kilometres =
         activeVisit.type == EntryType.homeVisit &&
             activeVisit.odometerStart != null &&
@@ -454,12 +456,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         : await _promptSupportNoteBreakdown(
             activeVisit: activeVisit,
             notes: notes,
-            minutes: visitMinutes,
+            minutes: previewMinutes,
             kilometres: kilometres,
           );
 
     if (!mounted || supportNoteBreakdown == null) return;
 
+    final visitMinutes = _minutesBetween(activeVisit.startedAt, DateTime.now());
     final trimmedSupportNoteBreakdown = supportNoteBreakdown.trim();
 
     final entry = WorkEntry(

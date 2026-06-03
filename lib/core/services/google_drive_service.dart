@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_settings.dart';
+import '../models/entry_type.dart';
 import '../models/google_drive_file.dart';
 import '../models/work_entry.dart';
 import '../utils/pay_period_utils.dart';
@@ -210,10 +211,16 @@ class GoogleDriveService {
       name: _folderName(entry.client),
     );
 
-    return findOrCreateFolder(
+    final periodFolder = await findOrCreateFolder(
       accessToken: accessToken,
       parentId: clientFolder.id,
       name: _cycleFolderName(invoiceNumber: invoiceNumber, range: range),
+    );
+
+    return findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: periodFolder.id,
+      name: _supportNoteTypeFolderName(entry.type),
     );
   }
 
@@ -480,10 +487,25 @@ class GoogleDriveService {
       noteText: noteText,
     );
     final existingFileId = existingMeta?.fileId.trim();
+    final existingParentFolderId = existingMeta?.parentFolderId?.trim();
     final canUpdateExistingDocx =
         existingMeta?.mimeType == _docxMimeType &&
         existingFileId != null &&
         existingFileId.isNotEmpty;
+    final shouldMoveExistingDocx =
+        canUpdateExistingDocx &&
+        existingParentFolderId != null &&
+        existingParentFolderId.isNotEmpty &&
+        existingParentFolderId != periodFolder.id;
+    if (shouldMoveExistingDocx) {
+      await _api.moveFile(
+        accessToken: accessToken,
+        fileId: existingFileId,
+        fromParentId: existingParentFolderId,
+        toParentId: periodFolder.id,
+      );
+    }
+
     final file = canUpdateExistingDocx
         ? await _api.updateFile(
             accessToken: accessToken,
@@ -527,6 +549,19 @@ class GoogleDriveService {
     required PayPeriodRange range,
   }) {
     return 'Invoice $invoiceNumber - ${_dateKey(range.start)} to ${_dateKey(range.end)}';
+  }
+
+  String _supportNoteTypeFolderName(EntryType type) {
+    switch (type) {
+      case EntryType.textNote:
+        return 'Texts';
+      case EntryType.phoneCall:
+        return 'Phone Calls';
+      case EntryType.homeVisit:
+        return 'Home Visits';
+      case EntryType.professionalContact:
+        return 'Professional Contacts';
+    }
   }
 
   String _dateKey(DateTime value) {

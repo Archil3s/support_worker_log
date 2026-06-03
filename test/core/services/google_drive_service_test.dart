@@ -92,8 +92,10 @@ void main() {
         startsWith('https://drive.google.com/drive/folders/'),
       );
       expect(meta.folderOpenLink, contains('client-notes%2FAB%2FInvoice%2010'));
+      expect(meta.folderOpenLink, contains('Home%20Visits'));
       expect(noteUpload.mimeType, _docxMimeType);
       expect(noteUpload.contentMimeType, isNull);
+      expect(noteUpload.parentId, contains('/Home Visits'));
       expect(documentText, contains('Name of client: AB'));
       expect(documentText, contains('Main topic(s)  (max. 200 words)'));
       expect(documentText, contains('Test note'));
@@ -125,6 +127,62 @@ void main() {
       );
     },
   );
+
+  test('saveSupportNote files text notes under Texts', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.textNote,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 20,
+        notes: const ['Text update'],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: 'Main topic(s)\nText update',
+    );
+
+    final noteUpload = api.uploads.singleWhere(
+      (upload) => upload.name.endsWith('_AB_in-progress.docx'),
+    );
+
+    expect(noteUpload.parentId, contains('/Texts'));
+  });
+
+  test('saveSupportNote files phone calls under Phone Calls', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.phoneCall,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 30,
+        notes: const ['Phone call'],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: 'Main topic(s)\nPhone call',
+    );
+
+    final noteUpload = api.uploads.singleWhere(
+      (upload) => upload.name.endsWith('_AB_in-progress.docx'),
+    );
+
+    expect(noteUpload.parentId, contains('/Phone Calls'));
+  });
 
   test(
     'saveSupportNote replaces legacy converted Docs metadata with docx',
@@ -164,6 +222,47 @@ void main() {
       expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
     },
   );
+
+  test('saveSupportNote moves an existing docx into the type folder', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    final meta = await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.phoneCall,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 30,
+        notes: const ['Phone call'],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: 'Main topic(s)\nPhone call',
+      existingMeta: const EntryDriveSupportNoteMeta(
+        entryId: 'entry-1',
+        initials: 'AB',
+        status: EntrySupportNoteStatus.inProgress,
+        fileId: 'existing-docx',
+        fileName: '2026-06-02_AB_in-progress.docx',
+        noteText: 'Old note',
+        mimeType: _docxMimeType,
+        parentFolderId: 'client-notes/AB/Invoice 10 - 2026-06-01 to 2026-06-14',
+      ),
+    );
+
+    expect(api.movedFiles.single.fileId, 'existing-docx');
+    expect(api.movedFiles.single.toParentId, contains('/Phone Calls'));
+    expect(api.updatedFileIds, contains('existing-docx'));
+    expect(
+      api.uploadedNames,
+      isNot(contains('2026-06-02_AB_in-progress.docx')),
+    );
+    expect(meta.parentFolderId, contains('/Phone Calls'));
+  });
 }
 
 const _docxMimeType =
@@ -174,6 +273,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
 
   final List<GoogleDriveFile> children;
   final uploads = <_Upload>[];
+  final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
 
@@ -232,6 +332,23 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     updatedFileIds.add(fileId);
     return GoogleDriveFile(id: fileId, name: name, mimeType: mimeType);
   }
+
+  @override
+  Future<GoogleDriveFile> moveFile({
+    required String accessToken,
+    required String fileId,
+    required String fromParentId,
+    required String toParentId,
+  }) async {
+    movedFiles.add(
+      _Move(fileId: fileId, fromParentId: fromParentId, toParentId: toParentId),
+    );
+    return const GoogleDriveFile(
+      id: 'existing-docx',
+      name: '2026-06-02_AB_in-progress.docx',
+      mimeType: _docxMimeType,
+    );
+  }
 }
 
 class _Upload {
@@ -248,6 +365,18 @@ class _Upload {
   final String mimeType;
   final String? contentMimeType;
   final List<int> bytes;
+}
+
+class _Move {
+  const _Move({
+    required this.fileId,
+    required this.fromParentId,
+    required this.toParentId,
+  });
+
+  final String fileId;
+  final String fromParentId;
+  final String toParentId;
 }
 
 String _docxText(List<int> bytes) {

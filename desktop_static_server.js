@@ -526,6 +526,50 @@ async function updateGoogleDriveFile(req, res) {
   }
 }
 
+async function moveGoogleDriveFile(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+    const fromParentId = String(payload.fromParentId || '').trim();
+    const toParentId = String(payload.toParentId || '').trim();
+
+    if (!fileId || !fromParentId || !toParentId) {
+      send(res, 400, 'Missing Drive move details.');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      addParents: toParentId,
+      removeParents: fromParentId,
+      fields: 'id,name,mimeType,webViewLink',
+    });
+    const moved = await googleDriveJsonRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'PATCH',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}?${params.toString()}`,
+      body: {},
+    });
+
+    send(res, 200, JSON.stringify(moved), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive file move failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -660,6 +704,11 @@ function handleRequest(req, res) {
 
   if ((req.url || '').split('?')[0] === '/__google_drive/update_file') {
     updateGoogleDriveFile(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/move_file') {
+    moveGoogleDriveFile(req, res);
     return;
   }
 

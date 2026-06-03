@@ -72,6 +72,26 @@ class GoogleDriveApiPlatform {
     return _fileFromJson(decoded, 'Google Drive file update failed');
   }
 
+  Future<GoogleDriveFile> moveFile({
+    required String accessToken,
+    required String fileId,
+    required String fromParentId,
+    required String toParentId,
+  }) async {
+    final decoded = await _jsonRequest(
+      _driveMoveUri(
+        fileId: fileId,
+        fromParentId: fromParentId,
+        toParentId: toParentId,
+      ),
+      method: 'PATCH',
+      accessToken: accessToken,
+      failureMessage: 'Google Drive file move failed',
+    );
+
+    return _fileFromJson(decoded, 'Google Drive file move failed');
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -114,6 +134,18 @@ class GoogleDriveApiPlatform {
   Uri _driveUpdateUri(String fileId) {
     return Uri.https('www.googleapis.com', '/upload/drive/v3/files/$fileId', {
       'uploadType': 'multipart',
+      'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveMoveUri({
+    required String fileId,
+    required String fromParentId,
+    required String toParentId,
+  }) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
+      'addParents': toParentId,
+      'removeParents': fromParentId,
       'fields': 'id,name,mimeType,webViewLink',
     });
   }
