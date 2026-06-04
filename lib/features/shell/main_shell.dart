@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/models/app_mode.dart';
+import '../../core/state/app_state.dart';
 import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../charts/charts_screen.dart';
@@ -9,6 +12,7 @@ import '../entries/entries_screen.dart';
 import '../notes/actions_screen.dart';
 import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
+import '../personal/personal_screen.dart';
 import '../quick_entry/quick_entry_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tax/tax_screen.dart';
@@ -92,6 +96,12 @@ class _MainShellState extends State<MainShell> {
       case _Section.settings:
         return 'Settings';
     }
+  }
+
+  String _title(AppMode mode) {
+    if (mode == AppMode.personal) return 'Personal Mode';
+
+    return title;
   }
 
   void _go(_Section next) {
@@ -226,35 +236,99 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final appMode = appState.appMode;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
         final maxContentWidth = wide ? 980.0 : 430.0;
+        final personalMode = appMode == AppMode.personal;
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(title),
+            title: Text(_title(appMode)),
             centerTitle: false,
             toolbarHeight: wide ? 64 : 56,
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: PopupMenuButton<AppMode>(
+                  tooltip: 'App mode',
+                  initialValue: appMode,
+                  onSelected: appState.setAppMode,
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: AppMode.work,
+                      child: ListTile(
+                        leading: Icon(Icons.work_outline_rounded),
+                        title: Text('Work Mode'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: AppMode.personal,
+                      child: ListTile(
+                        leading: Icon(Icons.person_outline_rounded),
+                        title: Text('Personal Mode'),
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF151B29),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF34405F)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          personalMode
+                              ? Icons.person_outline_rounded
+                              : Icons.work_outline_rounded,
+                          size: 20,
+                          color: const Color(0xFF4F8DF7),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          appMode.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           body: SafeArea(
             bottom: false,
             child: Row(
               children: [
-                if (wide)
+                if (wide && !personalMode)
                   _SideRail(selectedIndex: railIndex, onTap: _onRailTap),
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: maxContentWidth),
-                      child: RepaintBoundary(child: _screen()),
+                      child: RepaintBoundary(
+                        child: personalMode
+                            ? const PersonalScreen()
+                            : _screen(),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          bottomNavigationBar: wide
+          bottomNavigationBar: wide || personalMode
               ? null
               : SafeArea(
                   top: false,

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_settings.dart';
 import '../models/entry_type.dart';
 import '../models/google_drive_file.dart';
+import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../utils/pay_period_utils.dart';
 import 'google_drive/google_drive_api_platform.dart';
@@ -20,6 +21,7 @@ class GoogleDriveFolderSetup {
     required this.calendarExportsFolder,
     required this.invoicesFolder,
     required this.referralsFolder,
+    required this.personalNotesFolder,
   });
 
   final GoogleDriveFile rootFolder;
@@ -28,6 +30,7 @@ class GoogleDriveFolderSetup {
   final GoogleDriveFile calendarExportsFolder;
   final GoogleDriveFile invoicesFolder;
   final GoogleDriveFile referralsFolder;
+  final GoogleDriveFile personalNotesFolder;
 
   AppSettings applyTo(AppSettings settings) {
     return settings.copyWith(
@@ -37,6 +40,7 @@ class GoogleDriveFolderSetup {
       googleDriveCalendarExportsFolderId: calendarExportsFolder.id,
       googleDriveInvoicesFolderId: invoicesFolder.id,
       googleDriveReferralsFolderId: referralsFolder.id,
+      googleDrivePersonalNotesFolderId: personalNotesFolder.id,
     );
   }
 }
@@ -256,6 +260,11 @@ class GoogleDriveService {
       name: 'Referrals',
       parentId: root.id,
     );
+    final personalNotes = await _api.createFolder(
+      accessToken: accessToken,
+      name: 'Personal Notes',
+      parentId: root.id,
+    );
 
     return GoogleDriveFolderSetup(
       rootFolder: root,
@@ -264,6 +273,70 @@ class GoogleDriveService {
       calendarExportsFolder: calendarExports,
       invoicesFolder: invoices,
       referralsFolder: referrals,
+      personalNotesFolder: personalNotes,
+    );
+  }
+
+  Future<void> syncPersonalLogEntries({
+    required String accessToken,
+    required String personalNotesFolderId,
+    required List<PersonalLogEntry> entries,
+  }) async {
+    for (final entry in entries) {
+      final folder = await _personalLogFolder(
+        accessToken: accessToken,
+        personalNotesFolderId: personalNotesFolderId,
+        entry: entry,
+      );
+      final bytes = await LocalSupportNoteService.buildPersonalLogDocx(
+        entry: entry,
+      );
+
+      await uploadOrUpdateFile(
+        accessToken: accessToken,
+        parentId: folder.id,
+        name: _personalLogFileName(entry),
+        mimeType: _docxMimeType,
+        bytes: bytes,
+      );
+    }
+  }
+
+  Future<GoogleDriveFile> _personalLogFolder({
+    required String accessToken,
+    required String personalNotesFolderId,
+    required PersonalLogEntry entry,
+  }) async {
+    final categoryFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: personalNotesFolderId,
+      name: _personalCategoryFolderName(entry.category),
+    );
+
+    if (entry.category == PersonalLogCategory.gym) {
+      final parts = _personalGymTitleParts(entry.title);
+      final splitFolder = await findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: categoryFolder.id,
+        name: parts.splitName,
+      );
+      final exerciseFolder = await findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: splitFolder.id,
+        name: parts.exerciseName,
+      );
+
+      return findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: exerciseFolder.id,
+        name: entry.date.year.toString(),
+      );
+    }
+
+    return findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: categoryFolder.id,
+      name: entry.date.year.toString(),
     );
   }
 
@@ -564,6 +637,45 @@ class GoogleDriveService {
     }
   }
 
+  String _personalCategoryFolderName(PersonalLogCategory category) {
+    switch (category) {
+      case PersonalLogCategory.gym:
+        return 'Gym';
+      case PersonalLogCategory.bodyWeight:
+        return 'Body Weight';
+      case PersonalLogCategory.health:
+        return 'Health';
+      case PersonalLogCategory.goal:
+        return 'Goals';
+      case PersonalLogCategory.note:
+        return 'Notes';
+    }
+  }
+
+  String _personalLogFileName(PersonalLogEntry entry) {
+    final title = _folderName(entry.title).replaceAll(' ', '_');
+    return '${_dateKey(entry.date)}_${entry.category.name}_$title.docx';
+  }
+
+  _PersonalGymTitleParts _personalGymTitleParts(String title) {
+    final parts = title.split(':');
+
+    if (parts.length < 2) {
+      return _PersonalGymTitleParts(
+        splitName: 'General',
+        exerciseName: _folderName(title),
+      );
+    }
+
+    final splitName = _folderName(parts.first);
+    final exerciseName = _folderName(parts.sublist(1).join(':'));
+
+    return _PersonalGymTitleParts(
+      splitName: splitName,
+      exerciseName: exerciseName,
+    );
+  }
+
   String _dateKey(DateTime value) {
     final year = value.year.toString().padLeft(4, '0');
     final month = value.month.toString().padLeft(2, '0');
@@ -608,6 +720,16 @@ class GoogleDriveService {
           'timesheet exports from Support Worker Log.\n',
     ),
   ];
+}
+
+class _PersonalGymTitleParts {
+  const _PersonalGymTitleParts({
+    required this.splitName,
+    required this.exerciseName,
+  });
+
+  final String splitName;
+  final String exerciseName;
 }
 
 class _TextTemplate {

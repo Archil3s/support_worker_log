@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/active_visit.dart';
+import '../models/app_mode.dart';
 import '../models/app_settings.dart';
 import '../models/general_action.dart';
 import '../models/invoice_status.dart';
+import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../services/calendar_export_service.dart';
 import '../services/cloud_storage_service.dart';
@@ -31,28 +33,36 @@ class AppState extends ChangeNotifier {
       DriveInvoiceCycleSyncService();
 
   AppSettings _settings = const AppSettings();
+  AppMode _appMode = AppMode.work;
   ActiveVisit? _activeVisit;
 
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
   final List<GeneralActionItem> _generalActions = [];
+  final List<PersonalLogEntry> _personalLogEntries = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
   final Map<String, double> _invoiceBaselineTotals = {};
 
   StreamSubscription<StoredAppData?>? _cloudDataSubscription;
   String? _cloudDataSubscriptionUserId;
   Timer? _driveInvoiceSyncDebounce;
+  Timer? _drivePersonalSyncDebounce;
   bool _driveInvoiceSyncRunning = false;
   bool _driveInvoiceSyncQueued = false;
+  bool _drivePersonalSyncRunning = false;
+  bool _drivePersonalSyncQueued = false;
   bool _cloudSyncReady = false;
   String? _cloudSyncError;
 
   AppSettings get settings => _settings;
+  AppMode get appMode => _appMode;
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
   List<WorkEntry> get entries => List.unmodifiable(_entries);
   List<GeneralActionItem> get generalActions =>
       List.unmodifiable(_generalActions);
+  List<PersonalLogEntry> get personalLogEntries =>
+      List.unmodifiable(_personalLogEntries);
   Map<String, InvoiceStatus> get invoiceStatuses =>
       Map.unmodifiable(_invoiceStatuses);
   Map<String, double> get invoiceBaselineTotals =>
@@ -139,6 +149,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(_syncLocalAndCloudSafely());
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
   }
 
   Future<void> sendPasswordResetEmail(String email) {
@@ -157,6 +168,7 @@ class AppState extends ChangeNotifier {
     final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
     notifyListeners();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
     return token;
   }
 
@@ -219,7 +231,48 @@ class AppState extends ChangeNotifier {
     final token = await _cloudStorageService.requireGoogleDriveAccessToken();
     notifyListeners();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
     return token;
+  }
+
+  Future<void> syncPersonalLogsToDrive() async {
+    if (_personalLogEntries.isEmpty) return;
+
+    if (_cloudStorageService.googleDriveAccessToken == null) {
+      await connectGoogleDrive();
+    }
+
+    await _syncDrivePersonalLogs();
+  }
+
+  Future<String> ensurePersonalNotesDriveFolderId() async {
+    if (_cloudStorageService.googleDriveAccessToken == null) {
+      await connectGoogleDrive();
+    }
+
+    final accessToken = await _cloudStorageService
+        .requireGoogleDriveAccessToken();
+    final folderId = await _ensurePersonalNotesDriveFolder(accessToken);
+    return folderId;
+  }
+
+  Future<String> ensurePersonalCategoryDriveFolderId(
+    PersonalLogCategory category,
+  ) async {
+    if (_cloudStorageService.googleDriveAccessToken == null) {
+      await connectGoogleDrive();
+    }
+
+    final accessToken = await _cloudStorageService
+        .requireGoogleDriveAccessToken();
+    final personalFolderId = await _ensurePersonalNotesDriveFolder(accessToken);
+    final categoryFolder = await _googleDriveService.findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: personalFolderId,
+      name: _personalCategoryFolderName(category),
+    );
+
+    return categoryFolder.id;
   }
 
   Future<void> signOut() async {
@@ -235,6 +288,7 @@ class AppState extends ChangeNotifier {
 
     await _syncLocalAndCloudSafely();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
     notifyListeners();
   }
 
@@ -274,6 +328,7 @@ class AppState extends ChangeNotifier {
 
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
   }
 
   Future<void> restoreFromBackup(StoredAppData data) async {
@@ -287,6 +342,7 @@ class AppState extends ChangeNotifier {
     await _storageService.clear();
 
     _settings = const AppSettings();
+    _appMode = AppMode.work;
     _activeVisit = null;
 
     _clients
@@ -295,6 +351,7 @@ class AppState extends ChangeNotifier {
 
     _entries.clear();
     _generalActions.clear();
+    _personalLogEntries.clear();
     _invoiceStatuses.clear();
     _invoiceBaselineTotals.clear();
 
@@ -306,6 +363,13 @@ class AppState extends ChangeNotifier {
     _settings = settings;
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+  }
+
+  void setAppMode(AppMode mode) {
+    if (_appMode == mode) return;
+
+    _appMode = mode;
+    _persistAndNotify();
   }
 
   void startActiveVisit(ActiveVisit visit) {
@@ -368,6 +432,27 @@ class AppState extends ChangeNotifier {
   void deleteGeneralAction(GeneralActionItem action) {
     _generalActions.removeWhere((item) => item.id == action.id);
     _persistAndNotify();
+  }
+
+  void addPersonalLogEntry(PersonalLogEntry entry) {
+    final title = entry.title.trim();
+    final notes = entry.notes.trim();
+    final metric = entry.metric.trim();
+
+    if (title.isEmpty && notes.isEmpty && metric.isEmpty) return;
+
+    _personalLogEntries.insert(
+      0,
+      entry.copyWith(title: title, notes: notes, metric: metric),
+    );
+    _persistAndNotify();
+    _scheduleDrivePersonalSync();
+  }
+
+  void deletePersonalLogEntry(PersonalLogEntry entry) {
+    _personalLogEntries.removeWhere((item) => item.id == entry.id);
+    _persistAndNotify();
+    _scheduleDrivePersonalSync();
   }
 
   void addEntries(List<WorkEntry> entries) {
@@ -535,6 +620,7 @@ class AppState extends ChangeNotifier {
       _cloudSyncError = null;
       _startCloudDataSubscription();
       _scheduleDriveInvoiceSync();
+      _scheduleDrivePersonalSync();
       return;
     }
 
@@ -552,6 +638,7 @@ class AppState extends ChangeNotifier {
     _cloudSyncError = null;
     _startCloudDataSubscription();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
   }
 
   Future<void> _syncLocalAndCloudSafely() async {
@@ -608,6 +695,7 @@ class AppState extends ChangeNotifier {
     _cloudSyncError = null;
     notifyListeners();
     _scheduleDriveInvoiceSync();
+    _scheduleDrivePersonalSync();
   }
 
   void _scheduleDriveInvoiceSync() {
@@ -617,6 +705,18 @@ class AppState extends ChangeNotifier {
     _driveInvoiceSyncDebounce?.cancel();
     _driveInvoiceSyncDebounce = Timer(const Duration(seconds: 2), () {
       unawaited(_syncDriveInvoicesSafely());
+    });
+  }
+
+  void _scheduleDrivePersonalSync() {
+    if (!_cloudStorageService.isSignedIn || _personalLogEntries.isEmpty) {
+      return;
+    }
+    if (_cloudStorageService.googleDriveAccessToken == null) return;
+
+    _drivePersonalSyncDebounce?.cancel();
+    _drivePersonalSyncDebounce = Timer(const Duration(seconds: 2), () {
+      unawaited(_syncDrivePersonalLogsSafely());
     });
   }
 
@@ -691,6 +791,97 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _syncDrivePersonalLogsSafely() async {
+    if (_drivePersonalSyncRunning) {
+      _drivePersonalSyncQueued = true;
+      return;
+    }
+
+    _drivePersonalSyncRunning = true;
+
+    try {
+      await _syncDrivePersonalLogs();
+    } catch (error) {
+      _cloudSyncError = error.toString();
+      notifyListeners();
+    } finally {
+      _drivePersonalSyncRunning = false;
+
+      if (_drivePersonalSyncQueued) {
+        _drivePersonalSyncQueued = false;
+        _scheduleDrivePersonalSync();
+      }
+    }
+  }
+
+  Future<void> _syncDrivePersonalLogs() async {
+    if (!_cloudStorageService.isSignedIn || _personalLogEntries.isEmpty) {
+      return;
+    }
+
+    final accessToken = await _cloudStorageService
+        .requireGoogleDriveAccessToken();
+    final personalNotesFolderId = await _ensurePersonalNotesDriveFolder(
+      accessToken,
+    );
+
+    await _googleDriveService.syncPersonalLogEntries(
+      accessToken: accessToken,
+      personalNotesFolderId: personalNotesFolderId,
+      entries: _personalLogEntries,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+  }
+
+  Future<String> _ensurePersonalNotesDriveFolder(String accessToken) async {
+    final existing = _settings.googleDrivePersonalNotesFolderId;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final rootFolderId = _settings.googleDriveRootFolderId;
+    if (rootFolderId == null || rootFolderId.isEmpty) {
+      final folderSetup = await _googleDriveService.createFolderSetup(
+        accessToken: accessToken,
+      );
+      _settings = folderSetup.applyTo(_settings);
+    } else {
+      final personalFolder = await _googleDriveService.findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: rootFolderId,
+        name: 'Personal Notes',
+      );
+      _settings = _settings.copyWith(
+        googleDrivePersonalNotesFolderId: personalFolder.id,
+      );
+    }
+
+    final data = _currentStoredData();
+    await _storageService.save(data);
+    if (_cloudStorageService.isSignedIn) {
+      await _cloudStorageService.save(data);
+    }
+    notifyListeners();
+
+    return _settings.googleDrivePersonalNotesFolderId!;
+  }
+
+  String _personalCategoryFolderName(PersonalLogCategory category) {
+    switch (category) {
+      case PersonalLogCategory.gym:
+        return 'Gym';
+      case PersonalLogCategory.bodyWeight:
+        return 'Body Weight';
+      case PersonalLogCategory.health:
+        return 'Health';
+      case PersonalLogCategory.goal:
+        return 'Goals';
+      case PersonalLogCategory.note:
+        return 'Notes';
+    }
+  }
+
   void _replaceInMemory(StoredAppData data) {
     _settings = data.settings.weeklyHoursGoal == 20
         ? data.settings.copyWith(weeklyHoursGoal: 10)
@@ -713,9 +904,13 @@ class AppState extends ChangeNotifier {
     _generalActions
       ..clear()
       ..addAll(_dedupeGeneralActions(data.generalActions));
+    _personalLogEntries
+      ..clear()
+      ..addAll(_dedupePersonalLogEntries(data.personalLogEntries));
     _invoiceBaselineTotals
       ..clear()
       ..addAll(data.invoiceBaselineTotals);
+    _appMode = data.appMode;
   }
 
   StoredAppData _mergeStoredData({
@@ -735,6 +930,10 @@ class AppState extends ChangeNotifier {
       ...cloudData.generalActions,
       ...localData.generalActions,
     ]);
+    final mergedPersonalLogs = _dedupePersonalLogEntries([
+      ...cloudData.personalLogEntries,
+      ...localData.personalLogEntries,
+    ]);
 
     return StoredAppData(
       settings: cloudData.settings,
@@ -750,6 +949,8 @@ class AppState extends ChangeNotifier {
         ...cloudData.invoiceBaselineTotals,
         ...localData.invoiceBaselineTotals,
       },
+      appMode: localData.appMode,
+      personalLogEntries: mergedPersonalLogs,
     );
   }
 
@@ -762,6 +963,8 @@ class AppState extends ChangeNotifier {
       generalActions: _generalActions,
       invoiceStatuses: _invoiceStatuses,
       invoiceBaselineTotals: _invoiceBaselineTotals,
+      appMode: _appMode,
+      personalLogEntries: _personalLogEntries,
     );
   }
 
@@ -831,6 +1034,25 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
+  List<PersonalLogEntry> _dedupePersonalLogEntries(
+    List<PersonalLogEntry> entries,
+  ) {
+    final seenIds = <String>{};
+    final result = <PersonalLogEntry>[];
+
+    for (final entry in entries) {
+      final id = entry.id.trim();
+      if (id.isEmpty || seenIds.contains(id)) continue;
+
+      seenIds.add(id);
+      result.add(entry);
+    }
+
+    result.sort((a, b) => b.date.compareTo(a.date));
+
+    return result;
+  }
+
   int _boundedIndex(int index) {
     if (index < 0) return 0;
     if (index > _entries.length) return _entries.length;
@@ -862,6 +1084,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _driveInvoiceSyncDebounce?.cancel();
+    _drivePersonalSyncDebounce?.cancel();
     unawaited(_stopCloudDataSubscription());
     super.dispose();
   }

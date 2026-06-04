@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:support_worker_log/core/models/app_mode.dart';
 import 'package:support_worker_log/core/models/app_settings.dart';
 import 'package:support_worker_log/core/models/general_action.dart';
 import 'package:support_worker_log/core/models/invoice_status.dart';
+import 'package:support_worker_log/core/models/personal_log_entry.dart';
 import 'package:support_worker_log/core/services/storage_service.dart';
 
 void main() {
@@ -57,5 +59,35 @@ void main() {
     );
     expect(restored.generalActions.first.completedAt, completedAt);
     expect(restored.generalActions.last.client, 'AB');
+  });
+
+  test('persists app mode and personal logs separately from work entries', () {
+    final data = StoredAppData(
+      settings: const AppSettings(),
+      clients: const ['AB'],
+      entries: const [],
+      appMode: AppMode.personal,
+      personalLogEntries: [
+        PersonalLogEntry(
+          id: 'personal-1',
+          category: PersonalLogCategory.gym,
+          date: DateTime(2026, 6, 4, 7),
+          title: 'Leg day',
+          metric: 'Squat 3x5 at 80kg',
+          notes: 'Good depth and stable knees.',
+        ),
+      ],
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.appMode, AppMode.personal);
+    expect(restored.entries, isEmpty);
+    expect(restored.personalLogEntries, hasLength(1));
+    expect(
+      restored.personalLogEntries.single.category,
+      PersonalLogCategory.gym,
+    );
+    expect(restored.personalLogEntries.single.metric, 'Squat 3x5 at 80kg');
   });
 }

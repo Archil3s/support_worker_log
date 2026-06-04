@@ -9,6 +9,7 @@ import '../models/entry_type.dart';
 import '../models/work_entry.dart';
 import '../utils/formatters.dart';
 import 'local_support_notes/local_support_notes_platform.dart';
+import '../models/personal_log_entry.dart';
 
 enum EntrySupportNoteStatus { incomplete, inProgress, finished, submitted }
 
@@ -298,6 +299,205 @@ class LocalSupportNoteService {
     }
   }
 
+  static Future<List<int>> buildPersonalLogDocx({
+    required PersonalLogEntry entry,
+  }) async {
+    try {
+      return _personalLogDocx(entry);
+    } catch (error) {
+      throw StateError('Personal note template could not be loaded: $error');
+    }
+  }
+
+  static List<int> _personalLogDocx(PersonalLogEntry entry) {
+    final archive = Archive();
+
+    void addTextFile(String name, String contents) {
+      final bytes = utf8.encode(contents);
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    addTextFile('[Content_Types].xml', _personalContentTypesXml);
+    addTextFile('_rels/.rels', _personalRootRelationshipsXml);
+    addTextFile('docProps/app.xml', _personalAppPropertiesXml);
+    addTextFile('docProps/core.xml', _personalCorePropertiesXml(entry));
+    addTextFile('word/document.xml', _personalDocumentXml(entry));
+
+    return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static String _personalDocumentXml(PersonalLogEntry entry) {
+    final sections = _personalLogSections(entry);
+    final paragraphs = <String>[
+      _personalParagraph('Personal Progress Log', style: 'Title'),
+      _personalParagraph(entry.category.label, style: 'Subtitle'),
+      _personalParagraph('Date: ${formatDate(entry.date)}', bold: true),
+      _personalParagraph('Log: ${_personalTitle(entry)}', bold: true),
+      if (entry.metric.trim().isNotEmpty)
+        _personalParagraph('Tracked result: ${entry.metric.trim()}'),
+      _personalSpacer,
+      for (final section in sections) ...[
+        _personalParagraph(section.title, style: 'Heading1'),
+        _personalParagraph(section.body),
+        _personalSpacer,
+      ],
+    ].join();
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    $paragraphs
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+''';
+  }
+
+  static List<_PersonalLogSection> _personalLogSections(
+    PersonalLogEntry entry,
+  ) {
+    final metric = entry.metric.trim();
+    final notes = entry.notes.trim();
+
+    switch (entry.category) {
+      case PersonalLogCategory.gym:
+        return [
+          _PersonalLogSection('Workout', _personalTitle(entry)),
+          _PersonalLogSection('Sets, reps, and load', _blankIfEmpty(metric)),
+          _PersonalLogSection('Performance notes', _blankIfEmpty(notes)),
+          const _PersonalLogSection('Next target', 'Weight:\nReps:\nForm cue:'),
+          const _PersonalLogSection(
+            'Recovery notes',
+            'Energy:\nSleep:\nSoreness:\nPain or niggles:',
+          ),
+        ];
+      case PersonalLogCategory.bodyWeight:
+        return [
+          _PersonalLogSection('Body weight', _blankIfEmpty(metric)),
+          _PersonalLogSection('Check-in notes', _blankIfEmpty(notes)),
+          const _PersonalLogSection(
+            'Context',
+            'Time weighed:\nHydration:\nTraining day:\nTrend note:',
+          ),
+        ];
+      case PersonalLogCategory.health:
+        return [
+          _PersonalLogSection('Health focus', _personalTitle(entry)),
+          _PersonalLogSection('Tracked measure', _blankIfEmpty(metric)),
+          _PersonalLogSection('Notes', _blankIfEmpty(notes)),
+          const _PersonalLogSection(
+            'Next check-in',
+            'What to monitor:\nWhat to change:\nReview date:',
+          ),
+        ];
+      case PersonalLogCategory.goal:
+        return [
+          _PersonalLogSection('Goal', _personalTitle(entry)),
+          _PersonalLogSection('Progress measure', _blankIfEmpty(metric)),
+          _PersonalLogSection('Progress notes', _blankIfEmpty(notes)),
+          const _PersonalLogSection(
+            'Next step',
+            'Small next action:\nDeadline:\nBlocker:',
+          ),
+        ];
+      case PersonalLogCategory.note:
+        return [
+          _PersonalLogSection('Topic', _personalTitle(entry)),
+          _PersonalLogSection('Detail', _blankIfEmpty(notes)),
+          _PersonalLogSection('Metric or reference', _blankIfEmpty(metric)),
+          const _PersonalLogSection('Follow-up', '-'),
+        ];
+    }
+  }
+
+  static String _personalParagraph(
+    String text, {
+    bool bold = false,
+    String? style,
+  }) {
+    final paragraphProps = switch (style) {
+      'Title' =>
+        '<w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="180"/></w:pPr>',
+      'Subtitle' =>
+        '<w:pPr><w:pStyle w:val="Subtitle"/><w:spacing w:after="220"/></w:pPr>',
+      'Heading1' =>
+        '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="160" w:after="80"/></w:pPr>',
+      _ => '<w:pPr><w:spacing w:after="80"/></w:pPr>',
+    };
+
+    return '<w:p>$paragraphProps${_personalRun(text, bold: bold || style != null)}</w:p>';
+  }
+
+  static String _personalRun(String text, {bool bold = false}) {
+    final escapedLines = text
+        .split('\n')
+        .map((line) => '<w:t xml:space="preserve">${_xml(line)}</w:t>')
+        .join('<w:br/>');
+    final runProps = bold
+        ? '<w:rPr><w:b/><w:bCs/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>'
+        : '<w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>';
+
+    return '<w:r>$runProps$escapedLines</w:r>';
+  }
+
+  static String _personalCorePropertiesXml(PersonalLogEntry entry) {
+    final title = _personalTitle(entry);
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${_xml(title)}</dc:title>
+  <dc:subject>Personal ${_xml(entry.category.label)} progress log</dc:subject>
+  <dc:creator>Support Worker Log</dc:creator>
+  <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
+</cp:coreProperties>
+''';
+  }
+
+  static String _personalTitle(PersonalLogEntry entry) {
+    final title = entry.title.trim();
+    return title.isEmpty ? entry.category.label : title;
+  }
+
+  static String _blankIfEmpty(String value) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? '-' : trimmed;
+  }
+
+  static const _personalSpacer =
+      '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr></w:p>';
+
+  static const _personalContentTypesXml = '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>
+''';
+
+  static const _personalRootRelationshipsXml = '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+''';
+
+  static const _personalAppPropertiesXml = '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Support Worker Log</Application>
+</Properties>
+''';
+
   static List<int> _docxFromTemplate({
     required Uint8List bytes,
     required String clientInitials,
@@ -527,6 +727,13 @@ class LocalSupportNoteService {
 
     return cleaned.isEmpty ? 'note' : cleaned;
   }
+}
+
+class _PersonalLogSection {
+  const _PersonalLogSection(this.title, this.body);
+
+  final String title;
+  final String body;
 }
 
 class _SupportNoteSections {

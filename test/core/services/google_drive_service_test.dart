@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/google_drive_file.dart';
+import 'package:support_worker_log/core/models/personal_log_entry.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
 import 'package:support_worker_log/core/services/google_drive/google_drive_api_platform.dart';
 import 'package:support_worker_log/core/services/google_drive_service.dart';
@@ -263,6 +264,45 @@ void main() {
     );
     expect(meta.parentFolderId, contains('/Phone Calls'));
   });
+
+  test(
+    'syncPersonalLogEntries files gym notes under split and exercise',
+    () async {
+      final api = _FakeGoogleDriveApi(children: const []);
+      final service = GoogleDriveService(api: api);
+
+      await service.syncPersonalLogEntries(
+        accessToken: 'token',
+        personalNotesFolderId: 'personal-notes',
+        entries: [
+          PersonalLogEntry(
+            id: 'personal-1',
+            category: PersonalLogCategory.gym,
+            date: DateTime(2026, 6, 4),
+            title: 'Legs: Squat',
+            metric: '80 kg | 3 x 5 reps',
+            notes: 'Good depth and stable knees.',
+          ),
+        ],
+      );
+
+      final noteUpload = api.uploads.singleWhere(
+        (upload) => upload.name.endsWith('_gym_Legs-_Squat.docx'),
+      );
+      final documentText = _docxText(noteUpload.bytes);
+
+      expect(noteUpload.parentId, 'personal-notes/Gym/Legs/Squat/2026');
+      expect(noteUpload.mimeType, _docxMimeType);
+      expect(documentText, contains('Personal Progress Log'));
+      expect(documentText, contains('Sets, reps, and load'));
+      expect(documentText, contains('Performance notes'));
+      expect(documentText, contains('Next target'));
+      expect(documentText, contains('80 kg | 3 x 5 reps'));
+      expect(documentText, contains('Good depth and stable knees.'));
+      expect(documentText, isNot(contains('Name of client')));
+      expect(documentText, isNot(contains('Safety concerns')));
+    },
+  );
 }
 
 const _docxMimeType =

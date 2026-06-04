@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/active_visit.dart';
+import '../models/app_mode.dart';
 import '../models/app_settings.dart';
 import '../models/general_action.dart';
 import '../models/invoice_status.dart';
+import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 
 class StoredAppData {
@@ -17,6 +19,8 @@ class StoredAppData {
     this.generalActions = const [],
     this.invoiceStatuses = const {},
     this.invoiceBaselineTotals = const {},
+    this.appMode = AppMode.work,
+    this.personalLogEntries = const [],
   });
 
   final AppSettings settings;
@@ -26,6 +30,8 @@ class StoredAppData {
   final List<GeneralActionItem> generalActions;
   final Map<String, InvoiceStatus> invoiceStatuses;
   final Map<String, double> invoiceBaselineTotals;
+  final AppMode appMode;
+  final List<PersonalLogEntry> personalLogEntries;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -46,6 +52,10 @@ class StoredAppData {
         (key, status) => MapEntry(key, status.name),
       ),
       'invoiceBaselineTotals': invoiceBaselineTotals,
+      'appMode': appMode.name,
+      'personalLogEntries': personalLogEntries
+          .map((entry) => entry.toJson())
+          .toList(),
     };
   }
 
@@ -98,6 +108,24 @@ class StoredAppData {
     }
 
     final rawInvoiceStatuses = json['invoiceStatuses'];
+    final rawPersonalLogEntries = json['personalLogEntries'];
+    final personalLogEntries = <PersonalLogEntry>[];
+
+    if (rawPersonalLogEntries is List) {
+      for (final rawItem in rawPersonalLogEntries) {
+        if (rawItem is Map<String, dynamic>) {
+          try {
+            final entry = PersonalLogEntry.fromJson(rawItem);
+            if (entry.title.trim().isNotEmpty ||
+                entry.notes.trim().isNotEmpty) {
+              personalLogEntries.add(entry);
+            }
+          } catch (_) {
+            // Strip malformed personal records during load/import.
+          }
+        }
+      }
+    }
 
     if (rawInvoiceStatuses is Map) {
       for (final entry in rawInvoiceStatuses.entries) {
@@ -140,6 +168,8 @@ class StoredAppData {
       generalActions: generalActions,
       invoiceStatuses: invoiceStatuses,
       invoiceBaselineTotals: invoiceBaselineTotals,
+      appMode: appModeFromName(json['appMode'] as String?),
+      personalLogEntries: personalLogEntries,
     );
   }
 }

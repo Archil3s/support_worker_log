@@ -16,6 +16,7 @@ class AppSettings {
     this.googleDriveCalendarExportsFolderId,
     this.googleDriveInvoicesFolderId,
     this.googleDriveReferralsFolderId,
+    this.googleDrivePersonalNotesFolderId,
   });
 
   static const defaultNoteOptions = [
@@ -58,6 +59,7 @@ class AppSettings {
   final String? googleDriveCalendarExportsFolderId;
   final String? googleDriveInvoicesFolderId;
   final String? googleDriveReferralsFolderId;
+  final String? googleDrivePersonalNotesFolderId;
 
   AppSettings copyWith({
     double? hourlyRate,
@@ -77,6 +79,7 @@ class AppSettings {
     String? googleDriveCalendarExportsFolderId,
     String? googleDriveInvoicesFolderId,
     String? googleDriveReferralsFolderId,
+    String? googleDrivePersonalNotesFolderId,
     bool clearGoogleDriveFolders = false,
   }) {
     return AppSettings(
@@ -112,6 +115,10 @@ class AppSettings {
       googleDriveReferralsFolderId: clearGoogleDriveFolders
           ? null
           : googleDriveReferralsFolderId ?? this.googleDriveReferralsFolderId,
+      googleDrivePersonalNotesFolderId: clearGoogleDriveFolders
+          ? null
+          : googleDrivePersonalNotesFolderId ??
+                this.googleDrivePersonalNotesFolderId,
     );
   }
 
@@ -133,6 +140,7 @@ class AppSettings {
       'googleDriveCalendarExportsFolderId': googleDriveCalendarExportsFolderId,
       'googleDriveInvoicesFolderId': googleDriveInvoicesFolderId,
       'googleDriveReferralsFolderId': googleDriveReferralsFolderId,
+      'googleDrivePersonalNotesFolderId': googleDrivePersonalNotesFolderId,
     };
   }
 
@@ -196,6 +204,9 @@ class AppSettings {
       ),
       googleDriveInvoicesFolderId: readString('googleDriveInvoicesFolderId'),
       googleDriveReferralsFolderId: readString('googleDriveReferralsFolderId'),
+      googleDrivePersonalNotesFolderId: readString(
+        'googleDrivePersonalNotesFolderId',
+      ),
     );
   }
 }

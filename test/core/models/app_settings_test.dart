@@ -10,6 +10,7 @@ void main() {
       googleDriveCalendarExportsFolderId: 'calendar-exports',
       googleDriveInvoicesFolderId: 'invoices',
       googleDriveReferralsFolderId: 'referrals',
+      googleDrivePersonalNotesFolderId: 'personal-notes',
     );
 
     final restored = AppSettings.fromJson(settings.toJson());
@@ -20,5 +21,6 @@ void main() {
     expect(restored.googleDriveCalendarExportsFolderId, 'calendar-exports');
     expect(restored.googleDriveInvoicesFolderId, 'invoices');
     expect(restored.googleDriveReferralsFolderId, 'referrals');
+    expect(restored.googleDrivePersonalNotesFolderId, 'personal-notes');
   });
 }

@@ -352,6 +352,7 @@ class _FolderList extends StatelessWidget {
       ('Calendar Exports', settings.googleDriveCalendarExportsFolderId),
       ('Invoices', settings.googleDriveInvoicesFolderId),
       ('Referrals', settings.googleDriveReferralsFolderId),
+      ('Personal Notes', settings.googleDrivePersonalNotesFolderId),
     ];
 
     return Column(
