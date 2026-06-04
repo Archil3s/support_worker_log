@@ -2127,11 +2127,60 @@ class _PersonalLogFolder extends StatelessWidget {
   }
 }
 
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = this.subtitle;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          tooltip: 'Close',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.close_rounded),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> _showPersonalLogSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    showDragHandle: true,
     builder: (_) => const _PersonalLogSheet(),
   );
 }
@@ -2146,6 +2195,7 @@ Future<void> _showExerciseLogSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    showDragHandle: true,
     builder: (_) => _ExerciseLogSheet(
       split: split,
       exercise: exercise,
@@ -2162,6 +2212,7 @@ Future<void> _showGuidedWorkoutSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    showDragHandle: true,
     builder: (_) => _GuidedWorkoutSheet(split: split),
   );
 }
@@ -2342,14 +2393,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          Text(
-            widget.split.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          _SheetHeader(title: widget.split.name),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -2978,21 +3022,9 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          Text(
-            widget.exercise.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.split.name,
-            style: const TextStyle(
-              color: Color(0xFF8396C7),
-              fontWeight: FontWeight.w800,
-            ),
+          _SheetHeader(
+            title: widget.exercise.name,
+            subtitle: widget.split.name,
           ),
           if (latestProgress != null) ...[
             const SizedBox(height: 10),
@@ -3139,14 +3171,7 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          const Text(
-            'Personal Log',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          const _SheetHeader(title: 'Personal Log'),
           const SizedBox(height: 14),
           SegmentedButton<PersonalLogCategory>(
             segments: const [
