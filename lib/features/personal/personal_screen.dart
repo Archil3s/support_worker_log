@@ -314,7 +314,7 @@ class _WorkoutSplitCard extends StatelessWidget {
               if (split.name == 'Stretch + Abs') ...[
                 const SizedBox(height: 10),
                 _StretchRecommendationsPanel(
-                  key: ValueKey(_swapReasonSignature(gymEntries)),
+                  key: ValueKey(_exerciseComplaintSignature(gymEntries)),
                 ),
               ],
               const SizedBox(height: 10),
@@ -616,8 +616,10 @@ class _StretchRecommendationsPanel extends StatelessWidget {
           .where((entry) => entry.category == PersonalLogCategory.gym)
           .toList(),
     );
-    final reasonCounts = _swapReasonCounts(entries);
-    final recommendations = _stretchRecommendationsForReasons(reasonCounts);
+    final complaintCounts = _exerciseComplaintCounts(entries);
+    final recommendations = _stretchRecommendationsForComplaints(
+      complaintCounts,
+    );
 
     return Container(
       width: double.infinity,
@@ -647,9 +649,9 @@ class _StretchRecommendationsPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              if (reasonCounts.isNotEmpty)
+              if (complaintCounts.isNotEmpty)
                 Text(
-                  reasonCounts.keys.first,
+                  complaintCounts.keys.first,
                   style: const TextStyle(
                     color: Color(0xFF31E981),
                     fontWeight: FontWeight.w900,
@@ -659,14 +661,28 @@ class _StretchRecommendationsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            reasonCounts.isEmpty
-                ? 'Log exercise swap reasons to tune this section.'
-                : 'Based on your most common swap reasons.',
+            complaintCounts.isEmpty
+                ? 'Log pain, tightness, or swap reasons to tune this section.'
+                : 'Based on your most common exercise complaints.',
             style: const TextStyle(
               color: Color(0xFFD8E2FF),
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (complaintCounts.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final complaint in complaintCounts.entries.take(3))
+                  _MetricPill(
+                    label: complaint.key,
+                    value: '${complaint.value}',
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           for (final recommendation in recommendations)
             Padding(
@@ -4032,6 +4048,9 @@ const _swapReasons = [
   'Wrist / RSI',
   'Knee discomfort',
   'Shoulder discomfort',
+  'Hip tightness',
+  'Elbow discomfort',
+  'Neck tightness',
   'Form feels off',
   'Too fatigued',
 ];
@@ -4776,32 +4795,18 @@ int _estimatedWorkoutCalories({
   return (activeCalories + restCalories).round();
 }
 
-Map<String, int> _swapReasonCounts(List<PersonalLogEntry> entries) {
+Map<String, int> _exerciseComplaintCounts(List<PersonalLogEntry> entries) {
   final counts = <String, int>{};
 
   for (final entry in entries) {
     if (entry.category != PersonalLogCategory.gym) continue;
 
     final content = '${entry.metric}\n${entry.notes}';
-    var matched = false;
+    final complaints = _exerciseComplaintsFromContent(content);
 
-    for (final match in RegExp(
-      r'Swap reason:\s*([^|\n]+)',
-      caseSensitive: false,
-    ).allMatches(content)) {
-      final reason = _normaliseSwapReason(match.group(1) ?? '');
-
-      if (reason.isEmpty) continue;
-      counts.update(reason, (value) => value + 1, ifAbsent: () => 1);
-      matched = true;
+    for (final complaint in complaints) {
+      counts.update(complaint, (value) => value + 1, ifAbsent: () => 1);
     }
-
-    if (matched) continue;
-
-    final inferredReason = _inferSwapReason(content);
-
-    if (inferredReason.isEmpty) continue;
-    counts.update(inferredReason, (value) => value + 1, ifAbsent: () => 1);
   }
 
   final sorted = counts.entries.toList()
@@ -4815,22 +4820,114 @@ Map<String, int> _swapReasonCounts(List<PersonalLogEntry> entries) {
   return Map<String, int>.fromEntries(sorted);
 }
 
-String _swapReasonSignature(List<PersonalLogEntry> entries) {
-  final counts = _swapReasonCounts(entries);
+String _exerciseComplaintSignature(List<PersonalLogEntry> entries) {
+  final counts = _exerciseComplaintCounts(entries);
 
   if (counts.isEmpty) return 'none:${entries.length}';
 
   return counts.entries.map((entry) => '${entry.key}:${entry.value}').join('|');
 }
 
-String _normaliseSwapReason(String value) {
+Set<String> _exerciseComplaintsFromContent(String content) {
+  final complaints = <String>{};
+
+  for (final match in RegExp(
+    r'Swap reason:\s*([^|\n]+)',
+    caseSensitive: false,
+  ).allMatches(content)) {
+    final complaint = _normaliseExerciseComplaint(match.group(1) ?? '');
+
+    if (complaint.isNotEmpty) complaints.add(complaint);
+  }
+
+  final lower = content.toLowerCase();
+  final hasComplaintLanguage = RegExp(
+    r'\b(pain|sore|ache|aching|tight|tightness|discomfort|niggle|strain|'
+    r'pinch|sharp|twinge|stiff|stiffness|rsi|fatigue|tired|form)\b',
+  ).hasMatch(lower);
+
+  void addIf(bool condition, String complaint) {
+    if (!condition) return;
+    complaints.add(complaint);
+  }
+
+  addIf(
+    lower.contains('lower back') ||
+        lower.contains('low back') ||
+        lower.contains('back pain') ||
+        lower.contains('sciatic') ||
+        lower.contains('sciatica'),
+    'Lower back pain',
+  );
+  addIf(
+    hasComplaintLanguage &&
+        (lower.contains('wrist') ||
+            lower.contains('forearm') ||
+            lower.contains('rsi')),
+    'Wrist / RSI',
+  );
+  addIf(hasComplaintLanguage && lower.contains('elbow'), 'Elbow discomfort');
+  addIf(hasComplaintLanguage && lower.contains('knee'), 'Knee discomfort');
+  addIf(
+    hasComplaintLanguage &&
+        (lower.contains('shoulder') || lower.contains('rotator cuff')),
+    'Shoulder discomfort',
+  );
+  addIf(
+    hasComplaintLanguage &&
+        (lower.contains('hip') ||
+            lower.contains('glute') ||
+            lower.contains('hip flexor')),
+    'Hip tightness',
+  );
+  addIf(
+    hasComplaintLanguage &&
+        (lower.contains('neck') ||
+            lower.contains('trap') ||
+            lower.contains('upper back')),
+    'Neck tightness',
+  );
+  addIf(
+    lower.contains('machine busy') || lower.contains('taken'),
+    'Machine busy',
+  );
+  addIf(
+    lower.contains('equipment unavailable') ||
+        lower.contains('equipment') && lower.contains('unavailable'),
+    'Equipment unavailable',
+  );
+  addIf(
+    lower.contains('form feels off') ||
+        lower.contains('bad form') ||
+        lower.contains('form broke') ||
+        lower.contains('form breakdown'),
+    'Form feels off',
+  );
+  addIf(
+    lower.contains('too fatigued') ||
+        lower.contains('fatigue') ||
+        lower.contains('tired'),
+    'Too fatigued',
+  );
+
+  return complaints;
+}
+
+String _normaliseExerciseComplaint(String value) {
   final lower = value.trim().toLowerCase();
 
   if (lower.isEmpty) return '';
   if (lower.contains('back')) return 'Lower back pain';
   if (lower.contains('rsi') || lower.contains('wrist')) return 'Wrist / RSI';
+  if (lower.contains('elbow')) return 'Elbow discomfort';
   if (lower.contains('knee')) return 'Knee discomfort';
   if (lower.contains('shoulder')) return 'Shoulder discomfort';
+  if (lower.contains('hip') || lower.contains('glute')) {
+    return 'Hip tightness';
+  }
+  if (lower.contains('neck') || lower.contains('trap')) {
+    return 'Neck tightness';
+  }
   if (lower.contains('busy')) return 'Machine busy';
   if (lower.contains('equipment') || lower.contains('taken')) {
     return 'Equipment unavailable';
@@ -4847,24 +4944,8 @@ String _normaliseSwapReason(String value) {
   return value.trim();
 }
 
-String _inferSwapReason(String content) {
-  final lower = content.toLowerCase();
-
-  if (lower.contains('lower back') || lower.contains('low back')) {
-    return 'Lower back pain';
-  }
-  if (lower.contains('rsi') || lower.contains('wrist')) return 'Wrist / RSI';
-  if (lower.contains('knee')) return 'Knee discomfort';
-  if (lower.contains('shoulder')) return 'Shoulder discomfort';
-  if (lower.contains('machine busy') || lower.contains('taken')) {
-    return 'Machine busy';
-  }
-
-  return '';
-}
-
-List<_StretchRecommendation> _stretchRecommendationsForReasons(
-  Map<String, int> reasonCounts,
+List<_StretchRecommendation> _stretchRecommendationsForComplaints(
+  Map<String, int> complaintCounts,
 ) {
   final recommendations = <_StretchRecommendation>[];
   final titles = <String>{};
@@ -4874,11 +4955,12 @@ List<_StretchRecommendation> _stretchRecommendationsForReasons(
     recommendations.add(recommendation);
   }
 
-  if (reasonCounts.isEmpty) {
+  if (complaintCounts.isEmpty) {
     add(
       const _StretchRecommendation(
-        title: 'Log swap reasons',
-        detail: 'Pick a reason when you swap an exercise and this will adapt.',
+        title: 'Log pain areas',
+        detail:
+            'Write pain, tightness, or swap reasons in workout notes to adapt.',
         icon: Icons.flag_outlined,
       ),
     );
@@ -4893,8 +4975,8 @@ List<_StretchRecommendation> _stretchRecommendationsForReasons(
     return recommendations;
   }
 
-  for (final reason in reasonCounts.keys.take(3)) {
-    switch (reason) {
+  for (final complaint in complaintCounts.keys.take(4)) {
+    switch (complaint) {
       case 'Lower back pain':
         add(
           const _StretchRecommendation(
@@ -4927,12 +5009,48 @@ List<_StretchRecommendation> _stretchRecommendationsForReasons(
           ),
         );
         break;
+      case 'Elbow discomfort':
+        add(
+          const _StretchRecommendation(
+            title: 'Elbow and forearm reset',
+            detail:
+                'Use wrist flexor/extensor stretches, then lighter neutral-grip work.',
+            icon: Icons.back_hand_outlined,
+          ),
+        );
+        break;
       case 'Knee discomfort':
         add(
           const _StretchRecommendation(
             title: 'Hip-first warm-up',
             detail: 'Low lunge hip opener, then controlled reverse crunches.',
             icon: Icons.directions_walk_rounded,
+          ),
+        );
+        break;
+      case 'Hip tightness':
+        add(
+          const _StretchRecommendation(
+            title: 'Hip opener focus',
+            detail: 'Use low lunge hip opener before squats, lunges, and abs.',
+            icon: Icons.self_improvement_rounded,
+          ),
+        );
+        add(
+          const _StretchRecommendation(
+            title: 'Glute bridge reset',
+            detail: 'Add light glute bridges before loading hip hinges.',
+            icon: Icons.directions_walk_rounded,
+          ),
+        );
+        break;
+      case 'Neck tightness':
+        add(
+          const _StretchRecommendation(
+            title: 'Neck and trap unload',
+            detail:
+                'Do slow neck side bends and shoulder blade squeezes before pressing.',
+            icon: Icons.accessibility_new_rounded,
           ),
         );
         break;
