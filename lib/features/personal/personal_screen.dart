@@ -313,7 +313,9 @@ class _WorkoutSplitCard extends StatelessWidget {
               ),
               if (split.name == 'Stretch + Abs') ...[
                 const SizedBox(height: 10),
-                _StretchRecommendationsPanel(entries: gymEntries),
+                _StretchRecommendationsPanel(
+                  key: ValueKey(_swapReasonSignature(gymEntries)),
+                ),
               ],
               const SizedBox(height: 10),
               for (final exercise in split.exercises)
@@ -605,12 +607,15 @@ class _MetricPill extends StatelessWidget {
 }
 
 class _StretchRecommendationsPanel extends StatelessWidget {
-  const _StretchRecommendationsPanel({required this.entries});
-
-  final List<PersonalLogEntry> entries;
+  const _StretchRecommendationsPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final entries = context.select<AppState, List<PersonalLogEntry>>(
+      (appState) => appState.personalLogEntries
+          .where((entry) => entry.category == PersonalLogCategory.gym)
+          .toList(),
+    );
     final reasonCounts = _swapReasonCounts(entries);
     final recommendations = _stretchRecommendationsForReasons(reasonCounts);
 
@@ -4808,6 +4813,14 @@ Map<String, int> _swapReasonCounts(List<PersonalLogEntry> entries) {
     });
 
   return Map<String, int>.fromEntries(sorted);
+}
+
+String _swapReasonSignature(List<PersonalLogEntry> entries) {
+  final counts = _swapReasonCounts(entries);
+
+  if (counts.isEmpty) return 'none:${entries.length}';
+
+  return counts.entries.map((entry) => '${entry.key}:${entry.value}').join('|');
 }
 
 String _normaliseSwapReason(String value) {
