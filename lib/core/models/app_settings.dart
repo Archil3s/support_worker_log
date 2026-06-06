@@ -17,6 +17,10 @@ class AppSettings {
     this.googleDriveInvoicesFolderId,
     this.googleDriveReferralsFolderId,
     this.googleDrivePersonalNotesFolderId,
+    this.googleWorkAccountEmail,
+    this.googlePersonalAccountEmail,
+    this.personalGoogleDriveRootFolderId,
+    this.personalGoogleDrivePersonalNotesFolderId,
   });
 
   static const defaultNoteOptions = [
@@ -60,6 +64,10 @@ class AppSettings {
   final String? googleDriveInvoicesFolderId;
   final String? googleDriveReferralsFolderId;
   final String? googleDrivePersonalNotesFolderId;
+  final String? googleWorkAccountEmail;
+  final String? googlePersonalAccountEmail;
+  final String? personalGoogleDriveRootFolderId;
+  final String? personalGoogleDrivePersonalNotesFolderId;
 
   AppSettings copyWith({
     double? hourlyRate,
@@ -80,7 +88,12 @@ class AppSettings {
     String? googleDriveInvoicesFolderId,
     String? googleDriveReferralsFolderId,
     String? googleDrivePersonalNotesFolderId,
+    String? googleWorkAccountEmail,
+    String? googlePersonalAccountEmail,
+    String? personalGoogleDriveRootFolderId,
+    String? personalGoogleDrivePersonalNotesFolderId,
     bool clearGoogleDriveFolders = false,
+    bool clearPersonalGoogleDriveFolders = false,
   }) {
     return AppSettings(
       hourlyRate: hourlyRate ?? this.hourlyRate,
@@ -119,6 +132,18 @@ class AppSettings {
           ? null
           : googleDrivePersonalNotesFolderId ??
                 this.googleDrivePersonalNotesFolderId,
+      googleWorkAccountEmail:
+          googleWorkAccountEmail ?? this.googleWorkAccountEmail,
+      googlePersonalAccountEmail:
+          googlePersonalAccountEmail ?? this.googlePersonalAccountEmail,
+      personalGoogleDriveRootFolderId: clearPersonalGoogleDriveFolders
+          ? null
+          : personalGoogleDriveRootFolderId ??
+                this.personalGoogleDriveRootFolderId,
+      personalGoogleDrivePersonalNotesFolderId: clearPersonalGoogleDriveFolders
+          ? null
+          : personalGoogleDrivePersonalNotesFolderId ??
+                this.personalGoogleDrivePersonalNotesFolderId,
     );
   }
 
@@ -141,6 +166,11 @@ class AppSettings {
       'googleDriveInvoicesFolderId': googleDriveInvoicesFolderId,
       'googleDriveReferralsFolderId': googleDriveReferralsFolderId,
       'googleDrivePersonalNotesFolderId': googleDrivePersonalNotesFolderId,
+      'googleWorkAccountEmail': googleWorkAccountEmail,
+      'googlePersonalAccountEmail': googlePersonalAccountEmail,
+      'personalGoogleDriveRootFolderId': personalGoogleDriveRootFolderId,
+      'personalGoogleDrivePersonalNotesFolderId':
+          personalGoogleDrivePersonalNotesFolderId,
     };
   }
 
@@ -206,6 +236,14 @@ class AppSettings {
       googleDriveReferralsFolderId: readString('googleDriveReferralsFolderId'),
       googleDrivePersonalNotesFolderId: readString(
         'googleDrivePersonalNotesFolderId',
+      ),
+      googleWorkAccountEmail: readString('googleWorkAccountEmail'),
+      googlePersonalAccountEmail: readString('googlePersonalAccountEmail'),
+      personalGoogleDriveRootFolderId: readString(
+        'personalGoogleDriveRootFolderId',
+      ),
+      personalGoogleDrivePersonalNotesFolderId: readString(
+        'personalGoogleDrivePersonalNotesFolderId',
       ),
     );
   }

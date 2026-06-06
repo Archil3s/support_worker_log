@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/app_settings.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/google_drive_file.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/state/app_state.dart';
@@ -24,7 +25,9 @@ class _DriveScreenState extends State<DriveScreen> {
   final GoogleDriveService driveService = GoogleDriveService();
 
   bool connecting = false;
+  bool connectingPersonal = false;
   bool creatingFolders = false;
+  bool creatingPersonalFolders = false;
   bool uploadingTemplates = false;
   bool loadingFiles = false;
   String? message;
@@ -32,8 +35,10 @@ class _DriveScreenState extends State<DriveScreen> {
   List<GoogleDriveFile> rootFiles = const [];
   List<GoogleDriveFile> templateFiles = const [];
 
-  Future<String> _connectDrive() async {
-    final token = await context.read<AppState>().connectGoogleDrive();
+  Future<String> _connectDrive(GoogleExportAccountScope scope) async {
+    final token = await context.read<AppState>().connectGoogleDrive(
+      scope: scope,
+    );
     return token;
   }
 
@@ -41,8 +46,17 @@ class _DriveScreenState extends State<DriveScreen> {
     await _run(
       busy: () => connecting = true,
       idle: () => connecting = false,
-      successMessage: 'Google Drive and Calendar connected.',
-      action: _connectDrive,
+      successMessage: 'Work Google Drive and Calendar connected.',
+      action: () => _connectDrive(GoogleExportAccountScope.work),
+    );
+  }
+
+  Future<void> _connectPersonal() async {
+    await _run(
+      busy: () => connectingPersonal = true,
+      idle: () => connectingPersonal = false,
+      successMessage: 'Personal Google Drive and Calendar connected.',
+      action: () => _connectDrive(GoogleExportAccountScope.personal),
     );
   }
 
@@ -53,10 +67,26 @@ class _DriveScreenState extends State<DriveScreen> {
       successMessage: 'Google Drive folders created.',
       action: () async {
         final appState = context.read<AppState>();
-        final token = await appState.connectGoogleDrive();
+        final token = await appState.connectWorkGoogle();
         final setup = await driveService.createFolderSetup(accessToken: token);
         appState.updateSettings(setup.applyTo(appState.settings));
         await _loadFilesWithToken(token, setup.applyTo(appState.settings));
+      },
+    );
+  }
+
+  Future<void> _createPersonalFolders() async {
+    await _run(
+      busy: () => creatingPersonalFolders = true,
+      idle: () => creatingPersonalFolders = false,
+      successMessage: 'Personal Google Drive folder created.',
+      action: () async {
+        final appState = context.read<AppState>();
+        final token = await appState.connectPersonalGoogle();
+        final setup = await driveService.createPersonalFolderSetup(
+          accessToken: token,
+        );
+        appState.updateSettings(setup.applyTo(appState.settings));
       },
     );
   }
@@ -74,7 +104,7 @@ class _DriveScreenState extends State<DriveScreen> {
           throw StateError('Create the Google Drive folders first.');
         }
 
-        final token = await appState.connectGoogleDrive();
+        final token = await appState.connectWorkGoogle();
         await driveService.uploadDefaultTemplates(
           accessToken: token,
           templatesFolderId: folderId,
@@ -91,7 +121,7 @@ class _DriveScreenState extends State<DriveScreen> {
       successMessage: 'Google Drive folders refreshed.',
       action: () async {
         final appState = context.read<AppState>();
-        final token = await appState.connectGoogleDrive();
+        final token = await appState.connectWorkGoogle();
         await _loadFilesWithToken(token, appState.settings);
       },
     );
@@ -191,8 +221,16 @@ class _DriveScreenState extends State<DriveScreen> {
     final foldersReady =
         settings.googleDriveRootFolderId != null &&
         settings.googleDriveTemplatesFolderId != null;
+    final personalFoldersReady =
+        settings.personalGoogleDriveRootFolderId != null &&
+        settings.personalGoogleDrivePersonalNotesFolderId != null;
     final anyBusy =
-        connecting || creatingFolders || uploadingTemplates || loadingFiles;
+        connecting ||
+        connectingPersonal ||
+        creatingFolders ||
+        creatingPersonalFolders ||
+        uploadingTemplates ||
+        loadingFiles;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -204,11 +242,11 @@ class _DriveScreenState extends State<DriveScreen> {
             children: [
               _StatusRow(
                 icon: Icons.cloud_done_outlined,
-                label: 'Drive + Calendar connection',
-                value: appState.googleServicesConnected
-                    ? 'Connected'
+                label: 'Work Google account',
+                value: appState.workGoogleServicesConnected
+                    ? appState.workGoogleAccountEmail ?? 'Connected'
                     : 'Not connected',
-                color: appState.googleServicesConnected
+                color: appState.workGoogleServicesConnected
                     ? const Color(0xFF31E981)
                     : const Color(0xFFFFC857),
               ),
@@ -232,7 +270,7 @@ class _DriveScreenState extends State<DriveScreen> {
                 label: Text(
                   connecting
                       ? 'Connecting Google Services'
-                      : 'Connect Drive + Calendar',
+                      : 'Connect Work Google',
                 ),
               ),
               const SizedBox(height: 10),
@@ -297,6 +335,77 @@ class _DriveScreenState extends State<DriveScreen> {
         ),
         const SizedBox(height: 12),
         SectionCard(
+          title: 'Personal Google Drive',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _StatusRow(
+                icon: Icons.cloud_done_outlined,
+                label: 'Personal Google account',
+                value: appState.personalGoogleServicesConnected
+                    ? appState.personalGoogleAccountEmail ?? 'Connected'
+                    : 'Not connected',
+                color: appState.personalGoogleServicesConnected
+                    ? const Color(0xFF31E981)
+                    : const Color(0xFFFFC857),
+              ),
+              _StatusRow(
+                icon: Icons.folder_outlined,
+                label: 'Personal folder',
+                value: personalFoldersReady ? 'Saved' : 'Not created',
+                color: personalFoldersReady
+                    ? const Color(0xFF31E981)
+                    : const Color(0xFFFFC857),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: connectingPersonal || anyBusy
+                    ? null
+                    : _connectPersonal,
+                icon: connectingPersonal
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.person_add_alt_outlined),
+                label: Text(
+                  connectingPersonal
+                      ? 'Connecting Personal Google'
+                      : 'Connect Personal Google',
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: creatingPersonalFolders || anyBusy
+                    ? null
+                    : _createPersonalFolders,
+                icon: creatingPersonalFolders
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.create_new_folder_outlined),
+                label: Text(
+                  personalFoldersReady
+                      ? 'Recreate Personal Folder'
+                      : 'Create Personal Folder',
+                ),
+              ),
+              if (settings.personalGoogleDriveRootFolderId != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _openDriveFolder(
+                    settings.personalGoogleDriveRootFolderId!,
+                  ),
+                  icon: const Icon(Icons.open_in_new_outlined),
+                  label: const Text('Open Personal Drive Folder'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
           title: 'Drive Folders',
           child: _FolderList(settings: settings),
         ),
@@ -346,13 +455,20 @@ class _FolderList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final folders = [
-      ('Support Worker Log', settings.googleDriveRootFolderId),
-      ('Templates', settings.googleDriveTemplatesFolderId),
-      ('Client Notes', settings.googleDriveClientNotesFolderId),
-      ('Calendar Exports', settings.googleDriveCalendarExportsFolderId),
-      ('Invoices', settings.googleDriveInvoicesFolderId),
-      ('Referrals', settings.googleDriveReferralsFolderId),
-      ('Personal Notes', settings.googleDrivePersonalNotesFolderId),
+      ('Work - Support Worker Log', settings.googleDriveRootFolderId),
+      ('Work - Templates', settings.googleDriveTemplatesFolderId),
+      ('Work - Client Notes', settings.googleDriveClientNotesFolderId),
+      ('Work - Calendar Exports', settings.googleDriveCalendarExportsFolderId),
+      ('Work - Invoices', settings.googleDriveInvoicesFolderId),
+      ('Work - Referrals', settings.googleDriveReferralsFolderId),
+      (
+        'Personal - Support Worker Log',
+        settings.personalGoogleDriveRootFolderId,
+      ),
+      (
+        'Personal - Personal Notes',
+        settings.personalGoogleDrivePersonalNotesFolderId,
+      ),
     ];
 
     return Column(

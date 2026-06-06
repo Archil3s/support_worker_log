@@ -8,9 +8,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/active_visit.dart';
 import '../../core/models/entry_type.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
+import '../../shared/widgets/google_account_connection_card.dart';
 
 String _cleanHeaderText(String value) {
   return value
@@ -2004,6 +2006,8 @@ class _StartVisitView extends StatelessWidget {
               'Tap client, tap support type, choose the visit date, then press Start Now.',
           icon: Icons.play_arrow_rounded,
         ),
+        const SizedBox(height: 12),
+        const GoogleAccountConnectionCard(scope: GoogleExportAccountScope.work),
         const SizedBox(height: 12),
         _Panel(
           title: 'Visit Date',

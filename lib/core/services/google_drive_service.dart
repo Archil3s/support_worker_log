@@ -45,6 +45,23 @@ class GoogleDriveFolderSetup {
   }
 }
 
+class GoogleDrivePersonalFolderSetup {
+  const GoogleDrivePersonalFolderSetup({
+    required this.rootFolder,
+    required this.personalNotesFolder,
+  });
+
+  final GoogleDriveFile rootFolder;
+  final GoogleDriveFile personalNotesFolder;
+
+  AppSettings applyTo(AppSettings settings) {
+    return settings.copyWith(
+      personalGoogleDriveRootFolderId: rootFolder.id,
+      personalGoogleDrivePersonalNotesFolderId: personalNotesFolder.id,
+    );
+  }
+}
+
 class GoogleDriveTemplateUpload {
   const GoogleDriveTemplateUpload({required this.name, required this.file});
 
@@ -64,6 +81,7 @@ class EntryDriveSupportNoteMeta {
     this.parentFolderId,
     this.webViewLink,
     this.contentFormat,
+    this.googleAccountEmail,
   });
 
   static const googleDocsMimeType = 'application/vnd.google-apps.document';
@@ -79,6 +97,7 @@ class EntryDriveSupportNoteMeta {
   final String? parentFolderId;
   final String? webViewLink;
   final String? contentFormat;
+  final String? googleAccountEmail;
 
   String? get openLink {
     final link = webViewLink?.trim();
@@ -112,6 +131,7 @@ class EntryDriveSupportNoteMeta {
     String? parentFolderId,
     String? webViewLink,
     String? contentFormat,
+    String? googleAccountEmail,
   }) {
     return EntryDriveSupportNoteMeta(
       entryId: entryId,
@@ -124,6 +144,7 @@ class EntryDriveSupportNoteMeta {
       parentFolderId: parentFolderId ?? this.parentFolderId,
       webViewLink: webViewLink ?? this.webViewLink,
       contentFormat: contentFormat ?? this.contentFormat,
+      googleAccountEmail: googleAccountEmail ?? this.googleAccountEmail,
     );
   }
 
@@ -139,6 +160,7 @@ class EntryDriveSupportNoteMeta {
       'parentFolderId': parentFolderId,
       'webViewLink': webViewLink,
       'contentFormat': contentFormat,
+      'googleAccountEmail': googleAccountEmail,
     };
   }
 
@@ -160,6 +182,7 @@ class EntryDriveSupportNoteMeta {
       parentFolderId: json['parentFolderId'] as String?,
       webViewLink: json['webViewLink'] as String?,
       contentFormat: json['contentFormat'] as String?,
+      googleAccountEmail: json['googleAccountEmail'] as String?,
     );
   }
 }
@@ -273,6 +296,25 @@ class GoogleDriveService {
       calendarExportsFolder: calendarExports,
       invoicesFolder: invoices,
       referralsFolder: referrals,
+      personalNotesFolder: personalNotes,
+    );
+  }
+
+  Future<GoogleDrivePersonalFolderSetup> createPersonalFolderSetup({
+    required String accessToken,
+  }) async {
+    final root = await _api.createFolder(
+      accessToken: accessToken,
+      name: 'Support Worker Log - Personal',
+    );
+    final personalNotes = await _api.createFolder(
+      accessToken: accessToken,
+      name: 'Personal Notes',
+      parentId: root.id,
+    );
+
+    return GoogleDrivePersonalFolderSetup(
+      rootFolder: root,
       personalNotesFolder: personalNotes,
     );
   }
@@ -534,6 +576,7 @@ class GoogleDriveService {
     required String noteText,
     DateTime? payPeriodAnchorDate,
     EntryDriveSupportNoteMeta? existingMeta,
+    String? googleAccountEmail,
   }) async {
     final cleanedInitials = initials.trim().toUpperCase();
 
@@ -561,7 +604,17 @@ class GoogleDriveService {
     );
     final existingFileId = existingMeta?.fileId.trim();
     final existingParentFolderId = existingMeta?.parentFolderId?.trim();
+    final currentGoogleAccountEmail = googleAccountEmail?.trim();
+    final existingGoogleAccountEmail = existingMeta?.googleAccountEmail?.trim();
+    final sameGoogleAccount =
+        currentGoogleAccountEmail == null ||
+        currentGoogleAccountEmail.isEmpty ||
+        (existingGoogleAccountEmail != null &&
+            existingGoogleAccountEmail.isNotEmpty &&
+            existingGoogleAccountEmail.toLowerCase() ==
+                currentGoogleAccountEmail.toLowerCase());
     final canUpdateExistingDocx =
+        sameGoogleAccount &&
         existingMeta?.mimeType == _docxMimeType &&
         existingFileId != null &&
         existingFileId.isNotEmpty;
@@ -606,6 +659,7 @@ class GoogleDriveService {
       parentFolderId: periodFolder.id,
       webViewLink: file.webViewLink,
       contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+      googleAccountEmail: currentGoogleAccountEmail,
     );
     await saveSupportNoteMeta(meta);
 

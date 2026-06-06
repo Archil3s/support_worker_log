@@ -216,6 +216,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       final appState = context.read<AppState>();
       final token = await appState.connectGoogleDrive();
       final clientNotesFolderId = await _clientNotesFolderId(appState, token);
+      final googleAccountEmail = appState.workGoogleAccountEmail;
       final updated = await driveService.saveSupportNote(
         accessToken: token,
         clientNotesFolderId: clientNotesFolderId,
@@ -224,7 +225,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         status: status,
         noteText: noteController.text,
         payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
-        existingMeta: driveMeta,
+        existingMeta: _driveMetaForAccount(driveMeta, googleAccountEmail),
+        googleAccountEmail: googleAccountEmail,
       );
 
       if (!mounted) return;
@@ -304,11 +306,20 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   Future<void> _openGoogleDriveNote() async {
     final current = driveMeta;
+    final appState = context.read<AppState>();
+    final accountMeta = _driveMetaForAccount(
+      current,
+      appState.workGoogleAccountEmail,
+    );
     final link = current?.openLink;
 
-    if (current == null || link == null || link.isEmpty) {
+    if (current == null ||
+        accountMeta == null ||
+        link == null ||
+        link.isEmpty) {
       setState(() {
-        message = 'Save the Google Drive note file first.';
+        message =
+            'Save the Google Drive note file under the selected Work account first.';
       });
       return;
     }
@@ -318,11 +329,17 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   Future<void> _openGoogleDriveFolder() async {
     final current = driveMeta;
+    final appState = context.read<AppState>();
+    final accountMeta = _driveMetaForAccount(
+      current,
+      appState.workGoogleAccountEmail,
+    );
     final link = current?.folderOpenLink;
 
-    if (current == null) {
+    if (current == null || accountMeta == null) {
       setState(() {
-        message = 'Save the Google Drive note file first.';
+        message =
+            'Save the Google Drive note file under the selected Work account first.';
       });
       return;
     }
@@ -338,7 +355,6 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     });
 
     try {
-      final appState = context.read<AppState>();
       final token = await appState.connectGoogleDrive();
       final clientNotesFolderId = await _clientNotesFolderId(appState, token);
       final folder = await driveService.findOrCreateSupportNoteFolder(
@@ -539,6 +555,21 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       ),
     );
   }
+}
+
+EntryDriveSupportNoteMeta? _driveMetaForAccount(
+  EntryDriveSupportNoteMeta? meta,
+  String? accountEmail,
+) {
+  if (meta == null) return null;
+
+  final selected = accountEmail?.trim().toLowerCase();
+  final saved = meta.googleAccountEmail?.trim().toLowerCase();
+
+  if (selected == null || selected.isEmpty) return meta;
+  if (saved == null || saved.isEmpty) return null;
+
+  return saved == selected ? meta : null;
 }
 
 Color _statusColor(EntrySupportNoteStatus status) {

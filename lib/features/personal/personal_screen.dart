@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/personal_log_entry.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/google_account_connection_card.dart';
 import '../../shared/widgets/section_card.dart';
 
 class PersonalScreen extends StatefulWidget {
@@ -107,6 +109,10 @@ class _PersonalScreenState extends State<PersonalScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
+        const GoogleAccountConnectionCard(
+          scope: GoogleExportAccountScope.personal,
+        ),
+        const SizedBox(height: 12),
         SectionCard(
           title: 'Personal Mode',
           child: Column(
@@ -294,6 +300,8 @@ class _WorkoutSplitCard extends StatelessWidget {
                 _FocusNote(text: split.focus),
                 const SizedBox(height: 10),
               ],
+              _SplitExerciseInsightsPanel(split: split, gymEntries: gymEntries),
+              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -303,6 +311,10 @@ class _WorkoutSplitCard extends StatelessWidget {
                   label: const Text('Start Flexible Workout'),
                 ),
               ),
+              if (split.name == 'Stretch + Abs') ...[
+                const SizedBox(height: 10),
+                _StretchRecommendationsPanel(entries: gymEntries),
+              ],
               const SizedBox(height: 10),
               for (final exercise in split.exercises)
                 _WorkoutExerciseRow(
@@ -349,6 +361,126 @@ class _FocusNote extends StatelessWidget {
           fontWeight: FontWeight.w800,
           height: 1.35,
         ),
+      ),
+    );
+  }
+}
+
+class _SplitExerciseInsightsPanel extends StatelessWidget {
+  const _SplitExerciseInsightsPanel({
+    required this.split,
+    required this.gymEntries,
+  });
+
+  final _WorkoutSplit split;
+  final List<PersonalLogEntry> gymEntries;
+
+  @override
+  Widget build(BuildContext context) {
+    final logs = _logsForSplit(split, gymEntries);
+    final baselines = _performanceBaselines(logs);
+    final exerciseCounts = {
+      for (final exercise in split.exercises)
+        exercise.name: logs
+            .where((log) => _sameExercise(log.exerciseName, exercise.name))
+            .length,
+    };
+    final leastLogged = exerciseCounts.entries.reduce((current, next) {
+      if (next.value < current.value) return next;
+      return current;
+    });
+    final bestScore = logs.fold<double>(0, (best, log) {
+      final score = _smartScoreForLog(log, baselines);
+      return score > best ? score : best;
+    });
+    final sets = logs.fold<int>(0, (total, log) => total + log.sets);
+    final reps = logs.fold<int>(0, (total, log) => total + log.reps);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_rounded, color: Color(0xFF31E981)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${split.name} data',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                logs.isEmpty ? 'New' : '${_formatCompactNumber(bestScore)}%',
+                style: const TextStyle(
+                  color: Color(0xFF31E981),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetricPill(label: 'Logs', value: '${logs.length}'),
+              _MetricPill(label: 'Sets', value: '$sets'),
+              _MetricPill(label: 'Reps', value: '$reps'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _splitPrompt(split, logs, leastLogged.key),
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+              height: 1.35,
+            ),
+          ),
+          if (logs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final row in _exerciseInsightRows(split, logs).take(4))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        row.exerciseName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFB5C3EA),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      row.detail,
+                      style: const TextStyle(
+                        color: Color(0xFF8396C7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }
@@ -466,6 +598,109 @@ class _MetricPill extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StretchRecommendationsPanel extends StatelessWidget {
+  const _StretchRecommendationsPanel({required this.entries});
+
+  final List<PersonalLogEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final reasonCounts = _swapReasonCounts(entries);
+    final recommendations = _stretchRecommendationsForReasons(reasonCounts);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.self_improvement_rounded,
+                color: Color(0xFF31E981),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Stretch focus',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (reasonCounts.isNotEmpty)
+                Text(
+                  reasonCounts.keys.first,
+                  style: const TextStyle(
+                    color: Color(0xFF31E981),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            reasonCounts.isEmpty
+                ? 'Log exercise swap reasons to tune this section.'
+                : 'Based on your most common swap reasons.',
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final recommendation in recommendations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    recommendation.icon,
+                    color: const Color(0xFF4F8DF7),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          recommendation.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          recommendation.detail,
+                          style: const TextStyle(
+                            color: Color(0xFFB5C3EA),
+                            fontWeight: FontWeight.w700,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -692,7 +927,7 @@ class _GymProgressAnalytics extends StatefulWidget {
 
 class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
   String selectedExercise = _allExercisesLabel;
-  _GymChartMetric selectedMetric = _GymChartMetric.estimatedMax;
+  _GymChartMetric selectedMetric = _GymChartMetric.smartScore;
 
   @override
   Widget build(BuildContext context) {
@@ -743,33 +978,41 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
           },
         ),
         const SizedBox(height: 12),
-        SegmentedButton<_GymChartMetric>(
-          segments: const [
-            ButtonSegment(
-              value: _GymChartMetric.estimatedMax,
-              icon: Icon(Icons.stacked_line_chart_rounded),
-              label: Text('Est max'),
-            ),
-            ButtonSegment(
-              value: _GymChartMetric.bestWeight,
-              icon: Icon(Icons.scale_rounded),
-              label: Text('Weight'),
-            ),
-            ButtonSegment(
-              value: _GymChartMetric.sets,
-              icon: Icon(Icons.format_list_numbered_rounded),
-              label: Text('Sets'),
-            ),
-            ButtonSegment(
-              value: _GymChartMetric.reps,
-              icon: Icon(Icons.repeat_rounded),
-              label: Text('Reps'),
-            ),
-          ],
-          selected: {selectedMetric},
-          onSelectionChanged: (values) {
-            setState(() => selectedMetric = values.first);
-          },
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SegmentedButton<_GymChartMetric>(
+            segments: const [
+              ButtonSegment(
+                value: _GymChartMetric.smartScore,
+                icon: Icon(Icons.psychology_rounded),
+                label: Text('Smart'),
+              ),
+              ButtonSegment(
+                value: _GymChartMetric.estimatedMax,
+                icon: Icon(Icons.stacked_line_chart_rounded),
+                label: Text('Est max'),
+              ),
+              ButtonSegment(
+                value: _GymChartMetric.bestWeight,
+                icon: Icon(Icons.scale_rounded),
+                label: Text('Load'),
+              ),
+              ButtonSegment(
+                value: _GymChartMetric.sets,
+                icon: Icon(Icons.format_list_numbered_rounded),
+                label: Text('Sets'),
+              ),
+              ButtonSegment(
+                value: _GymChartMetric.reps,
+                icon: Icon(Icons.repeat_rounded),
+                label: Text('Reps'),
+              ),
+            ],
+            selected: {selectedMetric},
+            onSelectionChanged: (values) {
+              setState(() => selectedMetric = values.first);
+            },
+          ),
         ),
         const SizedBox(height: 14),
         Wrap(
@@ -777,13 +1020,10 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
           runSpacing: 10,
           children: [
             _MetricPill(
-              label: 'Est max',
-              value: '${_formatCompactNumber(totals.bestEstimatedMaxKg)} kg',
+              label: 'Smart score',
+              value: '${_formatCompactNumber(totals.averageSmartScore)}%',
             ),
-            _MetricPill(
-              label: 'Best kg',
-              value: _formatCompactNumber(totals.bestWeightKg),
-            ),
+            _MetricPill(label: 'Exercises', value: '${totals.uniqueExercises}'),
             _MetricPill(
               label: 'Avg reps/set',
               value: _formatCompactNumber(totals.averageRepsPerSet),
@@ -791,6 +1031,8 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
             _MetricPill(label: 'Sessions', value: '${totals.sessions}'),
           ],
         ),
+        const SizedBox(height: 14),
+        _SmartTrainingPanel(logs: filtered, totals: totals),
         const SizedBox(height: 14),
         _PersonalRecordBoard(logs: filtered),
         const SizedBox(height: 14),
@@ -806,7 +1048,7 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
         const SizedBox(height: 12),
         _WeeklySessionBars(logs: filtered),
         const SizedBox(height: 12),
-        _ExerciseBestWeightBars(logs: filtered),
+        _ExerciseSmartScoreBars(logs: filtered),
         const SizedBox(height: 12),
         _ExerciseHistoryTable(logs: filtered),
         const SizedBox(height: 12),
@@ -825,6 +1067,7 @@ class _GymVisualSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final latest = points.isEmpty ? null : points.last;
+    final latestSmartScore = latest?.smartScore ?? 0;
     final latestEstimatedMax = latest?.bestEstimatedMaxKg ?? 0;
     final maxEstimatedMax = points.fold<double>(
       0,
@@ -844,18 +1087,18 @@ class _GymVisualSummary extends StatelessWidget {
       childAspectRatio: 1.45,
       children: [
         _VisualMetricCard(
-          icon: Icons.bolt_rounded,
-          label: 'Latest est max',
-          value: '${_formatCompactNumber(latestEstimatedMax)} kg',
+          icon: Icons.psychology_rounded,
+          label: 'Latest smart score',
+          value: '${_formatCompactNumber(latestSmartScore)}%',
           color: const Color(0xFF31E981),
-          progress: estimatedMaxProgress,
+          progress: latestSmartScore / 100,
         ),
         _VisualMetricCard(
           icon: Icons.scale_rounded,
-          label: 'Best weight',
-          value: '${_formatCompactNumber(totals.bestWeightKg)} kg',
+          label: 'Latest est max',
+          value: '${_formatCompactNumber(latestEstimatedMax)} kg',
           color: const Color(0xFF4F8DF7),
-          progress: totals.bestWeightKg <= 0 ? 0 : 1,
+          progress: estimatedMaxProgress,
         ),
         _VisualMetricCard(
           icon: Icons.format_list_numbered_rounded,
@@ -872,6 +1115,100 @@ class _GymVisualSummary extends StatelessWidget {
           progress: totals.sessions <= 0 ? 0 : 1,
         ),
       ],
+    );
+  }
+}
+
+class _SmartTrainingPanel extends StatelessWidget {
+  const _SmartTrainingPanel({required this.logs, required this.totals});
+
+  final List<_GymProgressLog> logs;
+  final _GymProgressTotals totals;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final intelligence = _TrainingIntelligence.fromLogs(logs);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.psychology_rounded, color: Color(0xFF31E981)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Smart training readout',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '${_formatCompactNumber(intelligence.overallScore)}%',
+                style: const TextStyle(
+                  color: Color(0xFF31E981),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ProfileBar(
+            label: 'Recent performance',
+            value: intelligence.performanceScore,
+            maxValue: 100,
+            color: const Color(0xFF31E981),
+            suffix: '%',
+          ),
+          const SizedBox(height: 10),
+          _ProfileBar(
+            label: 'Consistency',
+            value: intelligence.consistencyScore,
+            maxValue: 100,
+            color: const Color(0xFF4F8DF7),
+            suffix: '%',
+          ),
+          const SizedBox(height: 10),
+          _ProfileBar(
+            label: 'Exercise coverage',
+            value: intelligence.varietyScore,
+            maxValue: 100,
+            color: const Color(0xFFF59E0B),
+            suffix: '%',
+          ),
+          const SizedBox(height: 10),
+          _ProfileBar(
+            label: 'Split balance',
+            value: intelligence.balanceScore,
+            maxValue: 100,
+            color: const Color(0xFFE879F9),
+            suffix: '%',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            intelligence.nextNudge,
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1138,7 +1475,7 @@ class _RecordCard extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '${_formatCompactNumber(record.estimatedMaxKg)} kg',
+            '${_formatCompactNumber(record.smartScore)}%',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -1148,7 +1485,9 @@ class _RecordCard extends StatelessWidget {
             ),
           ),
           Text(
-            'best ${_formatCompactNumber(record.bestWeightKg)} kg',
+            record.bestWeightKg > 0
+                ? 'best ${_formatCompactNumber(record.bestWeightKg)} kg'
+                : 'best ${record.bestReps} reps',
             style: const TextStyle(
               color: Color(0xFFD8E2FF),
               fontSize: 12,
@@ -1632,14 +1971,15 @@ class _ProgressInsight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final first = logs.isEmpty ? null : logs.first;
-    final latest = logs.isEmpty ? null : logs.last;
-    final firstEstimatedMax = first?.bestEstimatedMaxKg ?? 0;
-    final latestEstimatedMax = latest?.bestEstimatedMaxKg ?? 0;
-    final change = latestEstimatedMax - firstEstimatedMax;
+    final points = _GymProgressPoint.fromLogs(logs);
+    final first = points.isEmpty ? null : points.first;
+    final latest = points.isEmpty ? null : points.last;
+    final firstSmartScore = first?.smartScore ?? 0;
+    final latestSmartScore = latest?.smartScore ?? 0;
+    final change = latestSmartScore - firstSmartScore;
     final changeText = change == 0
-        ? 'No estimated strength change yet'
-        : '${change > 0 ? '+' : ''}${_formatCompactNumber(change)} kg estimated max';
+        ? 'No smart score change yet'
+        : '${change > 0 ? '+' : ''}${_formatCompactNumber(change)}% smart score';
 
     return Container(
       width: double.infinity,
@@ -1659,7 +1999,7 @@ class _ProgressInsight extends StatelessWidget {
           Text(
             logs.length == 1
                 ? 'One logged workout. Keep logging each session to build a trend.'
-                : '$changeText from first to latest logged session.',
+                : '$changeText from first to latest training day.',
             style: const TextStyle(
               color: Color(0xFFD8E2FF),
               fontWeight: FontWeight.w800,
@@ -1669,7 +2009,7 @@ class _ProgressInsight extends StatelessWidget {
           if (totals.bestWeightKg > 0) ...[
             const SizedBox(height: 4),
             Text(
-              'Best load: ${_formatCompactNumber(totals.bestWeightKg)} kg. Average reps per set: ${_formatCompactNumber(totals.averageRepsPerSet)}.',
+              'Raw load is still tracked, but the main score compares each exercise against its own best.',
               style: const TextStyle(
                 color: Color(0xFFD8E2FF),
                 fontWeight: FontWeight.w800,
@@ -1820,20 +2160,23 @@ class _WeeklySessionBars extends StatelessWidget {
   }
 }
 
-class _ExerciseBestWeightBars extends StatelessWidget {
-  const _ExerciseBestWeightBars({required this.logs});
+class _ExerciseSmartScoreBars extends StatelessWidget {
+  const _ExerciseSmartScoreBars({required this.logs});
 
   final List<_GymProgressLog> logs;
 
   @override
   Widget build(BuildContext context) {
+    final baselines = _performanceBaselines(logs);
     final bests = <String, double>{};
 
     for (final log in logs) {
+      final score = _smartScoreForLog(log, baselines);
+
       bests.update(
         log.exerciseName,
-        (value) => log.bestWeightKg > value ? log.bestWeightKg : value,
-        ifAbsent: () => log.bestWeightKg,
+        (value) => score > value ? score : value,
+        ifAbsent: () => score,
       );
     }
 
@@ -1843,8 +2186,6 @@ class _ExerciseBestWeightBars extends StatelessWidget {
     if (rows.isEmpty) {
       return const SizedBox.shrink();
     }
-
-    final maxValue = rows.first.value <= 0 ? 1.0 : rows.first.value;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1857,7 +2198,7 @@ class _ExerciseBestWeightBars extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Exercise best weights',
+            'Exercise smart scores',
             style: TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -1881,7 +2222,7 @@ class _ExerciseBestWeightBars extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${_formatCompactNumber(row.value)} kg',
+                  '${_formatCompactNumber(row.value)}%',
                   style: const TextStyle(
                     color: Color(0xFF31E981),
                     fontWeight: FontWeight.w900,
@@ -1893,7 +2234,7 @@ class _ExerciseBestWeightBars extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(99),
               child: LinearProgressIndicator(
-                value: (row.value / maxValue).clamp(0.0, 1.0),
+                value: (row.value / 100).clamp(0.0, 1.0),
                 minHeight: 9,
                 backgroundColor: const Color(0xFF20283B),
                 color: const Color(0xFF31E981),
@@ -1955,7 +2296,9 @@ class _ExerciseHistoryTable extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${_formatCompactNumber(log.bestWeightKg)} kg',
+                  _isBodyweightExerciseName(log.exerciseName)
+                      ? '${log.reps} reps'
+                      : '${_formatCompactNumber(log.bestWeightKg)} kg',
                   style: const TextStyle(
                     color: Color(0xFF31E981),
                     fontWeight: FontWeight.w900,
@@ -1965,7 +2308,7 @@ class _ExerciseHistoryTable extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${formatDate(log.date)} | ${log.sets} sets | ${log.reps} reps | est max ${_formatCompactNumber(log.bestEstimatedMaxKg)} kg',
+              _exerciseHistoryDetail(log),
               style: const TextStyle(
                 color: Color(0xFF8396C7),
                 fontSize: 12,
@@ -2235,6 +2578,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
   int reps = 12;
   double? lastWeightKg;
   int? lastReps;
+  String selectedSwapReason = _swapReasons.first;
 
   _WorkoutExercise get exercise => exerciseQueue[exerciseIndex];
 
@@ -2288,12 +2632,23 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
   }
 
   void _useSubstitute(String name) {
+    final current = exercise;
+
     setState(() {
-      exerciseQueue[exerciseIndex] = _WorkoutExercise(
-        name: name,
-        target: 'Substitute for ${exercise.name}',
+      exerciseQueue[exerciseIndex] = current.swappedWith(
+        name,
+        selectedSwapReason,
       );
       _loadExercise();
+    });
+  }
+
+  void _selectSwapReason(String reason) {
+    setState(() {
+      selectedSwapReason = reason;
+      if (exercise.isSwap) {
+        exerciseQueue[exerciseIndex] = exercise.withSwapReason(reason);
+      }
     });
   }
 
@@ -2316,6 +2671,8 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
           exerciseName: exercise.name,
           weightKg: exercise.tracksLoad ? weightKg : 0,
           reps: reps,
+          originalExerciseName: exercise.originalName,
+          swapReason: exercise.swapReason,
         ),
       );
       lastWeightKg = weightKg;
@@ -2359,6 +2716,10 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
         setCount: sets.length,
       );
       final metric = [
+        if (sets.first.originalExerciseName != null)
+          'Swapped from: ${sets.first.originalExerciseName}',
+        if (sets.first.swapReason.isNotEmpty)
+          'Swap reason: ${sets.first.swapReason}',
         for (var index = 0; index < sets.length; index++)
           sets[index].summary(index + 1),
         if (calories > 0) 'Estimated calories: $calories kcal',
@@ -2421,6 +2782,9 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
             const SizedBox(height: 10),
             _SubstituteChips(
               alternatives: exercise.alternatives,
+              selectedReason: selectedSwapReason,
+              selectedExerciseName: exercise.name,
+              onReasonSelected: _selectSwapReason,
               onSelected: _useSubstitute,
             ),
           ],
@@ -2531,11 +2895,15 @@ class _LoggedWorkoutSet {
     required this.exerciseName,
     required this.weightKg,
     required this.reps,
+    this.originalExerciseName,
+    this.swapReason = '',
   });
 
   final String exerciseName;
   final double weightKg;
   final int reps;
+  final String? originalExerciseName;
+  final String swapReason;
 
   String summary(int setNumber) {
     return [
@@ -2656,10 +3024,16 @@ class _ExerciseQueueChips extends StatelessWidget {
 class _SubstituteChips extends StatelessWidget {
   const _SubstituteChips({
     required this.alternatives,
+    required this.selectedReason,
+    required this.selectedExerciseName,
+    required this.onReasonSelected,
     required this.onSelected,
   });
 
   final List<String> alternatives;
+  final String selectedReason;
+  final String selectedExerciseName;
+  final ValueChanged<String> onReasonSelected;
   final ValueChanged<String> onSelected;
 
   @override
@@ -2676,7 +3050,7 @@ class _SubstituteChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'If this is taken',
+            'Swap exercise',
             style: TextStyle(
               color: Color(0xFF8396C7),
               fontSize: 12,
@@ -2684,15 +3058,35 @@ class _SubstituteChips extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: alternatives.contains(selectedExerciseName)
+                ? selectedExerciseName
+                : null,
+            dropdownColor: const Color(0xFF20283B),
+            decoration: const InputDecoration(
+              labelText: 'Replacement',
+              prefixIcon: Icon(Icons.swap_horiz_rounded),
+            ),
+            items: [
+              for (final alternative in alternatives)
+                DropdownMenuItem(value: alternative, child: Text(alternative)),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              onSelected(value);
+            },
+          ),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final alternative in alternatives)
-                ActionChip(
-                  avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
-                  label: Text(alternative),
-                  onPressed: () => onSelected(alternative),
+              for (final reason in _swapReasons)
+                FilterChip(
+                  selected: selectedReason == reason,
+                  avatar: const Icon(Icons.flag_outlined, size: 18),
+                  label: Text(reason),
+                  onSelected: (_) => onReasonSelected(reason),
                 ),
             ],
           ),
@@ -2729,10 +3123,24 @@ class _LoggedSetsList extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    '${items[index].exerciseName} | '
-                    '${items[index].summary(index + 1)}',
-                    style: const TextStyle(color: Color(0xFFD8E2FF)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${items[index].exerciseName} | '
+                        '${items[index].summary(index + 1)}',
+                        style: const TextStyle(color: Color(0xFFD8E2FF)),
+                      ),
+                      if (items[index].swapReason.isNotEmpty)
+                        Text(
+                          'Swap reason: ${items[index].swapReason}',
+                          style: const TextStyle(
+                            color: Color(0xFF8396C7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 IconButton(
@@ -2922,13 +3330,16 @@ class _ExerciseLogSheet extends StatefulWidget {
 class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
   final notesController = TextEditingController();
   final loggedSets = <_LoggedWorkoutSet>[];
+  late _WorkoutExercise selectedExercise;
   double weightKg = 0;
   int reps = 12;
   String timing = '3:2:1';
+  String selectedSwapReason = _swapReasons.first;
 
   @override
   void initState() {
     super.initState();
+    selectedExercise = widget.exercise;
     reps = int.tryParse(widget.exercise.defaultReps) ?? 12;
     _loadLatestLog();
     notesController.text = widget.exercise.cue;
@@ -2956,13 +3367,31 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
     }
   }
 
+  void _selectExercise(String name) {
+    setState(() {
+      selectedExercise = widget.exercise.swappedWith(name, selectedSwapReason);
+      reps = int.tryParse(selectedExercise.defaultReps) ?? reps;
+    });
+  }
+
+  void _selectSwapReason(String reason) {
+    setState(() {
+      selectedSwapReason = reason;
+      if (selectedExercise.isSwap) {
+        selectedExercise = selectedExercise.withSwapReason(reason);
+      }
+    });
+  }
+
   void _addSet() {
     setState(() {
       loggedSets.add(
         _LoggedWorkoutSet(
-          exerciseName: widget.exercise.name,
-          weightKg: widget.exercise.tracksLoad ? weightKg : 0,
+          exerciseName: selectedExercise.name,
+          weightKg: selectedExercise.tracksLoad ? weightKg : 0,
           reps: reps,
+          originalExerciseName: selectedExercise.originalName,
+          swapReason: selectedExercise.swapReason,
         ),
       );
     });
@@ -2989,6 +3418,10 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
       setCount: loggedSets.length,
     );
     final metricParts = <String>[
+      if (selectedExercise.originalName != null)
+        'Swapped from: ${selectedExercise.originalName}',
+      if (selectedExercise.swapReason.isNotEmpty)
+        'Swap reason: ${selectedExercise.swapReason}',
       for (var index = 0; index < loggedSets.length; index++)
         loggedSets[index].summary(index + 1),
       if (calories > 0) 'Estimated calories: $calories kcal',
@@ -3001,7 +3434,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         category: PersonalLogCategory.gym,
         date: DateTime.now(),
-        title: '${widget.split.name}: ${widget.exercise.name}',
+        title: '${widget.split.name}: ${selectedExercise.name}',
         metric: metricParts.join(' | '),
         notes: notes,
       ),
@@ -3023,16 +3456,26 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
         shrinkWrap: true,
         children: [
           _SheetHeader(
-            title: widget.exercise.name,
+            title: selectedExercise.name,
             subtitle: widget.split.name,
           ),
+          if (widget.exercise.alternatives.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _SubstituteChips(
+              alternatives: widget.exercise.alternatives,
+              selectedReason: selectedSwapReason,
+              selectedExerciseName: selectedExercise.name,
+              onReasonSelected: _selectSwapReason,
+              onSelected: _selectExercise,
+            ),
+          ],
           if (latestProgress != null) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (widget.exercise.tracksLoad)
+                if (selectedExercise.tracksLoad)
                   _MetricPill(
                     label: 'Last kg',
                     value: _formatCompactNumber(latestProgress.bestWeightKg),
@@ -3046,7 +3489,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
             ),
           ],
           const SizedBox(height: 14),
-          if (widget.exercise.tracksLoad) ...[
+          if (selectedExercise.tracksLoad) ...[
             _WeightStepper(
               value: weightKg,
               smallStep: 0.5,
@@ -3271,6 +3714,8 @@ class _WorkoutExercise {
     this.defaultSetCount = 3,
     this.defaultRepCount = 12,
     this.tracksLoad = true,
+    this.originalName,
+    this.swapReason = '',
   });
 
   final String name;
@@ -3280,10 +3725,47 @@ class _WorkoutExercise {
   final int defaultSetCount;
   final int defaultRepCount;
   final bool tracksLoad;
+  final String? originalName;
+  final String swapReason;
 
   String get defaultSets => '$defaultSetCount';
 
   String get defaultReps => '$defaultRepCount';
+
+  bool get isSwap => originalName != null;
+
+  _WorkoutExercise swappedWith(String replacementName, String reason) {
+    final baseName = originalName ?? name;
+
+    return _WorkoutExercise(
+      name: replacementName,
+      target: 'Substitute for $baseName',
+      cue: cue,
+      alternatives: alternatives,
+      defaultSetCount: defaultSetCount,
+      defaultRepCount: _defaultRepCountForExerciseName(
+        replacementName,
+        defaultRepCount,
+      ),
+      tracksLoad: _tracksLoadForExerciseName(replacementName, tracksLoad),
+      originalName: baseName,
+      swapReason: reason,
+    );
+  }
+
+  _WorkoutExercise withSwapReason(String reason) {
+    return _WorkoutExercise(
+      name: name,
+      target: target,
+      cue: cue,
+      alternatives: alternatives,
+      defaultSetCount: defaultSetCount,
+      defaultRepCount: defaultRepCount,
+      tracksLoad: tracksLoad,
+      originalName: originalName,
+      swapReason: reason,
+    );
+  }
 }
 
 const _workoutSplits = [
@@ -3296,7 +3778,13 @@ const _workoutSplits = [
         name: 'Conventional deadlift',
         target: '5 sets x 5 reps',
         cue: 'Brace hard, push the floor away, keep the bar close.',
-        alternatives: ['Romanian deadlift', 'Trap bar deadlift'],
+        alternatives: [
+          'Chest-supported row',
+          'Seated cable row',
+          'Machine row',
+          'Romanian deadlift',
+          'Trap bar deadlift',
+        ],
       ),
       _WorkoutExercise(
         name: 'Reverse lat pulldown machine',
@@ -3361,12 +3849,21 @@ const _workoutSplits = [
       ),
       _WorkoutExercise(
         name: 'Single-leg RDL',
-        alternatives: ['Dumbbell RDL', 'Cable pull-through'],
+        alternatives: [
+          'Seated hamstring curl',
+          'Cable pull-through',
+          'Dumbbell RDL',
+        ],
       ),
       _WorkoutExercise(
         name: 'Back extension',
         cue: 'Rounded back, glute focus, control the top squeeze.',
-        alternatives: ['Cable pull-through', 'Dumbbell RDL'],
+        alternatives: [
+          'Hip thrust machine',
+          'Dead bug press',
+          'Cable pull-through',
+          'Dumbbell RDL',
+        ],
       ),
     ],
   ),
@@ -3398,10 +3895,14 @@ const _workoutSplits = [
       ),
       _WorkoutExercise(
         name: 'Dips',
+        defaultRepCount: 10,
+        tracksLoad: false,
         alternatives: ['Close-grip push ups', 'Triceps pressdown'],
       ),
       _WorkoutExercise(
         name: 'Push ups',
+        defaultRepCount: 15,
+        tracksLoad: false,
         alternatives: ['Incline push ups', 'Machine chest press'],
       ),
     ],
@@ -3431,6 +3932,26 @@ const _workoutSplits = [
             'front hip open.',
         defaultSetCount: 2,
         defaultRepCount: 30,
+        tracksLoad: false,
+      ),
+      _WorkoutExercise(
+        name: 'Knee-to-chest stretch',
+        target: '2 sets x 20 seconds each side',
+        cue:
+            'Pull one knee toward the chest, keep the low back heavy, then try '
+            'both knees if it feels good.',
+        defaultSetCount: 2,
+        defaultRepCount: 20,
+        tracksLoad: false,
+      ),
+      _WorkoutExercise(
+        name: 'Cat-cow back mobiliser',
+        target: '2 sets x 5 slow reps',
+        cue:
+            'Move slowly through the spine. Keep it gentle and stop if pain '
+            'gets sharper.',
+        defaultSetCount: 2,
+        defaultRepCount: 5,
         tracksLoad: false,
       ),
       _WorkoutExercise(
@@ -3499,8 +4020,43 @@ const _workoutSplits = [
 
 const _allExercisesLabel = 'All gym logs';
 const _defaultBodyWeightKg = 112.5;
+const _swapReasons = [
+  'Lower back pain',
+  'Machine busy',
+  'Equipment unavailable',
+  'Wrist / RSI',
+  'Knee discomfort',
+  'Shoulder discomfort',
+  'Form feels off',
+  'Too fatigued',
+];
+
+class _StretchRecommendation {
+  const _StretchRecommendation({
+    required this.title,
+    required this.detail,
+    required this.icon,
+  });
+
+  final String title;
+  final String detail;
+  final IconData icon;
+}
+
+class _ExerciseInsightRow {
+  const _ExerciseInsightRow({
+    required this.exerciseName,
+    required this.detail,
+    required this.date,
+  });
+
+  final String exerciseName;
+  final String detail;
+  final DateTime date;
+}
 
 enum _GymChartMetric {
+  smartScore('Smart score', 'Score'),
   estimatedMax('Estimated max', 'Est max'),
   bestWeight('Best weight', 'Kg'),
   sets('Sets completed', 'Sets'),
@@ -3513,6 +4069,8 @@ enum _GymChartMetric {
 
   double valueFor(_GymProgressPoint point) {
     switch (this) {
+      case _GymChartMetric.smartScore:
+        return point.smartScore;
       case _GymChartMetric.estimatedMax:
         return point.bestEstimatedMaxKg;
       case _GymChartMetric.bestWeight:
@@ -3528,18 +4086,22 @@ enum _GymChartMetric {
 class _GymProgressLog {
   const _GymProgressLog({
     required this.date,
+    required this.splitName,
     required this.exerciseName,
     required this.bestWeightKg,
     required this.bestEstimatedMaxKg,
+    required this.volumeLoadKg,
     required this.estimatedCalories,
     required this.sets,
     required this.reps,
   });
 
   final DateTime date;
+  final String splitName;
   final String exerciseName;
   final double bestWeightKg;
   final double bestEstimatedMaxKg;
+  final double volumeLoadKg;
   final int estimatedCalories;
   final int sets;
   final int reps;
@@ -3547,6 +4109,15 @@ class _GymProgressLog {
   double get averageRepsPerSet => sets <= 0 ? 0 : reps / sets;
 
   bool get hasLoad => bestWeightKg > 0;
+
+  double get performanceValue {
+    if (_isBodyweightExerciseName(exerciseName)) {
+      return reps + sets * 2;
+    }
+    if (bestEstimatedMaxKg > 0) return bestEstimatedMaxKg;
+    if (volumeLoadKg > 0) return volumeLoadKg;
+    return reps.toDouble();
+  }
 
   static _GymProgressLog? fromEntry(PersonalLogEntry entry) {
     final metric = entry.metric.trim();
@@ -3560,9 +4131,11 @@ class _GymProgressLog {
 
     return _GymProgressLog(
       date: DateTime(entry.date.year, entry.date.month, entry.date.day),
+      splitName: _splitNameFromTitle(entry.title),
       exerciseName: _exerciseNameFromTitle(entry.title),
       bestWeightKg: manual.bestWeightKg,
       bestEstimatedMaxKg: manual.bestEstimatedMaxKg,
+      volumeLoadKg: manual.volumeLoadKg,
       estimatedCalories: _caloriesForMetric(metric, manual.sets),
       sets: manual.sets,
       reps: manual.reps,
@@ -3573,16 +4146,20 @@ class _GymProgressLog {
 class _GymProgressPoint {
   const _GymProgressPoint({
     required this.date,
+    required this.smartScore,
     required this.bestWeightKg,
     required this.bestEstimatedMaxKg,
+    required this.volumeLoadKg,
     required this.sets,
     required this.reps,
     required this.sessions,
   });
 
   final DateTime date;
+  final double smartScore;
   final double bestWeightKg;
   final double bestEstimatedMaxKg;
+  final double volumeLoadKg;
   final int sets;
   final int reps;
   final int sessions;
@@ -3591,6 +4168,7 @@ class _GymProgressPoint {
 
   static List<_GymProgressPoint> fromLogs(List<_GymProgressLog> logs) {
     final grouped = <DateTime, List<_GymProgressLog>>{};
+    final baselines = _performanceBaselines(logs);
 
     for (final log in logs) {
       grouped.putIfAbsent(log.date, () => []).add(log);
@@ -3607,13 +4185,20 @@ class _GymProgressPoint {
         (best, log) =>
             log.bestEstimatedMaxKg > best ? log.bestEstimatedMaxKg : best,
       );
+      final volumeLoad = dayLogs.fold<double>(
+        0,
+        (total, log) => total + log.volumeLoadKg,
+      );
       final sets = dayLogs.fold<int>(0, (total, log) => total + log.sets);
       final reps = dayLogs.fold<int>(0, (total, log) => total + log.reps);
+      final smartScore = _averageSmartScore(dayLogs, baselines);
 
       return _GymProgressPoint(
         date: entry.key,
+        smartScore: smartScore,
         bestWeightKg: bestWeight,
         bestEstimatedMaxKg: bestEstimatedMax,
+        volumeLoadKg: volumeLoad,
         sets: sets,
         reps: reps,
         sessions: dayLogs.length,
@@ -3626,6 +4211,8 @@ class _GymProgressTotals {
   const _GymProgressTotals({
     required this.bestWeightKg,
     required this.bestEstimatedMaxKg,
+    required this.averageSmartScore,
+    required this.uniqueExercises,
     required this.sets,
     required this.reps,
     required this.sessions,
@@ -3634,6 +4221,8 @@ class _GymProgressTotals {
 
   final double bestWeightKg;
   final double bestEstimatedMaxKg;
+  final double averageSmartScore;
+  final int uniqueExercises;
   final int sets;
   final int reps;
   final int sessions;
@@ -3647,6 +4236,8 @@ class _GymProgressTotals {
       sessions <= 0 ? 0 : loadedSessions / sessions;
 
   factory _GymProgressTotals.fromLogs(List<_GymProgressLog> logs) {
+    final baselines = _performanceBaselines(logs);
+
     return _GymProgressTotals(
       bestWeightKg: logs.fold<double>(
         0,
@@ -3657,6 +4248,8 @@ class _GymProgressTotals {
         (best, log) =>
             log.bestEstimatedMaxKg > best ? log.bestEstimatedMaxKg : best,
       ),
+      averageSmartScore: _averageSmartScore(logs, baselines),
+      uniqueExercises: logs.map((log) => log.exerciseName).toSet().length,
       sets: logs.fold<int>(0, (total, log) => total + log.sets),
       reps: logs.fold<int>(0, (total, log) => total + log.reps),
       sessions: logs.length,
@@ -3669,35 +4262,47 @@ class _ExerciseRecord {
   const _ExerciseRecord({
     required this.exerciseName,
     required this.date,
+    required this.smartScore,
     required this.bestWeightKg,
+    required this.bestReps,
     required this.estimatedMaxKg,
   });
 
   final String exerciseName;
   final DateTime date;
+  final double smartScore;
   final double bestWeightKg;
+  final int bestReps;
   final double estimatedMaxKg;
 
   static List<_ExerciseRecord> fromLogs(List<_GymProgressLog> logs) {
+    final baselines = _performanceBaselines(logs);
     final bestByExercise = <String, _ExerciseRecord>{};
 
     for (final log in logs) {
-      if (log.bestEstimatedMaxKg <= 0 && log.bestWeightKg <= 0) continue;
+      final smartScore = _smartScoreForLog(log, baselines);
+
+      if (smartScore <= 0 && log.bestEstimatedMaxKg <= 0) continue;
 
       final current = bestByExercise[log.exerciseName];
 
-      if (current == null || log.bestEstimatedMaxKg > current.estimatedMaxKg) {
+      if (current == null ||
+          smartScore > current.smartScore ||
+          (smartScore == current.smartScore &&
+              log.date.isAfter(current.date))) {
         bestByExercise[log.exerciseName] = _ExerciseRecord(
           exerciseName: log.exerciseName,
           date: log.date,
+          smartScore: smartScore,
           bestWeightKg: log.bestWeightKg,
+          bestReps: log.reps,
           estimatedMaxKg: log.bestEstimatedMaxKg,
         );
       }
     }
 
     return bestByExercise.values.toList()
-      ..sort((a, b) => b.estimatedMaxKg.compareTo(a.estimatedMaxKg));
+      ..sort((a, b) => b.date.compareTo(a.date));
   }
 }
 
@@ -3755,12 +4360,14 @@ class _ParsedGymMetric {
   const _ParsedGymMetric({
     required this.bestWeightKg,
     required this.bestEstimatedMaxKg,
+    required this.volumeLoadKg,
     required this.sets,
     required this.reps,
   });
 
   final double bestWeightKg;
   final double bestEstimatedMaxKg;
+  final double volumeLoadKg;
   final int sets;
   final int reps;
 }
@@ -3777,6 +4384,7 @@ _ParsedGymMetric? _parseGuidedMetric(String metric) {
 
   var bestWeightKg = 0.0;
   var bestEstimatedMaxKg = 0.0;
+  var volumeLoadKg = 0.0;
   var reps = 0;
 
   for (final line in setLines) {
@@ -3794,12 +4402,14 @@ _ParsedGymMetric? _parseGuidedMetric(String metric) {
     if (estimatedMax > bestEstimatedMaxKg) {
       bestEstimatedMaxKg = estimatedMax;
     }
+    volumeLoadKg += weight * lineReps;
     reps += lineReps;
   }
 
   return _ParsedGymMetric(
     bestWeightKg: bestWeightKg,
     bestEstimatedMaxKg: bestEstimatedMaxKg,
+    volumeLoadKg: volumeLoadKg,
     sets: setLines.length,
     reps: reps,
   );
@@ -3823,6 +4433,7 @@ _ParsedGymMetric? _parseManualMetric(String metric) {
   return _ParsedGymMetric(
     bestWeightKg: weight,
     bestEstimatedMaxKg: _estimatedMaxKg(weight: weight, reps: repsPerSet),
+    volumeLoadKg: weight * reps,
     sets: sets,
     reps: reps,
   );
@@ -3832,6 +4443,270 @@ double _estimatedMaxKg({required double weight, required int reps}) {
   if (weight <= 0 || reps <= 0) return 0;
 
   return weight * (1 + reps / 30);
+}
+
+Map<String, double> _performanceBaselines(List<_GymProgressLog> logs) {
+  final baselines = <String, double>{};
+
+  for (final log in logs) {
+    final value = log.performanceValue;
+
+    if (value <= 0) continue;
+
+    baselines.update(
+      log.exerciseName,
+      (current) => value > current ? value : current,
+      ifAbsent: () => value,
+    );
+  }
+
+  return baselines;
+}
+
+double _smartScoreForLog(_GymProgressLog log, Map<String, double> baselines) {
+  final baseline = baselines[log.exerciseName] ?? 0;
+  final value = log.performanceValue;
+
+  if (baseline <= 0 || value <= 0) return 0;
+
+  return (value / baseline * 100).clamp(0.0, 100.0);
+}
+
+double _averageSmartScore(
+  List<_GymProgressLog> logs,
+  Map<String, double> baselines,
+) {
+  final scores = [
+    for (final log in logs)
+      if (_smartScoreForLog(log, baselines) > 0)
+        _smartScoreForLog(log, baselines),
+  ];
+
+  if (scores.isEmpty) return 0;
+
+  return scores.fold<double>(0, (total, score) => total + score) /
+      scores.length;
+}
+
+List<_GymProgressLog> _logsForSplit(
+  _WorkoutSplit split,
+  List<PersonalLogEntry> entries,
+) {
+  final exerciseNames = split.exercises.map((exercise) => exercise.name);
+
+  return entries
+      .map((entry) => _GymProgressLog.fromEntry(entry))
+      .whereType<_GymProgressLog>()
+      .where((log) {
+        if (log.splitName == split.name) return true;
+
+        return exerciseNames.any(
+          (exerciseName) => _sameExercise(log.exerciseName, exerciseName),
+        );
+      })
+      .toList()
+    ..sort((a, b) => a.date.compareTo(b.date));
+}
+
+List<_ExerciseInsightRow> _exerciseInsightRows(
+  _WorkoutSplit split,
+  List<_GymProgressLog> logs,
+) {
+  final rows = <_ExerciseInsightRow>[];
+
+  for (final exercise in split.exercises) {
+    final exerciseLogs = logs
+        .where((log) => _sameExercise(log.exerciseName, exercise.name))
+        .toList();
+
+    if (exerciseLogs.isEmpty) continue;
+
+    final latest = exerciseLogs.last;
+    final detail = _isBodyweightExerciseName(latest.exerciseName)
+        ? '${latest.reps} reps last'
+        : '${_formatCompactNumber(latest.bestWeightKg)} kg last';
+
+    rows.add(
+      _ExerciseInsightRow(
+        exerciseName: exercise.name,
+        detail: detail,
+        date: latest.date,
+      ),
+    );
+  }
+
+  return rows..sort((a, b) => b.date.compareTo(a.date));
+}
+
+String _splitPrompt(
+  _WorkoutSplit split,
+  List<_GymProgressLog> logs,
+  String leastLoggedExercise,
+) {
+  if (logs.isEmpty) {
+    return 'Prompt: log ${split.exercises.first.name} first so this tab starts tracking each exercise separately.';
+  }
+
+  if (split.name == 'Chest + Shoulders') {
+    return 'Prompt: log $leastLoggedExercise next. Push ups are scored from reps and sets, so body weight will not skew chest progress.';
+  }
+
+  if (split.name == 'Stretch + Abs') {
+    return 'Prompt: log the stretch reason and time held so recommendations can match what keeps coming up.';
+  }
+
+  return 'Prompt: log $leastLoggedExercise next so this tab does not over-read one exercise.';
+}
+
+String _exerciseHistoryDetail(_GymProgressLog log) {
+  final base = '${formatDate(log.date)} | ${log.sets} sets | ${log.reps} reps';
+
+  if (_isBodyweightExerciseName(log.exerciseName)) {
+    return '$base | bodyweight score ${_formatCompactNumber(log.performanceValue)}';
+  }
+
+  return '$base | est max ${_formatCompactNumber(log.bestEstimatedMaxKg)} kg';
+}
+
+bool _sameExercise(String left, String right) {
+  return _normaliseExerciseName(left) == _normaliseExerciseName(right);
+}
+
+String _normaliseExerciseName(String value) {
+  return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+}
+
+bool _isBodyweightExerciseName(String exerciseName) {
+  final normalised = _normaliseExerciseName(exerciseName);
+
+  return normalised.contains('push up') ||
+      normalised.contains('pushup') ||
+      normalised == 'dips' ||
+      normalised.contains('close grip push') ||
+      normalised.contains('incline push');
+}
+
+bool _tracksLoadForExerciseName(String exerciseName, bool fallback) {
+  final normalised = _normaliseExerciseName(exerciseName);
+
+  if (_isBodyweightExerciseName(exerciseName)) return false;
+  if (normalised.contains('machine') ||
+      normalised.contains('pressdown') ||
+      normalised.contains('dumbbell') ||
+      normalised.contains('cable') ||
+      normalised.contains('barbell')) {
+    return true;
+  }
+
+  return fallback;
+}
+
+int _defaultRepCountForExerciseName(String exerciseName, int fallback) {
+  if (_isBodyweightExerciseName(exerciseName)) return 15;
+
+  return fallback;
+}
+
+class _TrainingIntelligence {
+  const _TrainingIntelligence({
+    required this.overallScore,
+    required this.performanceScore,
+    required this.consistencyScore,
+    required this.varietyScore,
+    required this.balanceScore,
+    required this.nextNudge,
+  });
+
+  final double overallScore;
+  final double performanceScore;
+  final double consistencyScore;
+  final double varietyScore;
+  final double balanceScore;
+  final String nextNudge;
+
+  factory _TrainingIntelligence.fromLogs(List<_GymProgressLog> logs) {
+    final sorted = [...logs]..sort((a, b) => a.date.compareTo(b.date));
+    final latestDate = sorted.last.date;
+    final recentStart = latestDate.subtract(const Duration(days: 27));
+    final recentLogs = sorted
+        .where((log) => !log.date.isBefore(recentStart))
+        .toList();
+    final baselines = _performanceBaselines(sorted);
+    final recentDays = recentLogs.map((log) => log.date).toSet().length;
+    final uniqueExercises = recentLogs.map((log) => log.exerciseName).toSet();
+    final splitCounts = <String, int>{};
+
+    for (final log in recentLogs) {
+      final split = log.splitName.isEmpty ? 'Other' : log.splitName;
+      splitCounts.update(split, (value) => value + 1, ifAbsent: () => 1);
+    }
+
+    final performanceScore = _averageSmartScore(recentLogs, baselines);
+    final consistencyScore = (recentDays / 12 * 100).clamp(0.0, 100.0);
+    final varietyScore = (uniqueExercises.length / 8 * 100).clamp(0.0, 100.0);
+    final balanceScore = _splitBalanceScore(splitCounts);
+    final overallScore =
+        performanceScore * 0.35 +
+        consistencyScore * 0.25 +
+        varietyScore * 0.2 +
+        balanceScore * 0.2;
+
+    return _TrainingIntelligence(
+      overallScore: overallScore,
+      performanceScore: performanceScore,
+      consistencyScore: consistencyScore,
+      varietyScore: varietyScore,
+      balanceScore: balanceScore,
+      nextNudge: _trainingNudge(
+        splitCounts,
+        recentDays,
+        uniqueExercises.length,
+      ),
+    );
+  }
+}
+
+double _splitBalanceScore(Map<String, int> splitCounts) {
+  if (splitCounts.isEmpty) return 0;
+
+  final plannedSplits = _workoutSplits.map((split) => split.name).toList();
+  final covered = plannedSplits.where((split) => (splitCounts[split] ?? 0) > 0);
+  final total = splitCounts.values.fold<int>(0, (sum, count) => sum + count);
+  final busiest = splitCounts.values.fold<int>(
+    0,
+    (max, count) => count > max ? count : max,
+  );
+  final coverageScore = covered.length / plannedSplits.length * 100;
+  final dominancePenalty = total <= 0 ? 0.0 : busiest / total * 35;
+
+  return (coverageScore - dominancePenalty).clamp(0.0, 100.0);
+}
+
+String _trainingNudge(
+  Map<String, int> splitCounts,
+  int recentDays,
+  int uniqueExercises,
+) {
+  if (recentDays < 3) {
+    return 'Next nudge: log three separate training days before chasing bigger numbers.';
+  }
+
+  if (uniqueExercises < 5) {
+    return 'Next nudge: add more exercise variety so progress is not just one big lift.';
+  }
+
+  final plannedSplits = _workoutSplits.map((split) => split.name).toList();
+  final leastSplit = plannedSplits.reduce((current, next) {
+    final currentCount = splitCounts[current] ?? 0;
+    final nextCount = splitCounts[next] ?? 0;
+    return nextCount < currentCount ? next : current;
+  });
+
+  if ((splitCounts[leastSplit] ?? 0) == 0) {
+    return 'Next nudge: hit $leastSplit so the week is more balanced.';
+  }
+
+  return 'Next nudge: progress the weakest recent exercise, not just the heaviest compound.';
 }
 
 double _firstDouble(RegExp pattern, String value) {
@@ -3896,6 +4771,205 @@ int _estimatedWorkoutCalories({
   return (activeCalories + restCalories).round();
 }
 
+Map<String, int> _swapReasonCounts(List<PersonalLogEntry> entries) {
+  final counts = <String, int>{};
+
+  for (final entry in entries) {
+    if (entry.category != PersonalLogCategory.gym) continue;
+
+    final content = '${entry.metric}\n${entry.notes}';
+    var matched = false;
+
+    for (final match in RegExp(
+      r'Swap reason:\s*([^|\n]+)',
+      caseSensitive: false,
+    ).allMatches(content)) {
+      final reason = _normaliseSwapReason(match.group(1) ?? '');
+
+      if (reason.isEmpty) continue;
+      counts.update(reason, (value) => value + 1, ifAbsent: () => 1);
+      matched = true;
+    }
+
+    if (matched) continue;
+
+    final inferredReason = _inferSwapReason(content);
+
+    if (inferredReason.isEmpty) continue;
+    counts.update(inferredReason, (value) => value + 1, ifAbsent: () => 1);
+  }
+
+  final sorted = counts.entries.toList()
+    ..sort((a, b) {
+      final countCompare = b.value.compareTo(a.value);
+
+      if (countCompare != 0) return countCompare;
+      return a.key.compareTo(b.key);
+    });
+
+  return Map<String, int>.fromEntries(sorted);
+}
+
+String _normaliseSwapReason(String value) {
+  final lower = value.trim().toLowerCase();
+
+  if (lower.isEmpty) return '';
+  if (lower.contains('back')) return 'Lower back pain';
+  if (lower.contains('rsi') || lower.contains('wrist')) return 'Wrist / RSI';
+  if (lower.contains('knee')) return 'Knee discomfort';
+  if (lower.contains('shoulder')) return 'Shoulder discomfort';
+  if (lower.contains('busy')) return 'Machine busy';
+  if (lower.contains('equipment') || lower.contains('taken')) {
+    return 'Equipment unavailable';
+  }
+  if (lower.contains('form')) return 'Form feels off';
+  if (lower.contains('fatigue') || lower.contains('tired')) {
+    return 'Too fatigued';
+  }
+
+  for (final reason in _swapReasons) {
+    if (lower == reason.toLowerCase()) return reason;
+  }
+
+  return value.trim();
+}
+
+String _inferSwapReason(String content) {
+  final lower = content.toLowerCase();
+
+  if (lower.contains('lower back') || lower.contains('low back')) {
+    return 'Lower back pain';
+  }
+  if (lower.contains('rsi') || lower.contains('wrist')) return 'Wrist / RSI';
+  if (lower.contains('knee')) return 'Knee discomfort';
+  if (lower.contains('shoulder')) return 'Shoulder discomfort';
+  if (lower.contains('machine busy') || lower.contains('taken')) {
+    return 'Machine busy';
+  }
+
+  return '';
+}
+
+List<_StretchRecommendation> _stretchRecommendationsForReasons(
+  Map<String, int> reasonCounts,
+) {
+  final recommendations = <_StretchRecommendation>[];
+  final titles = <String>{};
+
+  void add(_StretchRecommendation recommendation) {
+    if (!titles.add(recommendation.title)) return;
+    recommendations.add(recommendation);
+  }
+
+  if (reasonCounts.isEmpty) {
+    add(
+      const _StretchRecommendation(
+        title: 'Log swap reasons',
+        detail: 'Pick a reason when you swap an exercise and this will adapt.',
+        icon: Icons.flag_outlined,
+      ),
+    );
+    add(
+      const _StretchRecommendation(
+        title: 'Lower back reset',
+        detail: 'Start with knee-to-chest, cat-cow, then dead bug press.',
+        icon: Icons.accessibility_new_rounded,
+      ),
+    );
+
+    return recommendations;
+  }
+
+  for (final reason in reasonCounts.keys.take(3)) {
+    switch (reason) {
+      case 'Lower back pain':
+        add(
+          const _StretchRecommendation(
+            title: 'Lower back reset',
+            detail: 'Knee-to-chest, cat-cow, and dead bug press before abs.',
+            icon: Icons.accessibility_new_rounded,
+          ),
+        );
+        add(
+          const _StretchRecommendation(
+            title: 'Unload the hinge',
+            detail: 'Use low lunge hip opener before heavy hinge work.',
+            icon: Icons.self_improvement_rounded,
+          ),
+        );
+        break;
+      case 'Wrist / RSI':
+        add(
+          const _StretchRecommendation(
+            title: 'Wrist care block',
+            detail: 'Do wrist flexor and extensor stretches before floor work.',
+            icon: Icons.back_hand_outlined,
+          ),
+        );
+        add(
+          const _StretchRecommendation(
+            title: 'Forearm-supported core',
+            detail: 'Use dead bug or forearm side plank instead of hand loads.',
+            icon: Icons.pan_tool_alt_outlined,
+          ),
+        );
+        break;
+      case 'Knee discomfort':
+        add(
+          const _StretchRecommendation(
+            title: 'Hip-first warm-up',
+            detail: 'Low lunge hip opener, then controlled reverse crunches.',
+            icon: Icons.directions_walk_rounded,
+          ),
+        );
+        break;
+      case 'Shoulder discomfort':
+        add(
+          const _StretchRecommendation(
+            title: 'Shoulder unload',
+            detail:
+                'Use wrist-safe sun salutations and shoulder blade squeezes.',
+            icon: Icons.fitness_center_rounded,
+          ),
+        );
+        break;
+      case 'Machine busy':
+      case 'Equipment unavailable':
+        add(
+          const _StretchRecommendation(
+            title: 'Waiting reset',
+            detail: 'Do low lunge hip opener or wrist stretches between swaps.',
+            icon: Icons.schedule_rounded,
+          ),
+        );
+        break;
+      case 'Form feels off':
+      case 'Too fatigued':
+        add(
+          const _StretchRecommendation(
+            title: 'Technique reset',
+            detail:
+                'Use cat-cow, dead bug press, then lighter controlled reps.',
+            icon: Icons.psychology_rounded,
+          ),
+        );
+        break;
+    }
+  }
+
+  if (recommendations.isEmpty) {
+    add(
+      const _StretchRecommendation(
+        title: 'General reset',
+        detail: 'Use low lunge hip opener, cat-cow, and dead bug press.',
+        icon: Icons.self_improvement_rounded,
+      ),
+    );
+  }
+
+  return recommendations.take(4).toList();
+}
+
 String _displayMetric(PersonalLogEntry entry) {
   final metric = entry.metric.trim();
 
@@ -3925,6 +4999,14 @@ String _exerciseNameFromTitle(String title) {
   final name = parts.length > 1 ? parts.sublist(1).join(':') : title;
   final trimmed = name.trim();
   return trimmed.isEmpty ? 'Gym log' : trimmed;
+}
+
+String _splitNameFromTitle(String title) {
+  final parts = title.split(':');
+
+  if (parts.length <= 1) return '';
+
+  return parts.first.trim();
 }
 
 double _latestBodyWeightKg(List<PersonalLogEntry> entries) {

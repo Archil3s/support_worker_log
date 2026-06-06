@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../core/utils/totals.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/google_account_connection_card.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
@@ -43,6 +45,8 @@ class DashboardScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
+        const GoogleAccountConnectionCard(scope: GoogleExportAccountScope.work),
+        const SizedBox(height: 12),
         SectionCard(
           title: 'Today',
           child: StatGrid(

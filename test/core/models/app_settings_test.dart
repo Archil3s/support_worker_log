@@ -11,6 +11,10 @@ void main() {
       googleDriveInvoicesFolderId: 'invoices',
       googleDriveReferralsFolderId: 'referrals',
       googleDrivePersonalNotesFolderId: 'personal-notes',
+      googleWorkAccountEmail: 'work@example.com',
+      googlePersonalAccountEmail: 'personal@example.com',
+      personalGoogleDriveRootFolderId: 'personal-root',
+      personalGoogleDrivePersonalNotesFolderId: 'personal-drive-notes',
     );
 
     final restored = AppSettings.fromJson(settings.toJson());
@@ -22,5 +26,12 @@ void main() {
     expect(restored.googleDriveInvoicesFolderId, 'invoices');
     expect(restored.googleDriveReferralsFolderId, 'referrals');
     expect(restored.googleDrivePersonalNotesFolderId, 'personal-notes');
+    expect(restored.googleWorkAccountEmail, 'work@example.com');
+    expect(restored.googlePersonalAccountEmail, 'personal@example.com');
+    expect(restored.personalGoogleDriveRootFolderId, 'personal-root');
+    expect(
+      restored.personalGoogleDrivePersonalNotesFolderId,
+      'personal-drive-notes',
+    );
   });
 }

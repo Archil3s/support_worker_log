@@ -6,12 +6,14 @@ import '../models/active_visit.dart';
 import '../models/app_mode.dart';
 import '../models/app_settings.dart';
 import '../models/general_action.dart';
+import '../models/google_export_account_scope.dart';
 import '../models/invoice_status.dart';
 import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../services/calendar_export_service.dart';
 import '../services/cloud_storage_service.dart';
 import '../services/drive_invoice_cycle_sync_service.dart';
+import '../services/google_export_account_service.dart';
 import '../services/google_drive_service.dart';
 import '../services/storage_service.dart';
 import '../utils/sample_invoice_data.dart';
@@ -28,6 +30,8 @@ enum CalendarEntryExportResult { created, draftOpened }
 class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
   final CloudStorageService _cloudStorageService = CloudStorageService();
+  final GoogleExportAccountService _googleExportAccountService =
+      GoogleExportAccountService();
   final GoogleDriveService _googleDriveService = GoogleDriveService();
   final DriveInvoiceCycleSyncService _driveInvoiceSyncService =
       DriveInvoiceCycleSyncService();
@@ -73,16 +77,38 @@ class AppState extends ChangeNotifier {
   String? get cloudSyncError => _cloudSyncError;
   String? get cloudUserId => _cloudStorageService.userId;
   String? get cloudEmail => _cloudStorageService.email;
-  String? get googleCalendarAccessToken =>
-      _cloudStorageService.googleCalendarAccessToken;
-  String? get googleDriveAccessToken =>
-      _cloudStorageService.googleDriveAccessToken;
-  bool get googleServicesConnected =>
-      _cloudStorageService.googleCalendarAccessToken != null &&
-      _cloudStorageService.googleDriveAccessToken != null;
+  String? get googleCalendarAccessToken => _workGoogleCalendarAccessToken;
+  String? get googleDriveAccessToken => _workGoogleDriveAccessToken;
+  String? get workGoogleAccountEmail =>
+      _googleExportAccountService.emailFor(GoogleExportAccountScope.work) ??
+      _settings.googleWorkAccountEmail ??
+      _cloudStorageService.email;
+  String? get personalGoogleAccountEmail =>
+      _googleExportAccountService.emailFor(GoogleExportAccountScope.personal) ??
+      _settings.googlePersonalAccountEmail;
+  bool get workGoogleServicesConnected =>
+      _workGoogleCalendarAccessToken != null &&
+      _workGoogleDriveAccessToken != null;
+  bool get personalGoogleServicesConnected => _googleExportAccountService
+      .isConnected(GoogleExportAccountScope.personal);
+  bool get googleServicesConnected => workGoogleServicesConnected;
+
+  String? get _workGoogleCalendarAccessToken {
+    return _googleExportAccountService.accessTokenFor(
+          GoogleExportAccountScope.work,
+        ) ??
+        _cloudStorageService.googleCalendarAccessToken;
+  }
+
+  String? get _workGoogleDriveAccessToken {
+    return _googleExportAccountService.accessTokenFor(
+          GoogleExportAccountScope.work,
+        ) ??
+        _cloudStorageService.googleDriveAccessToken;
+  }
 
   String get existingGoogleCalendarAccessToken {
-    final token = _cloudStorageService.googleCalendarAccessToken;
+    final token = _workGoogleCalendarAccessToken;
 
     if (token == null || token.isEmpty) {
       throw StateError(
@@ -157,26 +183,30 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> requireGoogleCalendarAccessToken() {
+    final token = _workGoogleCalendarAccessToken;
+    if (token != null && token.isNotEmpty) {
+      return Future.value(token);
+    }
+
     return _cloudStorageService.requireGoogleCalendarAccessToken();
   }
 
   Future<String> connectGoogleCalendar({bool forceRefresh = false}) async {
-    await _cloudStorageService.connectGoogleServicesForCurrentUser(
+    final connection = await _googleExportAccountService.connect(
+      scope: GoogleExportAccountScope.work,
       forceRefresh: forceRefresh,
-      allowPopup: true,
     );
-    final token = await _cloudStorageService.requireGoogleCalendarAccessToken();
+    _saveGoogleExportEmail(connection);
     notifyListeners();
     _scheduleDriveInvoiceSync();
-    _scheduleDrivePersonalSync();
-    return token;
+    return connection.accessToken;
   }
 
   Future<CalendarEntryExportResult> createPrivateGoogleCalendarEvent(
     WorkEntry entry,
   ) async {
     try {
-      var token = _cloudStorageService.googleCalendarAccessToken;
+      var token = _workGoogleCalendarAccessToken;
 
       if (token == null || token.isEmpty) {
         token = await connectGoogleCalendar();
@@ -217,41 +247,82 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<String> requireGoogleDriveAccessToken({bool forceRefresh = false}) {
-    return _cloudStorageService.requireGoogleDriveAccessToken(
+  Future<String> requireGoogleDriveAccessToken({
+    bool forceRefresh = false,
+    GoogleExportAccountScope scope = GoogleExportAccountScope.work,
+  }) async {
+    if (scope == GoogleExportAccountScope.work && !forceRefresh) {
+      final token = _workGoogleDriveAccessToken;
+      if (token != null && token.isNotEmpty) return token;
+    }
+
+    if (!forceRefresh) {
+      return _googleExportAccountService.requireAccessToken(scope: scope);
+    }
+
+    final connection = await _googleExportAccountService.connect(
+      scope: scope,
+      forceRefresh: true,
+    );
+    _saveGoogleExportEmail(connection);
+    notifyListeners();
+    return connection.accessToken;
+  }
+
+  Future<String> connectGoogleDrive({
+    bool forceRefresh = false,
+    GoogleExportAccountScope scope = GoogleExportAccountScope.work,
+  }) async {
+    final connection = await _googleExportAccountService.connect(
+      scope: scope,
+      forceRefresh: forceRefresh,
+    );
+    _saveGoogleExportEmail(connection);
+    notifyListeners();
+    if (scope == GoogleExportAccountScope.work) {
+      _scheduleDriveInvoiceSync();
+    } else {
+      _scheduleDrivePersonalSync();
+    }
+    return connection.accessToken;
+  }
+
+  Future<String> connectWorkGoogle({bool forceRefresh = false}) {
+    return connectGoogleDrive(
+      scope: GoogleExportAccountScope.work,
       forceRefresh: forceRefresh,
     );
   }
 
-  Future<String> connectGoogleDrive({bool forceRefresh = false}) async {
-    await _cloudStorageService.connectGoogleServicesForCurrentUser(
+  Future<String> connectPersonalGoogle({bool forceRefresh = false}) {
+    return connectGoogleDrive(
+      scope: GoogleExportAccountScope.personal,
       forceRefresh: forceRefresh,
-      allowPopup: true,
     );
-    final token = await _cloudStorageService.requireGoogleDriveAccessToken();
-    notifyListeners();
-    _scheduleDriveInvoiceSync();
-    _scheduleDrivePersonalSync();
-    return token;
   }
 
   Future<void> syncPersonalLogsToDrive() async {
     if (_personalLogEntries.isEmpty) return;
 
-    if (_cloudStorageService.googleDriveAccessToken == null) {
-      await connectGoogleDrive();
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.personal,
+    )) {
+      await connectPersonalGoogle();
     }
 
     await _syncDrivePersonalLogs();
   }
 
   Future<String> ensurePersonalNotesDriveFolderId() async {
-    if (_cloudStorageService.googleDriveAccessToken == null) {
-      await connectGoogleDrive();
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.personal,
+    )) {
+      await connectPersonalGoogle();
     }
 
-    final accessToken = await _cloudStorageService
-        .requireGoogleDriveAccessToken();
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.personal,
+    );
     final folderId = await _ensurePersonalNotesDriveFolder(accessToken);
     return folderId;
   }
@@ -259,12 +330,15 @@ class AppState extends ChangeNotifier {
   Future<String> ensurePersonalCategoryDriveFolderId(
     PersonalLogCategory category,
   ) async {
-    if (_cloudStorageService.googleDriveAccessToken == null) {
-      await connectGoogleDrive();
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.personal,
+    )) {
+      await connectPersonalGoogle();
     }
 
-    final accessToken = await _cloudStorageService
-        .requireGoogleDriveAccessToken();
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.personal,
+    );
     final personalFolderId = await _ensurePersonalNotesDriveFolder(accessToken);
     final categoryFolder = await _googleDriveService.findOrCreateFolder(
       accessToken: accessToken,
@@ -700,7 +774,7 @@ class AppState extends ChangeNotifier {
 
   void _scheduleDriveInvoiceSync() {
     if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
-    if (_cloudStorageService.googleDriveAccessToken == null) return;
+    if (_workGoogleDriveAccessToken == null) return;
 
     _driveInvoiceSyncDebounce?.cancel();
     _driveInvoiceSyncDebounce = Timer(const Duration(seconds: 2), () {
@@ -712,7 +786,11 @@ class AppState extends ChangeNotifier {
     if (!_cloudStorageService.isSignedIn || _personalLogEntries.isEmpty) {
       return;
     }
-    if (_cloudStorageService.googleDriveAccessToken == null) return;
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.personal,
+    )) {
+      return;
+    }
 
     _drivePersonalSyncDebounce?.cancel();
     _drivePersonalSyncDebounce = Timer(const Duration(seconds: 2), () {
@@ -746,8 +824,7 @@ class AppState extends ChangeNotifier {
   Future<void> _syncDriveInvoices() async {
     if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
 
-    final accessToken = await _cloudStorageService
-        .requireGoogleDriveAccessToken();
+    final accessToken = await requireGoogleDriveAccessToken();
     var syncSettings = _settings;
     var clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
     var invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
@@ -819,8 +896,9 @@ class AppState extends ChangeNotifier {
       return;
     }
 
-    final accessToken = await _cloudStorageService
-        .requireGoogleDriveAccessToken();
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.personal,
+    );
     final personalNotesFolderId = await _ensurePersonalNotesDriveFolder(
       accessToken,
     );
@@ -837,12 +915,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> _ensurePersonalNotesDriveFolder(String accessToken) async {
-    final existing = _settings.googleDrivePersonalNotesFolderId;
+    final existing = _settings.personalGoogleDrivePersonalNotesFolderId;
     if (existing != null && existing.isNotEmpty) return existing;
 
-    final rootFolderId = _settings.googleDriveRootFolderId;
+    final rootFolderId = _settings.personalGoogleDriveRootFolderId;
     if (rootFolderId == null || rootFolderId.isEmpty) {
-      final folderSetup = await _googleDriveService.createFolderSetup(
+      final folderSetup = await _googleDriveService.createPersonalFolderSetup(
         accessToken: accessToken,
       );
       _settings = folderSetup.applyTo(_settings);
@@ -853,7 +931,7 @@ class AppState extends ChangeNotifier {
         name: 'Personal Notes',
       );
       _settings = _settings.copyWith(
-        googleDrivePersonalNotesFolderId: personalFolder.id,
+        personalGoogleDrivePersonalNotesFolderId: personalFolder.id,
       );
     }
 
@@ -864,7 +942,39 @@ class AppState extends ChangeNotifier {
     }
     notifyListeners();
 
-    return _settings.googleDrivePersonalNotesFolderId!;
+    return _settings.personalGoogleDrivePersonalNotesFolderId!;
+  }
+
+  void _saveGoogleExportEmail(GoogleExportConnection connection) {
+    final email = connection.email?.trim();
+    if (email == null || email.isEmpty) return;
+
+    switch (connection.scope) {
+      case GoogleExportAccountScope.work:
+        final previous = _settings.googleWorkAccountEmail?.trim();
+        final accountChanged =
+            previous == null ||
+            previous.isEmpty ||
+            previous.toLowerCase() != email.toLowerCase();
+        _settings = _settings.copyWith(
+          googleWorkAccountEmail: email,
+          clearGoogleDriveFolders: accountChanged,
+        );
+        break;
+      case GoogleExportAccountScope.personal:
+        final previous = _settings.googlePersonalAccountEmail?.trim();
+        final accountChanged =
+            previous == null ||
+            previous.isEmpty ||
+            previous.toLowerCase() != email.toLowerCase();
+        _settings = _settings.copyWith(
+          googlePersonalAccountEmail: email,
+          clearPersonalGoogleDriveFolders: accountChanged,
+        );
+        break;
+    }
+
+    unawaited(_save());
   }
 
   String _personalCategoryFolderName(PersonalLogCategory category) {

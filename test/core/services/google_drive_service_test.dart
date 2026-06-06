@@ -266,6 +266,49 @@ void main() {
   });
 
   test(
+    'saveSupportNote creates a new file when Google account changes',
+    () async {
+      final api = _FakeGoogleDriveApi(children: const []);
+      final service = GoogleDriveService(api: api);
+
+      final meta = await service.saveSupportNote(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entry: WorkEntry(
+          id: 'entry-1',
+          client: 'AB',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 2),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const [],
+        ),
+        initials: 'AB',
+        status: EntrySupportNoteStatus.inProgress,
+        noteText: 'Main topic(s)\nNew account note',
+        googleAccountEmail: 'new-work@example.com',
+        existingMeta: const EntryDriveSupportNoteMeta(
+          entryId: 'entry-1',
+          initials: 'AB',
+          status: EntrySupportNoteStatus.inProgress,
+          fileId: 'old-account-docx',
+          fileName: '2026-06-02_AB_in-progress.docx',
+          noteText: 'Old account note',
+          mimeType: _docxMimeType,
+          parentFolderId:
+              'client-notes/AB/Invoice 10 - 2026-06-01 to 2026-06-14',
+          googleAccountEmail: 'old-work@example.com',
+        ),
+      );
+
+      expect(api.updatedFileIds, isNot(contains('old-account-docx')));
+      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
+      expect(meta.fileId, 'new-doc');
+      expect(meta.googleAccountEmail, 'new-work@example.com');
+    },
+  );
+
+  test(
     'syncPersonalLogEntries files gym notes under split and exercise',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
