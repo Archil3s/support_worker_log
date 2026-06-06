@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -21,6 +23,7 @@ class GoogleExportAccountService {
   GoogleExportAccountService({FirebaseAuth? auth}) : _authOverride = auth;
 
   static const _secondaryAppName = 'support_worker_log_google_exports';
+  static const _googleSignInTimeout = Duration(seconds: 90);
 
   final FirebaseAuth? _authOverride;
   FirebaseAuth? _auth;
@@ -44,11 +47,32 @@ class GoogleExportAccountService {
     bool forceRefresh = false,
   }) async {
     final auth = await _secondaryAuth();
-    final credential = await _signInWithGoogle(auth, forceRefresh);
+    await _resetSecondaryAuth(auth);
+    late final UserCredential credential;
+
+    try {
+      credential = await _signInWithGoogle(
+        auth,
+        forceRefresh,
+      ).timeout(_googleSignInTimeout);
+    } on TimeoutException {
+      await _resetSecondaryAuth(auth);
+      throw StateError(
+        '${scope.label} Google sign-in timed out. Close any old Google popup and try again.',
+      );
+    } on FirebaseAuthException catch (error) {
+      await _resetSecondaryAuth(auth);
+      throw StateError(_authErrorMessage(scope, error));
+    } catch (_) {
+      await _resetSecondaryAuth(auth);
+      rethrow;
+    }
+
     final oauth = credential.credential;
     final token = oauth is OAuthCredential ? oauth.accessToken : null;
 
     if (token == null || token.isEmpty) {
+      await _resetSecondaryAuth(auth);
       throw StateError(
         '${scope.label} Google account did not return an access token.',
       );
@@ -114,5 +138,37 @@ class GoogleExportAccountService {
 
     if (kIsWeb) return auth.signInWithPopup(provider);
     return auth.signInWithProvider(provider);
+  }
+
+  Future<void> _resetSecondaryAuth(FirebaseAuth auth) async {
+    if (auth.currentUser == null) return;
+
+    await auth.signOut();
+  }
+
+  String _authErrorMessage(
+    GoogleExportAccountScope scope,
+    FirebaseAuthException error,
+  ) {
+    final code = error.code.toLowerCase();
+    final message = error.message?.trim();
+
+    if (code.contains('popup-closed-by-user') ||
+        code.contains('cancelled-popup-request') ||
+        code.contains('canceled')) {
+      return '${scope.label} Google sign-in was cancelled. Try Choose ${scope.label} Google Account again.';
+    }
+
+    if (code.contains('access-denied') ||
+        code.contains('permission-denied') ||
+        (message != null && message.toLowerCase().contains('access denied'))) {
+      return '${scope.label} Google access was denied. Choose the account again and allow Drive and Calendar access.';
+    }
+
+    if (message != null && message.isNotEmpty) {
+      return '${scope.label} Google sign-in failed: $message';
+    }
+
+    return '${scope.label} Google sign-in failed: ${error.code}';
   }
 }
