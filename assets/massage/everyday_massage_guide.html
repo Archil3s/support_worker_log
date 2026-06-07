@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Everyday Massage Guide</title>
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<style>
+    :root {
+      --font-sans:'Figtree',system-ui,sans-serif;
+      --bg1:#ffffff;--bg2:#f5f5f4;--bgw:#fff7ed;
+      --t1:#1c1917;--t2:#57534e;--t3:#a8a29e;--tw:#92400e;
+      --b1:#d6d3d1;--b2:#e7e5e4;--b3:#f5f5f4;
+      --pace-pulse:2s;--pace-pulse2:2.3s;--pace-glide:1s;
+      --pace-squeeze:1.6s;--pace-circle:2.4s;--pace-hold:1.8s;
+      --pace-dot:2.2s;--pace-route-dash:1.1s;
+      --pace-bead-pulse:1.2s;--pace-glow:1.6s;--pace-press:1.2s;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:var(--font-sans);background:var(--bg1);color:var(--t1);padding:24px 16px 48px;max-width:720px;margin:0 auto}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+    @keyframes pt{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:0.6}}
+    @keyframes ripple{0%{transform:scale(1);opacity:0.8}100%{transform:scale(2.2);opacity:0}}
+    @keyframes thumbP{0%,100%{transform:scaleY(1)}50%{transform:scaleY(0.72)}}
+    @keyframes palmC{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+    @keyframes sqz{0%,100%{transform:scaleX(1)}40%{transform:scaleX(0.8)}}
+    @keyframes gld{0%{transform:translateY(5px);opacity:0.4}100%{transform:translateY(-5px);opacity:1}}
+    @keyframes hld{0%,100%{opacity:1}50%{opacity:0.5}}
+    @keyframes frcX{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+
+    .dot{animation:pt 2s ease-in-out infinite;transform-origin:center}
+    .dot2{animation:pt 2.5s ease-in-out infinite 0.5s;transform-origin:center}
+    .dot3{animation:pt 2s ease-in-out infinite 1s;transform-origin:center}
+    .rip{animation:ripple 2s ease-out infinite;transform-origin:center}
+    .rip2{animation:ripple 2.5s ease-out infinite 0.5s;transform-origin:center}
+
+    .at{animation:thumbP 1.4s ease-in-out infinite;transform-origin:50% 100%}
+    .ap{animation:palmC 2.2s linear infinite;transform-origin:center}
+    .as{animation:sqz 1.6s ease-in-out infinite;transform-origin:center}
+    .ag{animation:gld 1s ease-in-out infinite alternate}
+    .ah{animation:hld 2s ease-in-out infinite}
+    .af{animation:frcX 0.4s ease-in-out infinite}
+
+    .tab{padding:9px 16px;border-radius:999px;border:0.5px solid var(--b2);background:var(--bg1);color:var(--t2);font-size:13px;cursor:pointer;font-family:var(--font-sans);transition:all .15s}
+    .tab:hover{background:var(--bg2)}
+    .tab.on{background:#1D9E75;color:#fff;border-color:transparent;font-weight:500}
+    .panel{display:none}.panel.on{display:block}
+
+    .tool-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:0.5px solid var(--b2);border-radius:999px;padding:4px 12px;font-size:12px;color:var(--t2);font-family:var(--font-sans);margin:2px}
+
+    .step-card{background:var(--bg1);border:0.5px solid var(--b3);border-radius:12px;padding:14px 16px;margin:8px 0;display:flex;gap:14px;align-items:flex-start}
+    .step-num{min-width:32px;height:32px;border-radius:50%;background:#E1F5EE;color:#085041;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--font-sans)}
+    .step-body{flex:1}
+    .step-title{font-size:14px;font-weight:500;color:var(--t1);margin:0 0 4px;font-family:var(--font-sans)}
+    .step-desc{font-size:13px;color:var(--t2);line-height:1.6;margin:0 0 6px;font-family:var(--font-sans)}
+    .step-feel{font-size:12px;color:#1D9E75;font-family:var(--font-sans)}
+
+    .tech-row{display:flex;align-items:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap}
+    .tech-chips{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+    .tc{display:inline-flex;align-items:center;gap:4px;background:#E1F5EE;border:0.5px solid #9FE1CB;border-radius:999px;padding:3px 9px;font-size:11px;color:#085041;font-family:var(--font-sans)}
+    .tc.pl{background:#F0FDF9;border-color:#9FE1CB}
+    .tc.pm{background:#DCFBF0;border-color:#5DCAA5}
+    .tc.pf{background:#C9F5E8;border-color:#1D9E75}
+
+    .warn{background:var(--bgw);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--tw);font-family:var(--font-sans);margin:10px 0;line-height:1.5}
+    .info-warn{background:#EFF6FF;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;font-family:var(--font-sans);margin:10px 0;line-height:1.5}
+
+    .page-header{margin-bottom:20px}
+    .page-header h1{font-size:20px;font-weight:600;color:var(--t1);margin-bottom:4px}
+    .page-header p{font-size:13px;color:var(--t2);line-height:1.5}
+    .tgl{font-size:11px;color:var(--t3);font-family:var(--font-sans);margin:8px 2px 3px;text-transform:uppercase;letter-spacing:0.06em}
+      @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+
+    .motion-legend-wrap{margin:4px 0 18px}
+    .motion-legend-title{font-size:12px;color:var(--t3);font-family:var(--font-sans);margin:0 0 8px;text-transform:uppercase;letter-spacing:.06em}
+    .motion-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+    .legend-card{border:0.5px solid var(--b2);background:linear-gradient(180deg,#fff 0%,#fafaf9 100%);border-radius:14px;padding:10px 10px 8px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+    .legend-vis{height:42px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+    .legend-name{font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px}
+    .legend-note{font-size:11px;line-height:1.35;color:var(--t2)}
+
+    .motion-guide{margin:9px 0 6px;border:0.5px solid #d9efe8;background:linear-gradient(180deg,#f8fffc 0%,#f0fdf8 100%);border-radius:12px;padding:10px 11px}
+    .mg-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+    .mg-label{font-size:11px;color:#0f6e56;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+    .mg-hint{font-size:11px;color:#4b7f71}
+    .mg-body{display:flex;gap:10px;align-items:center}
+    .mg-visual{width:86px;min-width:86px;height:48px;border-radius:10px;background:#ffffff;border:0.5px solid #cae9de;display:flex;align-items:center;justify-content:center}
+    .mg-copy{flex:1;min-width:0}
+    .mg-title{font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px}
+    .mg-desc{font-size:11px;line-height:1.4;color:var(--t2)}
+
+    .mv-svg{width:74px;height:36px}
+    .mv-stroke{stroke:#1D9E75;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    .mv-soft{stroke:#8fd8bf;stroke-width:5;stroke-linecap:round;fill:none;opacity:.55}
+    .mv-dot{fill:#1D9E75}
+    .mv-soft-fill{fill:#DFF8EE;stroke:#5DCAA5;stroke-width:1.2}
+    .mv-warm{stroke:#D85A30}
+    .mv-note{fill:#0F6E56;font-size:7px;font-family:var(--font-sans)}
+    .mv-pulse{animation:ripple var(--pace-pulse) ease-out infinite;transform-origin:center}
+    .mv-pulse2{animation:ripple var(--pace-pulse2) ease-out infinite .45s;transform-origin:center}
+    .mv-bob{animation:gld var(--pace-glide) ease-in-out infinite alternate}
+    .mv-sqz{animation:sqz var(--pace-squeeze) ease-in-out infinite;transform-origin:center}
+    .mv-rot{animation:palmC var(--pace-circle) linear infinite;transform-origin:center}
+    .mv-hold{animation:hld var(--pace-hold) ease-in-out infinite}
+
+    .step-card{box-shadow:0 1px 0 rgba(0,0,0,.02)}
+    .tech-row{align-items:center}
+    .tech-row svg{border-radius:8px;background:#fcfcfb;border:0.5px solid var(--b2);padding:4px}
+
+    .callout-ico line,.callout-ico path,.callout-ico circle,.callout-ico rect,.callout-ico ellipse{vector-effect:non-scaling-stroke}
+    .callout-ico .ci-stroke{stroke:#1D9E75;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    .callout-ico .ci-fill{fill:#DFF8EE;stroke:#5DCAA5;stroke-width:1}
+    .callout-ico .ci-accent{fill:#1D9E75}
+    .callout-ico .ci-warm{stroke:#D85A30;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+    .callout-ico .ci-warm-fill{fill:#FDE6DD;stroke:#D85A30;stroke-width:1}
+
+    :root{--start:#1D9E75;--move:#5DCAA5;--end:#D85A30;--end-soft:#FDE6DD}
+    .partner-note{background:#F0FDF9;border:0.5px solid #cae9de;border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.5;color:#245e50}
+    .partner-note strong{color:#0f6e56}
+    .se-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:8px}
+    .se-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t2)}
+    .se-dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+    .se-start{background:var(--start)}
+    .se-end{background:var(--end)}
+    .se-path{width:28px;height:2px;background:linear-gradient(90deg,var(--start),var(--end));position:relative;border-radius:4px;display:inline-block}
+    .se-path:after{content:'';position:absolute;right:-1px;top:-3px;width:8px;height:8px;border-top:2px solid var(--end);border-right:2px solid var(--end);transform:rotate(45deg)}
+    .motion-legend-title{margin-bottom:6px}
+    .motion-legend-wrap{padding:12px;border:0.5px solid var(--b2);border-radius:16px;background:linear-gradient(180deg,#fff 0%,#fbfbfa 100%)}
+    .mg-label{color:#0f6e56}
+    .mg-hint{color:#7a5343;font-weight:500}
+    .mg-visual{background:linear-gradient(180deg,#fff 0%,#fdfdfd 100%)}
+    .mv-start{fill:var(--start)}
+    .mv-end{fill:var(--end)}
+    .mv-end-stroke{stroke:var(--end);stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    .mv-path{stroke:var(--move);stroke-width:4.5;stroke-linecap:round;fill:none;opacity:.55}
+    .mv-line{stroke:var(--start);stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    .ci-start{fill:var(--start)}
+    .ci-end{fill:var(--end)}
+    .ci-end-stroke{stroke:var(--end);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none}
+    .ci-path{stroke:var(--move);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.75}
+
+    /* V3: stop old body-map pulse markers from looking like motion directions */
+    div.panel > svg .rip,
+    div.panel > svg .rip2{
+      display:none !important;
+      animation:none !important;
+    }
+    div.panel > svg .dot,
+    div.panel > svg .dot2,
+    div.panel > svg .dot3{
+      animation:none !important;
+      transform:none !important;
+      opacity:.95;
+    }
+    .body-map-note{
+      background:#fff;
+      border:0.5px solid #cae9de;
+      border-radius:12px;
+      padding:10px 12px;
+      margin:8px 0 12px;
+      font-size:12px;
+      line-height:1.45;
+      color:#245e50;
+    }
+    .body-map-note strong{color:#0f6e56}
+
+    /* V4: interactive body-map coaching layer */
+    @keyframes routeDash{to{stroke-dashoffset:-28}}
+    @keyframes beadPulse{0%,100%{r:5;opacity:1}50%{r:7;opacity:.65}}
+    @keyframes glowPulse{0%,100%{opacity:.28;transform:scale(1)}50%{opacity:.08;transform:scale(1.9)}}
+    @keyframes pressBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+
+    div.panel > svg .dot,
+    div.panel > svg .dot2,
+    div.panel > svg .dot3{
+      animation: beadPulse var(--pace-dot) ease-in-out infinite !important;
+      opacity:.9;
+    }
+
+    .body-map-note{
+      background:#F0FDF9;
+      border:0.5px solid #cae9de;
+      border-radius:12px;
+      padding:10px 12px;
+      margin:8px 0 12px;
+      font-size:12px;
+      line-height:1.45;
+      color:#245e50;
+    }
+    .body-map-note strong{color:#0f6e56}
+
+    .route-path{
+      fill:none;
+      stroke:#1D9E75;
+      stroke-width:4;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      stroke-dasharray:9 8;
+      animation:routeDash var(--pace-route-dash) linear infinite;
+      filter:drop-shadow(0 1px 2px rgba(29,158,117,.2));
+    }
+    .route-guide{
+      fill:none;
+      stroke:#D85A30;
+      stroke-width:1.6;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      opacity:.75;
+    }
+    .route-start{fill:#4F8DF7;stroke:#fff;stroke-width:3}
+    .route-end{fill:#D85A30;stroke:#fff;stroke-width:3}
+    .route-bead{fill:#F97316;stroke:#fff;stroke-width:2;animation:beadPulse var(--pace-bead-pulse) ease-in-out infinite}
+    .route-bead.pressure-light{fill:#F59E0B}
+    .route-bead.pressure-medium{fill:#F97316}
+    .route-bead.pressure-firm{fill:#EF4444}
+    .route-label{
+      font-family:var(--font-sans);
+      font-size:11px;
+      font-weight:600;
+      fill:#0f6e56;
+      paint-order:stroke;
+      stroke:#fff;
+      stroke-width:4px;
+      stroke-linejoin:round;
+    }
+    .route-pulse{
+      fill:#1D9E75;
+      transform-origin:center;
+      animation:glowPulse var(--pace-glow) ease-in-out infinite;
+    }
+    .route-press-hand{
+      animation:pressBounce var(--pace-press) ease-in-out infinite;
+      transform-origin:center;
+    }
+
+    .partner-coach{
+      margin:10px 0 16px;
+      border:0.5px solid #cae9de;
+      border-radius:14px;
+      overflow:hidden;
+      background:#fff;
+      box-shadow:0 1px 0 rgba(0,0,0,.02);
+    }
+    .coach-main{
+      padding:12px 14px;
+      background:linear-gradient(180deg,#F8FFFC 0%,#F0FDF9 100%);
+      border-bottom:0.5px solid #cae9de;
+    }
+    .coach-kicker{
+      font-size:11px;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      font-weight:700;
+      color:#0f6e56;
+      margin-bottom:4px;
+    }
+    .coach-title{
+      font-size:14px;
+      font-weight:700;
+      color:var(--t1);
+      margin-bottom:4px;
+    }
+    .coach-instruction{
+      font-size:13px;
+      line-height:1.5;
+      color:var(--t2);
+    }
+    .coach-hint{
+      margin-top:8px;
+      font-size:12px;
+      color:#0f6e56;
+    }
+    .coach-controls{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      padding:10px;
+      background:#fff;
+    }
+    .coach-btn{
+      border:0.5px solid var(--b2);
+      background:#fff;
+      color:var(--t2);
+      border-radius:999px;
+      padding:7px 11px;
+      font-family:var(--font-sans);
+      font-size:12px;
+      cursor:pointer;
+      transition:all .15s;
+    }
+    .coach-btn:hover{background:#F0FDF9;border-color:#9FE1CB;color:#0f6e56}
+    .coach-btn.on{background:#1D9E75;color:#fff;border-color:#1D9E75;font-weight:600}
+    .step-card.active-step{
+      border-color:#1D9E75;
+      box-shadow:0 0 0 2px rgba(29,158,117,.12);
+      background:#fbfffd;
+    }
+
+    .frame-note{background:linear-gradient(180deg,#fff 0%,#fbfbfa 100%);border:0.5px solid var(--b2);border-radius:14px;padding:12px 14px;margin:0 0 16px;font-size:12px;line-height:1.5;color:var(--t2)}
+    .frame-note strong{color:var(--t1)}
+
+    .coach-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+    .pressure-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:0.5px solid}
+    .pressure-chip.light{background:#F0FDF9;border-color:#9FE1CB;color:#0f6e56}
+    .pressure-chip.medium{background:#E6FAF2;border-color:#5DCAA5;color:#0f6e56}
+    .pressure-chip.firm{background:#D9F5EA;border-color:#1D9E75;color:#085041}
+    .pressure-chip .pdot{display:inline-block;border-radius:999px;background:currentColor}
+    .pressure-chip.light .pdot{width:10px;height:10px;opacity:.35;box-shadow:0 0 0 4px currentColor}
+    .pressure-chip.medium .pdot{width:8px;height:8px;opacity:.55;box-shadow:0 0 0 2px currentColor}
+    .pressure-chip.firm .pdot{width:6px;height:6px;opacity:.85}
+    .coach-type{font-size:11px;color:#6a6f6d}
+    .route-pressure-text{font-family:var(--font-sans);font-size:10px;font-weight:600;fill:#D85A30;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+
+    .speed-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;border:0.5px solid #d8d6d3;background:#fffaf5;color:#9a5a17}
+    .speed-chip .sicon{font-size:12px;line-height:1}
+    .design-note{font-size:11px;color:#6a6f6d;margin-top:6px}
+    .route-start-label,.route-end-label{font-family:var(--font-sans);font-size:10px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+    .route-start-label{fill:#4F8DF7}
+    .route-end-label{fill:#D85A30}
+    .route-pressure-ring{fill:none;stroke:#F97316;opacity:.45}
+    .route-pressure-ring.pressure-light{stroke:#F59E0B;opacity:.32}
+    .route-pressure-ring.pressure-medium{stroke:#F97316;opacity:.45}
+    .route-pressure-ring.pressure-firm{stroke:#DC2626;opacity:.58}
+    .style-panel{border:0.5px solid #cae9de;border-radius:16px;background:linear-gradient(180deg,#F8FFFC 0%,#F0FDF9 100%);padding:12px;margin:0 0 16px}
+    .style-head{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+    .style-title{font-size:13px;font-weight:700;color:#0f6e56}
+    .style-current{font-size:12px;color:#57534e;line-height:1.4}
+    .style-buttons{display:flex;gap:8px;flex-wrap:wrap}
+    .style-btn{border:0.5px solid #cae9de;background:#fff;color:#245e50;border-radius:999px;padding:8px 12px;font-family:var(--font-sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+    .style-btn:hover{background:#E1F5EE}
+    .style-btn.on{background:#1D9E75;border-color:#1D9E75;color:#fff}
+    .style-note{font-size:11px;color:#4b7f71;line-height:1.45;margin-top:8px}
+
+    /* App theme override */
+    :root{
+      --bg1:#151B29;--bg2:#101827;--bgw:#241C13;
+      --t1:#FFFFFF;--t2:#CDD7F0;--t3:#8396C7;--tw:#FFC857;
+      --b1:#34405F;--b2:#34405F;--b3:#27324B;
+      --start:#4F8DF7;--move:#31E981;--end:#FFC857;--end-soft:#2A2417;
+    }
+    html{background:#151B29}
+    body{background:#151B29;color:#FFFFFF}
+    .page-header h1{color:#FFFFFF}
+    .page-header p{color:#8396C7}
+    .partner-note,
+    .style-panel,
+    .motion-legend-wrap,
+    .partner-coach,
+    .frame-note,
+    .body-map-note,
+    .motion-guide,
+    .step-card,
+    .legend-card{
+      background:#101827;
+      border-color:#34405F;
+      box-shadow:none;
+      color:#CDD7F0;
+    }
+    .partner-note strong,
+    .frame-note strong,
+    .body-map-note strong,
+    .style-title,
+    .coach-title,
+    .legend-name,
+    .step-title,
+    .mg-title{
+      color:#FFFFFF;
+    }
+    .partner-note,
+    .style-current,
+    .style-note,
+    .legend-note,
+    .step-desc,
+    .mg-desc,
+    .coach-instruction,
+    .se-item,
+    .coach-type,
+    .design-note{
+      color:#CDD7F0;
+    }
+    .motion-legend-title,
+    .tgl,
+    .mg-hint,
+    .page-header p + p{
+      color:#8396C7!important;
+    }
+    .tab,
+    .style-btn,
+    .coach-btn,
+    .tool-chip,
+    .tc,
+    .pressure-chip,
+    .speed-chip{
+      background:#13294D;
+      border-color:#34405F;
+      color:#CDD7F0;
+    }
+    .tab:hover,
+    .style-btn:hover,
+    .coach-btn:hover{
+      background:#20283B;
+      border-color:#4F8DF7;
+      color:#FFFFFF;
+    }
+    .tab.on,
+    .style-btn.on,
+    .coach-btn.on{
+      background:#4F8DF7;
+      border-color:#4F8DF7;
+      color:#FFFFFF;
+    }
+    .coach-main{
+      background:#101827;
+      border-bottom-color:#34405F;
+    }
+    .coach-controls{background:#151B29}
+    .coach-kicker,
+    .coach-hint,
+    .mg-label,
+    .step-feel{
+      color:#4F8DF7;
+    }
+    .step-num{
+      background:#13294D;
+      color:#4F8DF7;
+      border:1px solid #34405F;
+    }
+    .step-card.active-step{
+      background:#13294D;
+      border-color:#4F8DF7;
+      box-shadow:0 0 0 2px rgba(79,141,247,.18);
+    }
+    .legend-vis,
+    .mg-visual,
+    .tech-row svg{
+      background:#151B29;
+      border-color:#34405F;
+    }
+    .warn{
+      background:#241C13;
+      border:1px solid #4A3A1E;
+      color:#FFC857;
+    }
+    .info-warn{
+      background:#13294D;
+      border:1px solid #34405F;
+      color:#CDD7F0;
+    }
+    .pressure-chip.light,
+    .pressure-chip.medium,
+    .pressure-chip.firm{
+      background:#13294D;
+      border-color:#34405F;
+      color:#31E981;
+    }
+    .speed-chip{
+      background:#241C13;
+      border-color:#4A3A1E;
+      color:#FFC857;
+    }
+    .route-path,
+    .mv-line,
+    .mv-stroke,
+    .ci-stroke{
+      stroke:#4F8DF7;
+    }
+    .route-guide,
+    .route-end-label,
+    .mv-end-stroke,
+    .ci-end-stroke{
+      stroke:#FFC857;
+      fill:#FFC857;
+    }
+    .route-start-label,
+    .route-label{
+      fill:#4F8DF7;
+    }
+    .route-start,
+    .mv-start,
+    .ci-start,
+    .mv-dot,
+    .ci-accent{
+      fill:#4F8DF7;
+    }
+    .route-end,
+    .mv-end,
+    .ci-end{
+      fill:#FFC857;
+    }
+    .route-bead{
+      fill:#F97316;
+      stroke:#151B29;
+    }
+    .route-bead.pressure-light{fill:#F59E0B}
+    .route-bead.pressure-medium{fill:#F97316}
+    .route-bead.pressure-firm{fill:#EF4444}
+    .route-start,
+    .route-end{
+      stroke:#151B29;
+    }
+    .route-start-label,
+    .route-end-label,
+    .route-label,
+    .route-pressure-text{
+      stroke:#151B29;
+    }
+    .route-pressure-ring{
+      stroke:#F97316;
+    }
+    .route-pressure-ring.pressure-light{stroke:#F59E0B;opacity:.35}
+    .route-pressure-ring.pressure-medium{stroke:#F97316;opacity:.5}
+    .route-pressure-ring.pressure-firm{stroke:#DC2626;opacity:.65}
+    .mv-path,
+    .ci-path,
+    .se-path{
+      stroke:#31E981;
+      background:linear-gradient(90deg,#4F8DF7,#31E981,#FFC857);
+    }
+    .se-path:after{
+      border-color:#FFC857;
+    }
+    .se-start{background:#4F8DF7}
+    .se-end{background:#FFC857}
+    .body-reference-map{
+      width:100%;
+      aspect-ratio:1.05;
+      min-height:250px;
+      max-height:360px;
+      margin:8px 0 12px;
+      border:1px solid #34405F;
+      border-radius:18px;
+      overflow:hidden;
+      background:#0B111C;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
+    }
+    .body-reference-map svg{
+      width:100%;
+      height:100%;
+      display:block;
+    }
+    .source-body-map{
+      display:none!important;
+    }
+    .reference-caption{
+      fill:#FFFFFF;
+      font-family:var(--font-sans);
+      font-size:20px;
+      font-weight:800;
+      paint-order:stroke;
+      stroke:#0B111C;
+      stroke-width:7px;
+      stroke-linejoin:round;
+    }
+</style>
+</head>
+<body>
+<div class="page-header">
+<h1>Everyday massage guide</h1>
+<p>Partner-view massage guide for a petite adult woman frame: interactive movement coaching with start and finish cues.</p>
+<p style="font-size:12px;color:var(--t3);line-height:1.5;margin-top:6px">Evidence note: this is for short-term comfort, soreness, mobility and relaxation. It is not a cure for injuries, PCOS, nerve pain or tendon problems.</p>
+</div><div class="partner-note"><strong>Partner massage view:</strong> this version is set up as if <strong>you are giving the massage</strong>. <div class="se-legend"><span class="se-item"><span class="se-dot se-start"></span> blue = where your hands start</span><span class="se-item"><span class="se-path"></span> follow this path</span><span class="se-item"><span class="se-dot se-end"></span> yellow = where the stroke ends / where you finish</span></div></div><div class="frame-note"><strong>Body-frame styling:</strong> the body maps below are now proportioned more like a petite adult woman frame — roughly <strong>5 ft 4 / 57 kg</strong>. It is still a simplified guide, not an exact portrait, but the silhouette is slimmer and closer to your partner’s build.</div>
+<div class="style-panel">
+<div class="style-head">
+<div><div class="style-title">Massage style pace</div><div class="style-current" id="style-current">Relaxation: slow, calming movement.</div></div>
+</div>
+<div class="style-buttons" id="style-buttons">
+<button class="style-btn on" data-style="relaxation" type="button">Relaxation</button>
+<button class="style-btn" data-style="remedial" type="button">Remedial</button>
+<button class="style-btn" data-style="sports" type="button">Sports recovery</button>
+<button class="style-btn" data-style="lymphatic" type="button">Lymphatic gentle</button>
+</div>
+<div class="style-note">The moving dots and stroke paths change speed to match the selected style. Pressure still comes from the selected technique.</div>
+</div>
+<h2 class="sr-only">Science-backed at-home massage guide including lower body and wine-work recovery</h2>
+<div class="motion-legend-wrap">
+<div class="motion-legend-title">How to give each stroke</div><div class="se-legend"><span class="se-item"><span class="se-dot se-start"></span> start</span><span class="se-item"><span class="se-path"></span> move</span><span class="se-item"><span class="se-dot se-end"></span> finish</span></div>
+<div class="motion-legend">
+<div class="legend-card"><div class="legend-vis"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36">
+<circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="12" stroke="#5DCAA5" stroke-width="1.2"></circle>
+<circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".45" r="8" stroke="#5DCAA5" stroke-width="1.2"></circle>
+<circle class="mv-dot" cx="37" cy="18" r="6"></circle>
+<path class="mv-stroke mv-hold" d="M37 5 L37 12"></path>
+<path class="mv-stroke" d="M31 8 L37 2 L43 8"></path>
+<rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.7" x="50" y="11"></rect>
+<rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.7" x="55" y="11"></rect>
+</svg></div><div class="legend-name">Press &amp; hold</div><div class="legend-note">Stay on one sore spot and let the pressure sink in.</div></div>
+<div class="legend-card"><div class="legend-vis"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36">
+<circle class="mv-soft" cx="37" cy="18" r="10"></circle>
+<path class="mv-stroke mv-rot" d="M25 18a12 12 0 1 1 6 10"></path>
+<path class="mv-stroke" d="M31 31 L31 24 L37 27"></path>
+<circle class="mv-dot" cx="37" cy="18" r="3.2"></circle>
+</svg></div><div class="legend-name">Circles</div><div class="legend-note">Keep the hand in one area and move around the point.</div></div>
+<div class="legend-card"><div class="legend-vis"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><line class="mv-soft" x1="14" x2="60" y1="18" y2="18"></line>
+<line class="mv-stroke mv-bob" x1="14" x2="60" y1="18" y2="18"></line>
+<circle class="mv-dot" cx="14" cy="18" r="3.2"></circle>
+<path class="mv-stroke" d="M54 12 L60 18 L54 24"></path></svg></div><div class="legend-name">Glide</div><div class="legend-note">Start at one end of the muscle and finish at the other.</div></div>
+<div class="legend-card"><div class="legend-vis"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36">
+<ellipse class="mv-soft-fill mv-sqz" cx="37" cy="18" rx="13" ry="8"></ellipse>
+<path class="mv-stroke" d="M10 18 L22 18"></path>
+<path class="mv-stroke" d="M18 12 L24 18 L18 24"></path>
+<path class="mv-stroke" d="M64 18 L52 18"></path>
+<path class="mv-stroke" d="M56 12 L50 18 L56 24"></path>
+</svg></div><div class="legend-name">Squeeze</div><div class="legend-note">Compress the tissue inward, then release slowly.</div></div>
+<div class="legend-card"><div class="legend-vis"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36">
+<line stroke="#c8e8dd" stroke-linecap="round" stroke-width="3" x1="18" x2="18" y1="8" y2="28"></line>
+<line stroke="#c8e8dd" stroke-linecap="round" stroke-width="3" x1="28" x2="28" y1="8" y2="28"></line>
+<line stroke="#c8e8dd" stroke-linecap="round" stroke-width="3" x1="38" x2="38" y1="8" y2="28"></line>
+<line stroke="#c8e8dd" stroke-linecap="round" stroke-width="3" x1="48" x2="48" y1="8" y2="28"></line>
+<line class="mv-stroke" x1="16" x2="50" y1="18" y2="18"></line>
+<path class="mv-stroke" d="M22 12 L16 18 L22 24"></path>
+<path class="mv-stroke" d="M44 12 L50 18 L44 24"></path>
+</svg></div><div class="legend-name">Cross-fibre</div><div class="legend-note">Go side-to-side across the muscle line, not along it.</div></div>
+</div>
+</div>
+<div class="info-warn"><i aria-hidden="true" class="ti ti-stethoscope"></i> Use the “feels good” rule: dull pressure, warmth, and easing are okay. Sharp pain, numbness, tingling, swelling, redness, or pain that travels down the leg/arm means stop and get medical or physio advice.</div>
+<div class="tgl">General</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 0 6px">
+<button class="tab on" onclick="sw('neck',this)">Neck &amp; traps</button>
+<button class="tab" onclick="sw('back',this)">Shoulders &amp; back</button>
+<button class="tab" onclick="sw('scalp',this)">Scalp &amp; face</button>
+<button class="tab" onclick="sw('jaw',this)">Jaw / TMJ</button>
+<button class="tab" onclick="sw('belly',this)">Belly / pelvic comfort</button>
+</div>
+<div class="tgl">Lower body</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 0 6px">
+<button class="tab" onclick="sw('calves',this)">Calves &amp; Achilles</button>
+<button class="tab" onclick="sw('hams',this)">Hamstrings &amp; glutes</button>
+<button class="tab" onclick="sw('hips',this)">Hip flexors &amp; IT band</button>
+<button class="tab" onclick="sw('quads',this)">Quads &amp; knees</button>
+<button class="tab" onclick="sw('feet',this)">Feet &amp; ankles</button>
+</div>
+<div class="tgl">Wine work recovery</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 0 16px">
+<button class="tab" onclick="sw('hands',this)">Hands &amp; forearms</button>
+</div>
+<!-- NECK & TRAPS -->
+<div class="panel on" id="p-neck">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis ball</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-droplet"></i> warm wet cloth</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> just your hands</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 260" width="100%">
+<title>Neck and trapezius pressure points</title>
+<desc>Person illustration showing where to press for neck and trap pain</desc>
+<ellipse cx="340" cy="68" fill="#F5C4B3" rx="45" ry="52" stroke="#D4537E" stroke-width="1.2" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)"></ellipse>
+<rect fill="#F5C4B3" height="55" rx="16" stroke="#D4537E" stroke-width="1" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)" width="36" x="322" y="116"></rect>
+<path d="M200 175 Q210 155 250 148 Q295 138 340 135 Q385 138 430 148 Q470 155 480 175 Q490 210 488 240 Q420 255 340 255 Q260 255 192 240 Q190 210 200 175Z" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1.3" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)"></path>
+<ellipse cx="210" cy="195" fill="#5DCAA5" rx="42" ry="25" stroke="#0F6E56" stroke-width="1" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)"></ellipse>
+<ellipse cx="470" cy="195" fill="#5DCAA5" rx="42" ry="25" stroke="#0F6E56" stroke-width="1" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)"></ellipse>
+<line opacity="0.4" stroke="var(--b2)" stroke-dasharray="4 4" stroke-width="1" transform="translate(340 170) scale(0.9 0.98) translate(-340 -170)" x1="340" x2="340" y1="135" y2="255"></line>
+<circle class="rip" cx="310" cy="122" fill="none" opacity="0.7" r="10" stroke="#D85A30" stroke-width="1.5"></circle>
+<circle class="dot" cx="310" cy="122" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="370" cy="122" fill="none" opacity="0.7" r="10" stroke="#D85A30" stroke-width="1.5"></circle>
+<circle class="dot2" cx="370" cy="122" fill="#1D9E75" r="7"></circle>
+<circle class="rip" cx="258" cy="158" fill="none" opacity="0.6" r="10" stroke="#085041" stroke-width="1.5"></circle>
+<circle class="dot3" cx="258" cy="158" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="422" cy="158" fill="none" opacity="0.6" r="10" stroke="#085041" stroke-width="1.5"></circle>
+<circle class="dot" cx="422" cy="158" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="222" cy="208" fill="#1D9E75" opacity="0.7" r="7"></circle>
+<circle class="dot3" cx="458" cy="208" fill="#1D9E75" opacity="0.7" r="7"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="370" x2="490" y1="122" y2="85"></line>
+<text fill="var(--t1)" font-size="13" x="495" y="80">Base of skull</text>
+<g class="callout-ico" transform="translate(493.0,87.0)"><circle class="ci-start" cx="7" cy="7" r="2.8"></circle><circle cx="7" cy="7" fill="none" opacity=".45" r="5.3" stroke="#D85A30" stroke-width="1.1"></circle><line class="ci-path" x1="7" x2="7" y1="1" y2="4"></line><path class="ci-end-stroke" d="M4.5 3.4 L7 1 L9.5 3.4"></path></g><text fill="var(--t2)" font-size="11" x="513.0" y="95">Press &amp; hold here</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="422" x2="490" y1="158" y2="148"></line>
+<text fill="var(--t1)" font-size="13" x="495" y="146">Upper trap</text>
+<g class="callout-ico" transform="translate(493.0,153.0)"><circle class="ci-start" cx="1.8" cy="7" r="2"></circle><circle class="ci-start" cx="12.2" cy="7" r="2"></circle><ellipse cx="7" cy="7" fill="#FDE6DD" rx="2.8" ry="2" stroke="#D85A30" stroke-width="1"></ellipse><line class="ci-path" x1="3.2" x2="5" y1="7" y2="7"></line><line class="ci-path" x1="10.8" x2="9" y1="7" y2="7"></line><path class="ci-stroke" d="M4.2 5.2 L5.8 7 L4.2 8.8"></path><path class="ci-stroke" d="M9.8 5.2 L8.2 7 L9.8 8.8"></path></g><text fill="var(--t2)" font-size="11" x="513.0" y="161">Squeeze this muscle</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="458" x2="490" y1="208" y2="215"></line>
+<text fill="var(--t1)" font-size="13" x="495" y="213">Mid trap</text>
+<g class="callout-ico" transform="translate(493.0,220.0)"><circle class="ci-start" cx="4.2" cy="7" r="2.8"></circle><line class="ci-path" x1="7.6" x2="11.2" y1="7" y2="7"></line><line class="ci-end-stroke" x1="12.8" x2="12.8" y1="2" y2="12"></line><line class="ci-end-stroke" opacity=".45" x1="11.1" x2="11.1" y1="2" y2="12"></line></g><text fill="var(--t2)" font-size="11" x="513.0" y="228">Tennis ball on wall</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Skull base — two finger press</p>
+<p class="step-desc">Feel the two bony bumps at the back of your head. Move your fingers an inch below them into the soft hollow. Press inward and upward. Hold still — no rubbing needed. This targets the suboccipital muscles, which refer pain into the head and neck via the greater occipital nerve.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ah" fill="#1D9E75" height="13" rx="3" width="6" x="10" y="8"></rect><rect class="ah" fill="#1D9E75" height="13" rx="3" style="animation-delay:0.2s" width="6" x="18" y="8"></rect><rect fill="#5DCAA5" height="7" rx="3" width="18" x="8" y="20"></rect></svg>
+<div class="tech-chips"><span class="tc">2 fingers</span><span class="tc">hold still</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Press and pause</div><div class="mg-desc">Press into one spot and stay there without rubbing.</div></div>
+</div>
+</div>
+<p class="step-feel">30–60 sec. You should feel a dull ache ease.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Trap squeeze — grab and hold</p>
+<p class="step-desc">Reach your right hand across to your left shoulder. Grab the muscle between your neck and shoulder. Squeeze firmly, hold for 5 seconds, slowly release. Repeat. This activates Golgi tendon organ pathways that signal the muscle to relax — the science behind why squeezing relieves tension.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><ellipse class="as" cx="17" cy="17" fill="#5DCAA5" rx="10" ry="7"></ellipse><path d="M7 17 Q8 10 17 9 Q26 10 27 17" fill="none" stroke="#1D9E75" stroke-width="1.5"></path><path d="M7 17 Q8 24 17 25 Q26 24 27 17" fill="none" stroke="#1D9E75" stroke-width="1.5"></path></svg>
+<div class="tech-chips"><span class="tc">full hand</span><span class="tc">squeeze &amp; hold</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-end" cx="37" cy="18" r="4.4"></circle><ellipse class="mv-sqz" cx="37" cy="18" fill="#DFF8EE" rx="12" ry="7.5" stroke="#5DCAA5" stroke-width="1.1"></ellipse><line class="mv-line" x1="13" x2="28" y1="18" y2="18"></line><line class="mv-line" x1="61" x2="46" y1="18" y2="18"></line><circle class="mv-start" cx="13" cy="18" r="3.4"></circle><circle class="mv-start" cx="61" cy="18" r="3.4"></circle><path class="mv-line" d="M22 12 L28 18 L22 24"></path><path class="mv-line" d="M52 12 L46 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Squeeze inward</div><div class="mg-desc">Grab the muscle, squeeze it in, pause, then release slowly.</div></div>
+</div>
+</div>
+<p class="step-feel">8–10 squeezes. Do both sides.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Tennis ball on the wall</p>
+<p class="step-desc">Place a tennis ball between your upper back and a wall. Lean into it and move very slowly until you find a sore spot. Stay there. Breathe out. Let the ball sink in. This applies sustained mechanical pressure to myofascial trigger points, which reduces sensitisation in the muscle spindle.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ah" cx="17" cy="17" fill="#9FE1CB" r="9"></circle><circle class="ah" cx="17" cy="17" fill="#1D9E75" r="5" style="animation-delay:0.3s"></circle></svg>
+<div class="tech-chips"><span class="tc">ball</span><span class="tc">sink &amp; hold</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Sink and hold</div><div class="mg-desc">Lean in until you find the sore spot, then stay there and breathe.</div></div>
+</div>
+</div>
+<p class="step-feel">2–3 min. Each sore spot gets 20–30 sec.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Warm cloth first (optional but great)</p>
+<p class="step-desc">Soak a cloth in warm water, wring it out, drape it over your neck and traps for 5 minutes before massaging. Heat increases muscle extensibility and reduces viscosity in the fascia, making the tissue easier to work with.</p>
+<p class="step-feel">Do this right before bed for best sleep.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Stop if pain shoots down your arm or you feel numbness — see a doctor. A little soreness is normal; sharp pain is not.</div>
+</div>
+<!-- SHOULDERS & BACK -->
+<div class="panel" id="p-back">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis ball or two</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-cylinder"></i> foam roller (optional)</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-door"></i> a doorframe</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 280" width="100%">
+<title>Back view: shoulder blades, mid-back, lower back</title>
+<desc>Illustrated back with shoulder and back massage points</desc>
+<path d="M210 30 Q180 42 172 85 Q165 130 168 200 Q170 255 200 272 Q260 285 340 285 Q420 285 480 272 Q510 255 512 200 Q515 130 508 85 Q500 42 470 30 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)"></path>
+<path d="M205 70 Q188 88 190 130 Q196 155 218 162 Q240 167 252 148 Q260 130 255 100 Q248 78 232 68 Z" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1.3" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)"></path>
+<path d="M475 70 Q492 88 490 130 Q484 155 462 162 Q440 167 428 148 Q420 130 425 100 Q432 78 448 68 Z" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1.3" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)"></path>
+<rect fill="#EEEDFE" height="88" opacity="0.85" rx="14" stroke="#7F77DD" stroke-width="1.2" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)" width="164" x="258" y="80"></rect>
+<text fill="#3C3489" font-size="12" text-anchor="middle" x="340" y="128">between shoulder blades</text>
+<rect fill="#FAC775" height="64" opacity="0.85" rx="10" stroke="#EF9F27" stroke-width="1.2" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)" width="136" x="272" y="200"></rect>
+<text fill="#633806" font-size="12" text-anchor="middle" x="340" y="235">lower back</text>
+<line opacity="0.5" stroke="var(--b2)" stroke-dasharray="5 4" stroke-width="1" transform="translate(340 150) scale(0.9 0.98) translate(-340 -150)" x1="340" x2="340" y1="30" y2="275"></line>
+<circle class="rip" cx="220" cy="112" fill="none" opacity="0.6" r="10" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot" cx="220" cy="112" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="460" cy="112" fill="none" opacity="0.6" r="10" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot2" cx="460" cy="112" fill="#1D9E75" r="7"></circle>
+<circle class="dot3" cx="285" cy="104" fill="#1D9E75" r="7"></circle>
+<circle class="dot" cx="395" cy="104" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="285" cy="148" fill="#1D9E75" r="7"></circle>
+<circle class="dot3" cx="395" cy="148" fill="#1D9E75" r="7"></circle>
+<circle class="dot" cx="300" cy="220" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="380" cy="220" fill="#1D9E75" r="7"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="460" x2="530" y1="112" y2="80"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="78">Shoulder blade</text>
+<g class="callout-ico" transform="translate(533.0,85.0)"><circle class="ci-start" cx="7" cy="7" r="2"></circle><path class="ci-path" d="M3.8 8.5a4.3 4.3 0 1 1 5.8 2.8"></path><path class="ci-end-stroke" d="M8.8 4.2 L11.2 4.5 L10.1 6.8"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="93">Cross-arm reach + circles</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="395" x2="530" y1="126" y2="138"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="136">Between blades</text>
+<g class="callout-ico" transform="translate(533.0,143.0)"><circle class="ci-start" cx="4.2" cy="7" r="2.8"></circle><line class="ci-path" x1="7.6" x2="11.2" y1="7" y2="7"></line><line class="ci-end-stroke" x1="12.8" x2="12.8" y1="2" y2="12"></line><line class="ci-end-stroke" opacity=".45" x1="11.1" x2="11.1" y1="2" y2="12"></line></g><text fill="var(--t2)" font-size="11" x="553.0" y="151">Two tennis balls in a sock</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="380" x2="530" y1="220" y2="210"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="208">Lower back</text>
+<g class="callout-ico" transform="translate(533.0,215.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="223">Both fists beside the spine</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Reach across and rub your shoulder blade</p>
+<p class="step-desc">Cross your right arm across your chest — this wings out your left shoulder blade, exposing the muscles tucked underneath. Use your left hand to rub small circles on the blade edge. The serratus anterior and rhomboids hide here and are often the source of deep mid-back aching.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><g class="ap"><circle cx="17" cy="17" fill="none" r="8" stroke="#1D9E75" stroke-dasharray="4 3" stroke-width="1.5"></circle><circle cx="17" cy="9" fill="#1D9E75" r="3"></circle></g></svg>
+<div class="tech-chips"><span class="tc">fingertips</span><span class="tc">small circles</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="3.4"></circle><circle class="mv-path" cx="37" cy="18" r="10"></circle><path class="mv-line" d="M27 22a10 10 0 1 1 14-12"></path><path class="mv-end-stroke" d="M44 9 L47 14 L41 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Small circles</div><div class="mg-desc">Keep your hand on one spot and make tight little circles.</div></div>
+</div>
+</div>
+<p class="step-feel">60 sec per side.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Two tennis balls in a sock</p>
+<p class="step-desc">Put two tennis balls in a long sock, tie the end. Lie on the floor, place them on either side of your spine between your shoulder blades. Slowly inch up and down. The two-ball setup maintains spinal decompression while applying bilateral myofascial pressure — much more effective than a single ball.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ah" cx="11" cy="17" fill="#9FE1CB" r="7"></circle><circle class="ah" cx="23" cy="17" fill="#9FE1CB" r="7" style="animation-delay:0.4s"></circle></svg>
+<div class="tech-chips"><span class="tc">two balls</span><span class="tc">slow glide</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow glide</div><div class="mg-desc">Move in one slow line from start to finish, then reset.</div></div>
+</div>
+</div>
+<p class="step-feel">3–5 min. Each sore spot 20–30 sec.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Doorframe chest stretch</p>
+<p class="step-desc">Stand in a doorway, both forearms on the frame at shoulder height. Lean forward gently. This stretches the pectoralis minor, which shortens from sustained forward posture and pulls the shoulder blades into a protracted, uncomfortable position.</p>
+<p class="step-feel">45 sec, 2 times. Do this before bed every night.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Lower back fist press</p>
+<p class="step-desc">Make two fists and reach behind you, placing your knuckles on the thick erector spinae muscles beside your lower spine. Press in and slightly upward. The erectors are postural muscles that rarely get a break and respond very well to sustained compression.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ah" fill="#5DCAA5" height="12" rx="4" width="18" x="8" y="12"></rect><rect fill="#1D9E75" height="6" rx="3" width="12" x="11" y="22"></rect></svg>
+<div class="tech-chips"><span class="tc">knuckles/fist</span><span class="tc">hold still</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Press and pause</div><div class="mg-desc">Press into one spot and stay there without rubbing.</div></div>
+</div>
+</div>
+<p class="step-feel">30 sec, 3 times.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Never roll directly on the spine bones — always to the side. If you have a slipped disc or sciatica, skip the lower back part and see a physio.</div>
+</div>
+<!-- JAW -->
+<div class="panel" id="p-jaw">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-droplet"></i> warm wet cloth</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> just your fingers</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 270" width="100%">
+<title>Face showing jaw and temple pressure points</title>
+<desc>Illustrated face for jaw and TMJ pain relief</desc>
+<ellipse cx="340" cy="120" fill="#F5C4B3" rx="120" ry="138" stroke="#D4537E" stroke-width="1.2" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<ellipse cx="300" cy="96" fill="#fff" rx="14" ry="8" stroke="#888780" stroke-width="0.8" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<ellipse cx="380" cy="96" fill="#fff" rx="14" ry="8" stroke="#888780" stroke-width="0.8" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<circle cx="300" cy="97" fill="#444441" r="5" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></circle>
+<circle cx="380" cy="97" fill="#444441" r="5" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></circle>
+<path d="M315 178 Q340 192 365 178" fill="none" stroke="#888780" stroke-linecap="round" stroke-width="1.2" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></path>
+<ellipse cx="228" cy="90" fill="#AFA9EC" opacity="0.5" rx="32" ry="45" stroke="#7F77DD" stroke-width="1" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<ellipse cx="452" cy="90" fill="#AFA9EC" opacity="0.5" rx="32" ry="45" stroke="#7F77DD" stroke-width="1" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<ellipse cx="238" cy="185" fill="#9FE1CB" opacity="0.6" rx="30" ry="38" stroke="#1D9E75" stroke-width="1" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<ellipse cx="442" cy="185" fill="#9FE1CB" opacity="0.6" rx="30" ry="38" stroke="#1D9E75" stroke-width="1" transform="translate(340 120) scale(0.9 1.0) translate(-340 -120)"></ellipse>
+<circle class="rip" cx="222" cy="78" fill="none" opacity="0.6" r="10" stroke="#7F77DD" stroke-width="1.5"></circle>
+<circle class="dot" cx="222" cy="78" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="458" cy="78" fill="none" opacity="0.6" r="10" stroke="#7F77DD" stroke-width="1.5"></circle>
+<circle class="dot2" cx="458" cy="78" fill="#1D9E75" r="7"></circle>
+<circle class="rip" cx="225" cy="148" fill="none" opacity="0.6" r="10" stroke="#D85A30" stroke-width="1.5"></circle>
+<circle class="dot3" cx="225" cy="148" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="455" cy="148" fill="none" opacity="0.6" r="10" stroke="#D85A30" stroke-width="1.5"></circle>
+<circle class="dot" cx="455" cy="148" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="235" cy="188" fill="#1D9E75" r="7"></circle>
+<circle class="dot3" cx="445" cy="188" fill="#1D9E75" r="7"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="458" x2="530" y1="78" y2="58"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="56">Temple</text>
+<g class="callout-ico" transform="translate(533.0,63.0)"><circle class="ci-start" cx="7" cy="7" r="2"></circle><path class="ci-path" d="M3.8 8.5a4.3 4.3 0 1 1 5.8 2.8"></path><path class="ci-end-stroke" d="M8.8 4.2 L11.2 4.5 L10.1 6.8"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="71">Circles toward the ear</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="455" x2="530" y1="148" y2="135"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="133">Jaw hinge (TMJ)</text>
+<g class="callout-ico" transform="translate(533.0,140.0)"><rect fill="#DFF8EE" height="5" rx="1.2" stroke="#5DCAA5" stroke-width="1" width="4" x="5" y="4.5"></rect><circle class="ci-start" cx="4" cy="7" r="1.6"></circle><circle class="ci-start" cx="10" cy="7" r="1.6"></circle><circle class="ci-end" cx="1.4" cy="7" r="1.6"></circle><circle class="ci-end" cx="12.6" cy="7" r="1.6"></circle><line class="ci-path" x1="4" x2="1.4" y1="7" y2="7"></line><line class="ci-path" x1="10" x2="12.6" y1="7" y2="7"></line><path class="ci-end-stroke" d="M3.3 5 L1.4 7 L3.3 9"></path><path class="ci-end-stroke" d="M10.7 5 L12.6 7 L10.7 9"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="148">Open mouth slowly here</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="445" x2="530" y1="188" y2="198"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="196">Masseter (cheek)</text>
+<g class="callout-ico" transform="translate(533.0,203.0)"><circle class="ci-start" cx="7" cy="7" r="2"></circle><path class="ci-path" d="M3.8 8.5a4.3 4.3 0 1 1 5.8 2.8"></path><path class="ci-end-stroke" d="M8.8 4.2 L11.2 4.5 L10.1 6.8"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="211">Clench to find it, then rub</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Find your jaw hinge and press</p>
+<p class="step-desc">Place your fingers just in front of your ear — open your mouth slightly and you'll feel the TMJ move. Press gently with 2 fingers and slowly open and close your jaw a few times. This mobilises the condyle within the joint space and reduces compressive loading.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ah" fill="#1D9E75" height="13" rx="3" width="6" x="10" y="8"></rect><rect class="ah" fill="#1D9E75" height="13" rx="3" style="animation-delay:0.2s" width="6" x="18" y="8"></rect><rect fill="#5DCAA5" height="7" rx="3" width="18" x="8" y="20"></rect></svg>
+<div class="tech-chips"><span class="tc">2 fingers</span><span class="tc">hold still</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Press and pause</div><div class="mg-desc">Press into one spot and stay there without rubbing.</div></div>
+</div>
+</div>
+<p class="step-feel">30 sec. Do both sides.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Masseter circles — the big chewing muscle</p>
+<p class="step-desc">Clench your teeth — the muscle that pops out on your cheek is the masseter. It's one of the strongest muscles in the body relative to its size. Use 2–3 fingers to make slow downward circles from just under your cheekbone to your jawline. Bruxism (tooth grinding) causes severe masseter hypertrophy and chronic headaches.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><g class="ap"><circle cx="17" cy="17" fill="none" r="8" stroke="#1D9E75" stroke-dasharray="4 3" stroke-width="1.5"></circle><circle cx="17" cy="9" fill="#1D9E75" r="3"></circle></g></svg>
+<div class="tech-chips"><span class="tc">2–3 fingers</span><span class="tc">slow circles</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="3.4"></circle><circle class="mv-path" cx="37" cy="18" r="10"></circle><path class="mv-line" d="M27 22a10 10 0 1 1 14-12"></path><path class="mv-end-stroke" d="M44 9 L47 14 L41 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow circles</div><div class="mg-desc">Stay over the area and move in slow, controlled circles.</div></div>
+</div>
+</div>
+<p class="step-feel">60–90 sec per side. Often very sore here.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Temple sweep</p>
+<p class="step-desc">Place all four fingertips on your temple. Make slow circles backward toward your ear. The temporalis muscle fans across this area and is a major contributor to tension headaches. Light to medium pressure — the temporal bone is sensitive.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><g class="ap"><circle cx="17" cy="17" fill="none" r="9" stroke="#9FE1CB" stroke-dasharray="5 3" stroke-width="1.5"></circle><circle cx="17" cy="8" fill="#5DCAA5" r="3"></circle></g></svg>
+<div class="tech-chips"><span class="tc">flat fingers</span><span class="tc">circles backward</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="3.4"></circle><circle class="mv-path" cx="37" cy="18" r="10"></circle><path class="mv-line" d="M27 22a10 10 0 1 1 14-12"></path><path class="mv-end-stroke" d="M44 9 L47 14 L41 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Circles backward</div><div class="mg-desc">Circle toward the back / ear side rather than forward.</div></div>
+</div>
+</div>
+<p class="step-feel">60 sec per side.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Warm cloth finish</p>
+<p class="step-desc">Press a warm damp cloth over your jaw and temples. Let your mouth hang open — no teeth touching. This produces heat-induced myofascial relaxation and is consistently rated as the most relieving part.</p>
+<p class="step-feel">5 min. Perfect before bed.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> If your jaw clicks or locks, see a dentist. Stop gum and hard foods when it flares. A night guard helps if you grind your teeth.</div>
+</div>
+<!-- BELLY -->
+<div class="panel" id="p-belly">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> just your hands</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-bed"></i> lie on your back</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-droplet"></i> warm oil (optional)</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 285" width="100%">
+<title>Torso showing belly and pelvic massage zones</title>
+<desc>Torso for gentle belly and pelvic comfort massage</desc>
+<path d="M215 20 Q178 35 168 75 Q160 118 162 185 Q165 248 190 270 Q240 285 340 285 Q440 285 490 270 Q515 248 518 185 Q520 118 512 75 Q502 35 465 20 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1.2" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></path>
+<circle cx="340" cy="210" fill="#E1F5EE" opacity="0.6" r="72" stroke="#1D9E75" stroke-width="1.2" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></circle>
+<path d="M340 145 Q410 145 412 210 Q410 272 340 275 Q270 272 268 210 Q270 148 338 145" fill="none" opacity="0.7" stroke="#1D9E75" stroke-dasharray="5 4" stroke-width="1.8" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></path>
+<polygon fill="#1D9E75" opacity="0.7" points="340,140 330,152 350,152" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></polygon>
+<ellipse cx="428" cy="78" fill="#FAC775" opacity="0.7" rx="52" ry="36" stroke="#EF9F27" stroke-width="1.2" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></ellipse>
+<text fill="#633806" font-size="12" text-anchor="middle" x="428" y="82">upper belly</text>
+<ellipse cx="220" cy="88" fill="#B5D4F4" opacity="0.8" rx="28" ry="18" stroke="#378ADD" stroke-width="1" transform="translate(340 150) scale(0.88 0.97) translate(-340 -150)"></ellipse>
+<text fill="#0C447C" font-size="11" text-anchor="middle" x="220" y="92">side body</text>
+<circle class="rip" cx="340" cy="210" fill="none" opacity="0.4" r="12" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot" cx="340" cy="210" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="220" cy="88" fill="#1D9E75" r="7"></circle>
+<circle class="dot3" cx="428" cy="68" fill="#1D9E75" r="7"></circle>
+<defs><marker id="arrp" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="8" refy="5" viewbox="0 0 10 10"><path d="M2 1L8 5L2 9" fill="none" stroke="#1D9E75" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></marker></defs>
+<line marker-end="url(#arrp)" opacity="0.6" stroke="#1D9E75" stroke-dasharray="4 3" stroke-width="1.5" x1="270" x2="270" y1="255" y2="200"></line>
+<line marker-end="url(#arrp)" opacity="0.6" stroke="#1D9E75" stroke-dasharray="4 3" stroke-width="1.5" x1="410" x2="410" y1="255" y2="200"></line>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="428" x2="530" y1="68" y2="48"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="46">Upper belly</text>
+<g class="callout-ico" transform="translate(533.0,53.0)"><circle class="ci-start" cx="7" cy="12" r="2"></circle><circle class="ci-end" cx="7" cy="2" r="2"></circle><line class="ci-path" x1="7" x2="7" y1="12" y2="2"></line><path class="ci-end-stroke" d="M4.5 4.5 L7 2 L9.5 4.5"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="61">Stroke upward under ribs</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="220" x2="165" y1="88" y2="58"></line>
+<text fill="var(--t1)" font-size="13" x="40" y="56">Low back warmth</text>
+<g class="callout-ico" transform="translate(38.0,63.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="58.0" y="71">Warm hands, hold still</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="412" x2="530" y1="210" y2="195"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="193">Belly</text>
+<g class="callout-ico" transform="translate(533.0,200.0)"><circle class="ci-start" cx="7" cy="7" r="2"></circle><path class="ci-path" d="M3.8 8.5a4.3 4.3 0 1 1 5.8 2.8"></path><path class="ci-end-stroke" d="M8.8 4.2 L11.2 4.5 L10.1 6.8"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="208">Clockwise circles</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="410" x2="530" y1="235" y2="248"></line>
+<text fill="var(--t1)" font-size="13" x="535" y="246">Groin sweep</text>
+<g class="callout-ico" transform="translate(533.0,253.0)"><circle class="ci-start" cx="7" cy="12" r="2"></circle><circle class="ci-end" cx="7" cy="2" r="2"></circle><line class="ci-path" x1="7" x2="7" y1="12" y2="2"></line><path class="ci-end-stroke" d="M4.5 4.5 L7 2 L9.5 4.5"></path></g><text fill="var(--t2)" font-size="11" x="553.0" y="261">Stroke upward to navel</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Lie down and warm your belly</p>
+<p class="step-desc">Lie on your back, knees bent. Rub your hands together until warm. Place flat palms on your lower belly and hold. The warmth activates thermoreceptors in the skin that signal the underlying smooth muscle to relax — this is the mechanism behind a hot water bottle.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ah" fill="#9FE1CB" height="14" rx="5" width="22" x="6" y="10"></rect></svg>
+<div class="tech-chips"><span class="tc">flat palm</span><span class="tc">hold still</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="16" cy="18" r="4"></circle><circle class="mv-end" cx="58" cy="18" r="4"></circle><line class="mv-path" x1="16" x2="58" y1="18" y2="18"></line><line class="mv-line" x1="16" x2="58" y1="18" y2="18"></line><path class="mv-end-stroke" d="M52 12 L58 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Motion guide</div><div class="mg-desc">Follow the arrow direction shown and keep the movement slow.</div></div>
+</div>
+</div>
+<p class="step-feel">1 min of just holding.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Clockwise belly circles</p>
+<p class="step-desc">Using flat palms, make slow circles around your belly — always clockwise (the direction of peristalsis in the large intestine). Start light and very gradually add a little pressure. Research supports abdominal massage for constipation and bloating via stimulation of colonic motility.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><g class="ap"><circle cx="17" cy="17" fill="none" r="10" stroke="#5DCAA5" stroke-dasharray="5 3" stroke-width="1.5"></circle><polygon fill="#1D9E75" points="17,7 14,12 20,12"></polygon></g></svg>
+<div class="tech-chips"><span class="tc">flat palm</span><span class="tc">clockwise</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="16" cy="18" r="4"></circle><circle class="mv-end" cx="58" cy="18" r="4"></circle><line class="mv-path" x1="16" x2="58" y1="18" y2="18"></line><line class="mv-line" x1="16" x2="58" y1="18" y2="18"></line><path class="mv-end-stroke" d="M52 12 L58 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Motion guide</div><div class="mg-desc">Follow the arrow direction shown and keep the movement slow.</div></div>
+</div>
+</div>
+<p class="step-feel">3–5 min. Often relieves bloating quickly.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Hip-crease sweep — very light comfort stroke</p>
+<p class="step-desc">Place your fingertips in the crease where your leg meets your hip. Use feather-light strokes upward toward the lower belly. Keep this soothing, not deep. Gentle skin stimulation can calm local sensitivity and feels good around bloating or pelvic discomfort, but do not press hard into the groin.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect fill="#9FE1CB" height="8" rx="3" width="12" x="11" y="22"></rect><rect class="ag" fill="#5DCAA5" height="10" rx="3" style="animation-direction:reverse" width="12" x="11" y="14"></rect></svg>
+<div class="tech-chips"><span class="tc">fingertips</span><span class="tc">stroke upward</span><span class="tc pl">very light</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Bottom to top</div><div class="mg-desc">Start lower on the muscle and glide upward in one pass.</div></div>
+</div>
+</div>
+<p class="step-feel">10 slow strokes per side.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Low-back warmth hold</p>
+<p class="step-desc">Roll to your side and place both hands over your lower back. Hold still and breathe slowly. Warmth plus steady pressure can downshift the nervous system and reduce muscle guarding around the low back and pelvis.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ah" fill="#9FE1CB" height="14" rx="5" width="22" x="6" y="10"></rect></svg>
+<div class="tech-chips"><span class="tc">full palm</span><span class="tc">hold still</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Press and pause</div><div class="mg-desc">Press into one spot and stay there without rubbing.</div></div>
+</div>
+</div>
+<p class="step-feel">3–5 min. Best when anxious or stressed.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">5</div>
+<div class="step-body">
+<p class="step-title">Upper-belly soft strokes</p>
+<p class="step-desc">Use a flat palm and make slow, shallow strokes just below the ribs. Keep pressure light and comfortable. This is for relaxation and comfort only — do not try to “move” organs or treat hormones with massage.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect fill="#9FE1CB" height="8" rx="3" width="12" x="11" y="22"></rect><rect class="ag" fill="#5DCAA5" height="10" rx="3" style="animation-direction:reverse" width="12" x="11" y="14"></rect></svg>
+<div class="tech-chips"><span class="tc">full hand</span><span class="tc">stroke upward</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Bottom to top</div><div class="mg-desc">Start lower on the muscle and glide upward in one pass.</div></div>
+</div>
+</div>
+<p class="step-feel">10–15 strokes. Only outside your period.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Skip the belly massage during your period or if you have an IUD. This helps with symptoms but is not a treatment — keep working with your doctor.</div>
+</div>
+<!-- CALVES & ACHILLES -->
+<div class="panel" id="p-calves">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis or lacrosse ball</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-cylinder"></i> foam roller (optional)</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> just your hands</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 285" width="100%">
+<title>Back of lower leg: calf and Achilles zones</title>
+<desc>Illustrated leg showing gastrocnemius, soleus and Achilles tendon</desc>
+<path d="M265 20 Q245 40 240 90 Q235 160 238 220 Q240 255 252 272 Q280 282 310 282 Q335 282 355 272 Q368 255 372 220 Q374 160 370 90 Q365 40 345 20 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1" transform="translate(305 150) scale(0.9 0.98) translate(-305 -150)"></path>
+<ellipse cx="286" cy="100" fill="#9FE1CB" opacity="0.8" rx="28" ry="50" stroke="#1D9E75" stroke-width="1.2" transform="translate(305 150) scale(0.9 0.98) translate(-305 -150)"></ellipse>
+<ellipse cx="325" cy="105" fill="#9FE1CB" opacity="0.7" rx="22" ry="44" stroke="#1D9E75" stroke-width="1.2" transform="translate(305 150) scale(0.9 0.98) translate(-305 -150)"></ellipse>
+<ellipse cx="305" cy="168" fill="#5DCAA5" opacity="0.5" rx="32" ry="38" stroke="#0F6E56" stroke-width="1" transform="translate(305 150) scale(0.9 0.98) translate(-305 -150)"></ellipse>
+<rect fill="#FAC775" height="38" rx="8" stroke="#EF9F27" stroke-width="1.2" transform="translate(305 150) scale(0.9 0.98) translate(-305 -150)" width="26" x="292" y="238"></rect>
+<text fill="#633806" font-size="10" text-anchor="middle" x="305" y="260">Achilles</text>
+<circle class="rip" cx="286" cy="90" fill="none" opacity="0.6" r="10" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot" cx="286" cy="90" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="325" cy="95" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="305" cy="168" fill="none" opacity="0.5" r="10" stroke="#0F6E56" stroke-width="1.5"></circle>
+<circle class="dot3" cx="305" cy="168" fill="#1D9E75" r="7"></circle>
+<circle class="dot" cx="305" cy="250" fill="#1D9E75" r="7"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="325" x2="430" y1="95" y2="72"></line>
+<text fill="var(--t1)" font-size="13" x="435" y="70">Gastrocnemius</text>
+<g class="callout-ico" transform="translate(433.0,77.0)"><circle class="ci-start" cx="1.8" cy="7" r="2"></circle><circle class="ci-start" cx="12.2" cy="7" r="2"></circle><ellipse cx="7" cy="7" fill="#FDE6DD" rx="2.8" ry="2" stroke="#D85A30" stroke-width="1"></ellipse><line class="ci-path" x1="3.2" x2="5" y1="7" y2="7"></line><line class="ci-path" x1="10.8" x2="9" y1="7" y2="7"></line><path class="ci-stroke" d="M4.2 5.2 L5.8 7 L4.2 8.8"></path><path class="ci-stroke" d="M9.8 5.2 L8.2 7 L9.8 8.8"></path></g><text fill="var(--t2)" font-size="11" x="453.0" y="85">Two-headed — squeeze both sides</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="305" x2="430" y1="168" y2="158"></line>
+<text fill="var(--t1)" font-size="13" x="435" y="156">Soleus</text>
+<g class="callout-ico" transform="translate(433.0,163.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="453.0" y="171">Deep calf — standing fatigue</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="318" x2="430" y1="250" y2="240"></line>
+<text fill="var(--t1)" font-size="13" x="435" y="238">Achilles tendon</text>
+<g class="callout-ico" transform="translate(433.0,245.0)"><line stroke="#d8efe7" stroke-width="1" x1="4" x2="4" y1="2" y2="12"></line><line stroke="#d8efe7" stroke-width="1" x1="7" x2="7" y1="2" y2="12"></line><line stroke="#d8efe7" stroke-width="1" x1="10" x2="10" y1="2" y2="12"></line><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="453.0" y="253">Cross-fibre friction only</text>
+</svg>
+<div class="info-warn" style="margin-bottom:12px"><i aria-hidden="true" class="ti ti-info-circle"></i> <strong>Wine work note:</strong> Standing on concrete compresses the plantar fascia and overloads the soleus. Start here before moving to the Achilles.</div>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Two-handed calf squeeze — bottom to top</p>
+<p class="step-desc">Sit and cross one leg. Wrap both hands around your calf and squeeze from just above the ankle upward toward the knee. Use slow rhythmic compression to reduce the heavy, tight feeling that builds after long standing. Work both the inner and outer sides of the gastrocnemius.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><ellipse class="as" cx="17" cy="17" fill="#5DCAA5" rx="10" ry="7"></ellipse><path d="M7 17 Q8 10 17 9 Q26 10 27 17" fill="none" stroke="#1D9E75" stroke-width="1.5"></path><path d="M7 17 Q8 24 17 25 Q26 24 27 17" fill="none" stroke="#1D9E75" stroke-width="1.5"></path></svg>
+<div class="tech-chips"><span class="tc">both hands wrap</span><span class="tc">squeeze upward</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-end" cx="37" cy="10" r="4"></circle><ellipse class="mv-sqz" cx="37" cy="20" fill="#DFF8EE" rx="12" ry="7.5" stroke="#5DCAA5" stroke-width="1.1"></ellipse><circle class="mv-start" cx="13" cy="20" r="3.4"></circle><circle class="mv-start" cx="61" cy="20" r="3.4"></circle><line class="mv-line" x1="13" x2="28" y1="20" y2="20"></line><line class="mv-line" x1="61" x2="46" y1="20" y2="20"></line><path class="mv-line" d="M22 14 L28 20 L22 26"></path><path class="mv-line" d="M52 14 L46 20 L52 26"></path><line class="mv-path" x1="37" x2="37" y1="20" y2="10"></line><path class="mv-end-stroke" d="M31 16 L37 10 L43 16"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Squeeze then lift</div><div class="mg-desc">Compress the muscle, then gently lift the tissue upward.</div></div>
+</div>
+</div>
+<p class="step-feel">8–10 slow passes per leg. 2–3 min total.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Thumb strip — soleus (the deeper calf)</p>
+<p class="step-desc">The soleus sits underneath the gastrocnemius and is the primary endurance muscle for standing. Use both thumbs together to make firm, slow strokes along either side of the shinbone from ankle to knee. You'll feel a denser, harder tissue — that's the soleus under cumulative load.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#1D9E75" height="22" rx="3" style="animation-direction:reverse" width="6" x="14" y="6"></rect></svg>
+<div class="tech-chips"><span class="tc">thumbs</span><span class="tc">long stroke up</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Bottom to top</div><div class="mg-desc">Start lower on the muscle and glide upward in one pass.</div></div>
+</div>
+</div>
+<p class="step-feel">5–6 slow passes per leg.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Achilles cross-friction — not up and down</p>
+<p class="step-desc">Pinch your Achilles between thumb and forefinger. Move across it side-to-side rather than along its length. This cross-fibre friction technique, backed by research on tendon remodelling, breaks down adhesions and improves collagen fibre organisation. The Achilles is a tendon — it needs different treatment than a muscle.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="af" fill="#5DCAA5" height="14" rx="4" width="10" x="12" y="10"></rect><line class="af" stroke="#1D9E75" stroke-dasharray="3 2" stroke-width="1.5" x1="8" x2="26" y1="17" y2="17"></line></svg>
+<div class="tech-chips"><span class="tc">thumb &amp; finger pinch</span><span class="tc">cross-fibre</span><span class="tc pl">light–medium</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><line stroke="#d8efe7" stroke-linecap="round" stroke-width="3" x1="27" x2="27" y1="8" y2="28"></line><line stroke="#d8efe7" stroke-linecap="round" stroke-width="3" x1="37" x2="37" y1="8" y2="28"></line><line stroke="#d8efe7" stroke-linecap="round" stroke-width="3" x1="47" x2="47" y1="8" y2="28"></line><circle class="mv-start" cx="19" cy="18" r="4"></circle><circle class="mv-end" cx="55" cy="18" r="4"></circle><line class="mv-path" x1="19" x2="55" y1="18" y2="18"></line><line class="mv-line" x1="19" x2="55" y1="18" y2="18"></line><path class="mv-end-stroke" d="M49 12 L55 18 L49 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Across the fibres</div><div class="mg-desc">Move side-to-side across the line of the tissue, not along it.</div></div>
+</div>
+</div>
+<p class="step-feel">60–90 sec per side. Mild discomfort is okay; sharp pain is not.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Tennis ball — arch and heel</p>
+<p class="step-desc">Sit in a chair and roll a tennis ball under your foot, focusing on the arch and heel pad. The plantar fascia gets compressed by standing on concrete and directly feeds tension upward into the Achilles and calf. Releasing it here reduces load on the whole chain.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ah" cx="17" cy="17" fill="#9FE1CB" r="9"></circle><circle class="ah" cx="17" cy="17" fill="#1D9E75" r="5" style="animation-delay:0.3s"></circle></svg>
+<div class="tech-chips"><span class="tc">ball underfoot</span><span class="tc">slow roll</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><rect fill="#DFF8EE" height="8" rx="4" stroke="#5DCAA5" stroke-width="1.1" width="14" x="30" y="11"></rect><circle class="mv-start" cx="37" cy="25" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="25" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="25" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow roll</div><div class="mg-desc">Roll steadily along the tissue rather than bouncing around.</div></div>
+</div>
+</div>
+<p class="step-feel">2–3 min per foot. Brilliant post-shift.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">5</div>
+<div class="step-body">
+<p class="step-title">Legs up the wall — gravity drainage</p>
+<p class="step-desc">Lie on your back and rest your legs vertically up a wall. Gravity can reduce the heavy-leg feeling after long standing by helping fluid move out of the lower legs. Keep it easy and comfortable — this should feel restful, not like a stretch.</p>
+<p class="step-feel">5–10 min. Best right after work.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> If your Achilles is acutely swollen or tender, skip steps 3–4 and see a physio. Never massage a recently torn tendon.</div>
+</div>
+<!-- HAMSTRINGS & GLUTES -->
+<div class="panel" id="p-hams">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis ball</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-cylinder"></i> foam roller</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-chair"></i> firm chair</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 290" width="100%">
+<title>Back of upper leg: hamstrings and glutes</title>
+<desc>Illustration of gluteus maximus, piriformis and hamstring muscles with massage points</desc>
+<path d="M185 20 Q155 40 148 90 Q142 145 148 200 Q155 248 180 268 Q225 280 305 280 Q380 280 420 268 Q442 248 448 200 Q455 145 450 90 Q443 40 415 20 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></path>
+<ellipse cx="235" cy="72" fill="#9FE1CB" opacity="0.8" rx="60" ry="44" stroke="#1D9E75" stroke-width="1.2" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></ellipse>
+<ellipse cx="360" cy="70" fill="#9FE1CB" opacity="0.7" rx="55" ry="40" stroke="#1D9E75" stroke-width="1.2" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></ellipse>
+<ellipse cx="340" cy="90" fill="#7F77DD" opacity="0.75" rx="22" ry="14" stroke="#534AB7" stroke-width="1" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></ellipse>
+<text fill="#26215C" font-size="9" text-anchor="middle" x="340" y="94">piriformis</text>
+<ellipse cx="258" cy="188" fill="#5DCAA5" opacity="0.65" rx="38" ry="55" stroke="#0F6E56" stroke-width="1" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></ellipse>
+<ellipse cx="352" cy="190" fill="#5DCAA5" opacity="0.55" rx="35" ry="50" stroke="#0F6E56" stroke-width="1" transform="translate(300 145) scale(0.88 0.98) translate(-300 -145)"></ellipse>
+<circle class="rip" cx="230" cy="62" fill="none" opacity="0.7" r="10" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot" cx="230" cy="62" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="358" cy="60" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="340" cy="90" fill="none" opacity="0.7" r="8" stroke="#7F77DD" stroke-width="1.5"></circle>
+<circle class="dot3" cx="340" cy="90" fill="#1D9E75" r="6"></circle>
+<circle class="dot" cx="258" cy="188" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="352" cy="190" fill="#1D9E75" r="7"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="358" x2="470" y1="60" y2="42"></line>
+<text fill="var(--t1)" font-size="13" x="475" y="40">Gluteus maximus</text>
+<g class="callout-ico" transform="translate(473.0,47.0)"><circle class="ci-start" cx="1.8" cy="7" r="2"></circle><circle class="ci-start" cx="12.2" cy="7" r="2"></circle><ellipse cx="7" cy="7" fill="#FDE6DD" rx="2.8" ry="2" stroke="#D85A30" stroke-width="1"></ellipse><line class="ci-path" x1="3.2" x2="5" y1="7" y2="7"></line><line class="ci-path" x1="10.8" x2="9" y1="7" y2="7"></line><path class="ci-stroke" d="M4.2 5.2 L5.8 7 L4.2 8.8"></path><path class="ci-stroke" d="M9.8 5.2 L8.2 7 L9.8 8.8"></path></g><text fill="var(--t2)" font-size="11" x="493.0" y="55">Knead deeply — loads from lifting</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="348" x2="470" y1="90" y2="100"></line>
+<text fill="var(--t1)" font-size="13" x="475" y="98">Piriformis</text>
+<g class="callout-ico" transform="translate(473.0,105.0)"><circle class="ci-start" cx="4.2" cy="7" r="2.8"></circle><line class="ci-path" x1="7.6" x2="11.2" y1="7" y2="7"></line><line class="ci-end-stroke" x1="12.8" x2="12.8" y1="2" y2="12"></line><line class="ci-end-stroke" opacity=".45" x1="11.1" x2="11.1" y1="2" y2="12"></line></g><text fill="var(--t2)" font-size="11" x="493.0" y="113">Tennis ball — key for sciatica</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="352" x2="470" y1="188" y2="170"></line>
+<text fill="var(--t1)" font-size="13" x="475" y="168">Hamstrings</text>
+<g class="callout-ico" transform="translate(473.0,175.0)"><circle class="ci-start" cx="7" cy="12" r="2"></circle><circle class="ci-end" cx="7" cy="2" r="2"></circle><line class="ci-path" x1="7" x2="7" y1="12" y2="2"></line><path class="ci-end-stroke" d="M4.5 4.5 L7 2 L9.5 4.5"></path></g><text fill="var(--t2)" font-size="11" x="493.0" y="183">Long stroke, both heads</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Glute knead — both thumbs, deep</p>
+<p class="step-desc">Lie on your side or stand. Use both thumbs or knuckles to press deep into the gluteal muscle with slow, firm circles. The gluteus maximus is the largest muscle in the body and absorbs enormous load from barrel lifting, case carrying, and transfer work. Work the full muscle — outer third, middle, and near the tailbone — not just the centre.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ap" cx="12" cy="17" fill="#5DCAA5" r="6" style="transform-origin:12px 17px"></circle><circle class="ap" cx="22" cy="17" fill="#1D9E75" r="6" style="transform-origin:22px 17px;animation-delay:0.4s"></circle></svg>
+<div class="tech-chips"><span class="tc">thumbs / knuckles</span><span class="tc">deep circles</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="3.4"></circle><circle class="mv-path" cx="37" cy="18" r="10"></circle><path class="mv-line" d="M27 22a10 10 0 1 1 14-12"></path><path class="mv-end-stroke" d="M44 9 L47 14 L41 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow circles</div><div class="mg-desc">Stay over the area and move in slow, controlled circles.</div></div>
+</div>
+</div>
+<p class="step-feel">90 sec per side. Should feel deeply satisfying.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Tennis ball — piriformis release</p>
+<p class="step-desc">Sit on the floor or a firm chair. Place a tennis ball under one buttock, toward the outer-back area (not the tailbone). Slowly lean in until you find a sharp, deep ache — stop and breathe. The piriformis is a deep hip rotator that runs alongside the sciatic nerve. When it's tight, it causes the classic sciatica-pattern pain that shoots down the leg.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ah" cx="17" cy="17" fill="#9FE1CB" r="9"></circle><circle class="ah" cx="17" cy="17" fill="#1D9E75" r="5" style="animation-delay:0.3s"></circle></svg>
+<div class="tech-chips"><span class="tc">ball</span><span class="tc">sink &amp; hold</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Sink and hold</div><div class="mg-desc">Lean in until you find the sore spot, then stay there and breathe.</div></div>
+</div>
+</div>
+<p class="step-feel">30–45 sec per spot. Do both sides — often very different.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Hamstring long stroke — edge of a chair</p>
+<p class="step-desc">Sit on the edge of a firm chair, leg extended. Use both thumbs or the heel of your hand and stroke from behind the knee up to the sit bone. The hamstrings have three heads — pass along slightly inner and outer sides. This effleurage stroke promotes venous return and reduces post-shift stiffness.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#5DCAA5" height="22" rx="4" style="animation-direction:reverse" width="8" x="13" y="6"></rect></svg>
+<div class="tech-chips"><span class="tc">thumbs / heel of hand</span><span class="tc">stroke upward</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Bottom to top</div><div class="mg-desc">Start lower on the muscle and glide upward in one pass.</div></div>
+</div>
+</div>
+<p class="step-feel">6–8 passes per leg. 2 min each side.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Foam roller — back of thigh</p>
+<p class="step-desc">Sit with a foam roller under one thigh and hands behind you for support. Roll slowly from knee to glute. Pause on dense or tender spots. Cross the free leg over the working knee to increase pressure. Don't rush — the hamstrings need slow work to release.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#9FE1CB" height="8" rx="4" width="26" x="4" y="13"></rect></svg>
+<div class="tech-chips"><span class="tc">foam roller</span><span class="tc">slow roll</span><span class="tc pm">medium–firm</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><rect fill="#DFF8EE" height="8" rx="4" stroke="#5DCAA5" stroke-width="1.1" width="14" x="30" y="11"></rect><circle class="mv-start" cx="37" cy="25" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="25" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="25" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow roll</div><div class="mg-desc">Roll steadily along the tissue rather than bouncing around.</div></div>
+</div>
+</div>
+<p class="step-feel">2–3 min per side.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Avoid rolling directly on the back of the knee — nerves and vessels there. If you have a hamstring strain, stick to gentle strokes only.</div>
+</div>
+<!-- HIP FLEXORS & IT BAND -->
+<div class="panel" id="p-hips">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis or lacrosse ball</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-cylinder"></i> foam roller</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-bed"></i> mat or rug</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 290" width="100%">
+<title>Hip and outer thigh: IT band and hip flexor zones</title>
+<desc>Illustration showing IT band, TFL and iliopsoas hip flexor</desc>
+<path d="M190 20 Q165 38 158 85 Q152 140 155 205 Q158 255 178 270 Q220 282 285 282 Q345 282 385 270 Q403 255 406 205 Q410 140 405 85 Q398 38 372 20 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1" transform="translate(290 145) scale(0.88 0.98) translate(-290 -145)"></path>
+<path d="M385 30 Q410 55 415 105 Q418 165 410 230 Q405 258 396 270" fill="none" opacity="0.3" stroke="#D85A30" stroke-linecap="round" stroke-width="8" transform="translate(290 145) scale(0.88 0.98) translate(-290 -145)"></path>
+<path d="M385 30 Q410 55 415 105 Q418 165 410 230 Q405 258 396 270" fill="none" stroke="#D85A30" stroke-linecap="round" stroke-width="2" transform="translate(290 145) scale(0.88 0.98) translate(-290 -145)"></path>
+<ellipse cx="372" cy="52" fill="#FAC775" opacity="0.85" rx="24" ry="18" stroke="#EF9F27" stroke-width="1.2" transform="translate(290 145) scale(0.88 0.98) translate(-290 -145)"></ellipse>
+<text fill="#633806" font-size="9" text-anchor="middle" x="372" y="56">TFL</text>
+<ellipse cx="230" cy="82" fill="#AFA9EC" opacity="0.75" rx="35" ry="24" stroke="#7F77DD" stroke-width="1.2" transform="translate(290 145) scale(0.88 0.98) translate(-290 -145)"></ellipse>
+<text fill="#3C3489" font-size="9" text-anchor="middle" x="230" y="86">hip flexor</text>
+<circle class="rip" cx="372" cy="48" fill="none" opacity="0.7" r="9" stroke="#BA7517" stroke-width="1.5"></circle>
+<circle class="dot" cx="372" cy="48" fill="#1D9E75" r="6"></circle>
+<circle class="dot2" cx="230" cy="78" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="397" cy="150" fill="none" opacity="0.6" r="9" stroke="#D85A30" stroke-width="1.5"></circle>
+<circle class="dot3" cx="397" cy="150" fill="#1D9E75" r="6"></circle>
+<circle class="dot" cx="395" cy="230" fill="#1D9E75" r="6"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="372" x2="460" y1="48" y2="34"></line>
+<text fill="var(--t1)" font-size="13" x="465" y="32">TFL / IT band origin</text>
+<g class="callout-ico" transform="translate(463.0,39.0)"><circle class="ci-start" cx="4.2" cy="7" r="2.8"></circle><line class="ci-path" x1="7.6" x2="11.2" y1="7" y2="7"></line><line class="ci-end-stroke" x1="12.8" x2="12.8" y1="2" y2="12"></line><line class="ci-end-stroke" opacity=".45" x1="11.1" x2="11.1" y1="2" y2="12"></line></g><text fill="var(--t2)" font-size="11" x="483.0" y="47">Ball press — not roller here</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="230" x2="170" y1="78" y2="50"></line>
+<text fill="var(--t1)" font-size="13" x="40" y="48">Hip flexors</text>
+<g class="callout-ico" transform="translate(38.0,55.0)"><circle class="ci-start" cx="1.8" cy="7" r="2"></circle><circle class="ci-start" cx="12.2" cy="7" r="2"></circle><ellipse cx="7" cy="7" fill="#FDE6DD" rx="2.8" ry="2" stroke="#D85A30" stroke-width="1"></ellipse><line class="ci-path" x1="3.2" x2="5" y1="7" y2="7"></line><line class="ci-path" x1="10.8" x2="9" y1="7" y2="7"></line><path class="ci-stroke" d="M4.2 5.2 L5.8 7 L4.2 8.8"></path><path class="ci-stroke" d="M9.8 5.2 L8.2 7 L9.8 8.8"></path></g><text fill="var(--t2)" font-size="11" x="58.0" y="63">Stretch + knead the crease</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="397" x2="460" y1="150" y2="140"></line>
+<text fill="var(--t1)" font-size="13" x="465" y="138">IT band mid-shaft</text>
+<g class="callout-ico" transform="translate(463.0,145.0)"><rect fill="#DFF8EE" height="4" rx="1.5" stroke="#5DCAA5" stroke-width="1" width="4" x="5" y="5"></rect><circle class="ci-start" cx="7" cy="12" r="2"></circle><circle class="ci-end" cx="7" cy="2" r="2"></circle><line class="ci-path" x1="7" x2="7" y1="12" y2="2"></line><path class="ci-end-stroke" d="M4.5 4.5 L7 2 L9.5 4.5"></path></g><text fill="var(--t2)" font-size="11" x="483.0" y="153">Foam roller — very slow</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="395" x2="460" y1="230" y2="230"></line>
+<text fill="var(--t1)" font-size="13" x="465" y="228">IT band lower</text>
+<g class="callout-ico" transform="translate(463.0,235.0)"><circle class="ci-start" cx="7" cy="12" r="2"></circle><circle class="ci-end" cx="7" cy="2" r="2"></circle><line class="ci-path" x1="7" x2="7" y1="12" y2="2"></line><path class="ci-end-stroke" d="M4.5 4.5 L7 2 L9.5 4.5"></path></g><text fill="var(--t2)" font-size="11" x="483.0" y="243">Stop 10 cm above the knee</text>
+</svg>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Hip flexor kneeling stretch with thumb press</p>
+<p class="step-desc">Kneel in a lunge position — back knee on the floor, front foot forward. Push hips forward gently until you feel a stretch at the front of the rear hip. While holding the stretch, press your opposite thumb into the hip crease. The iliopsoas is chronically shortened in people who stand in a forward-loaded posture and is a primary cause of lower back pain.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><ellipse class="ah" cx="17" cy="20" fill="#9FE1CB" rx="9" ry="6"></ellipse><rect class="at" fill="#1D9E75" height="14" rx="3" width="6" x="14" y="6"></rect></svg>
+<div class="tech-chips"><span class="tc">thumb</span><span class="tc">hold in stretch</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Move into stretch, then pause</div><div class="mg-desc">Take the tissue to a gentle stretch and hold at the end point.</div></div>
+</div>
+</div>
+<p class="step-feel">45 sec per side. Breathe into the stretch.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">TFL ball release — just below the hip bone</p>
+<p class="step-desc">Lie face-down and place a tennis ball just below the bony point of your hip (ASIS). The TFL — tensor fasciae latae — controls IT band tension and is often tight in people who walk on hard surfaces all day. Sink slowly into the ball. Hold and breathe — don't roll yet. The TFL is small and responds better to sustained compression than to rolling.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><circle class="ah" cx="17" cy="17" fill="#9FE1CB" r="9"></circle><circle class="ah" cx="17" cy="17" fill="#1D9E75" r="5" style="animation-delay:0.3s"></circle></svg>
+<div class="tech-chips"><span class="tc">ball</span><span class="tc">sink &amp; hold</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="5.2"></circle><circle class="mv-pulse" cx="37" cy="18" fill="none" opacity=".5" r="11" stroke="#D85A30" stroke-width="1.2"></circle><circle class="mv-pulse2" cx="37" cy="18" fill="none" opacity=".35" r="7.5" stroke="#D85A30" stroke-width="1.2"></circle><path class="mv-line mv-hold" d="M37 5 L37 12"></path><path class="mv-line" d="M31 8 L37 2 L43 8"></path><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="50" y="11"></rect><rect fill="#0F6E56" height="13" opacity=".8" rx="1" width="2.8" x="55" y="11"></rect></svg></div>
+<div class="mg-copy"><div class="mg-title">Sink and hold</div><div class="mg-desc">Lean in until you find the sore spot, then stay there and breathe.</div></div>
+</div>
+</div>
+<p class="step-feel">30–60 sec. Hold until you feel it soften.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">IT band foam roller — side-lying, very slow</p>
+<p class="step-desc">Lie on your side with a foam roller under your outer thigh, just below the hip. Roll very slowly — about 5 cm per breath — from hip toward the knee. The IT band is a dense fibrous tract (not a muscle) and cannot be lengthened. What you're actually doing is stimulating mechanoreceptors that reduce the protective tension signal from the nervous system. That's why holding on sore spots matters more than speed.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#9FE1CB" height="8" rx="4" width="26" x="4" y="13"></rect></svg>
+<div class="tech-chips"><span class="tc">foam roller</span><span class="tc">very slow roll</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><rect fill="#DFF8EE" height="8" rx="4" stroke="#5DCAA5" stroke-width="1.1" width="14" x="30" y="11"></rect><circle class="mv-start" cx="37" cy="25" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="25" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="25" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow roll</div><div class="mg-desc">Roll steadily along the tissue rather than bouncing around.</div></div>
+</div>
+</div>
+<p class="step-feel">3–4 min per side. Pause on sore spots for 20 sec.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Quad long stroke — front of thigh</p>
+<p class="step-desc">Sit on the edge of a chair, leg extended. Use both palms or thumbs to stroke upward from just above the knee to the hip. Work three lines: inner, central, and outer front thigh. This effleurage supports venous return through the femoral vein and reduces the quad tightness that also contributes to knee tracking problems.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect fill="#9FE1CB" height="8" rx="3" width="12" x="11" y="22"></rect><rect class="ag" fill="#5DCAA5" height="10" rx="3" style="animation-direction:reverse" width="12" x="11" y="14"></rect></svg>
+<div class="tech-chips"><span class="tc">both palms</span><span class="tc">stroke upward</span><span class="tc pm">medium pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="28" r="4"></circle><circle class="mv-end" cx="37" cy="8" r="4"></circle><line class="mv-path" x1="37" x2="37" y1="28" y2="8"></line><line class="mv-line" x1="37" x2="37" y1="28" y2="8"></line><path class="mv-end-stroke" d="M31 14 L37 8 L43 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Bottom to top</div><div class="mg-desc">Start lower on the muscle and glide upward in one pass.</div></div>
+</div>
+</div>
+<p class="step-feel">6–8 strokes per leg.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> IT band rolling is uncomfortable — that's normal. Stop 10 cm above the knee. Sharp knee-edge pain means stop and see a physio.</div>
+</div>
+<!-- HANDS & FOREARMS -->
+<div class="panel" id="p-hands">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px">
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> just your hands</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-droplet"></i> massage oil or balm</span>
+<span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> golf ball (optional)</span>
+</div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. <strong>Blue dot</strong> = where your hands start. <strong>Yellow dot</strong> = where the stroke finishes. The <strong>moving bead</strong> shows how your hands travel. Pressure and movement speed are explained in the coach box below.</div><svg role="img" viewbox="0 0 680 295" width="100%">
+<title>Palm and forearm: flexors, extensors, carpal zone and thenar eminence</title>
+<desc>Hand and forearm for wine-work recovery</desc>
+<path d="M140 30 Q120 50 118 100 Q116 155 122 210 Q128 248 140 265 Q175 278 230 278 Q280 278 310 265 Q320 248 325 210 Q330 155 326 100 Q322 50 305 30 Z" fill="#F5C4B3" stroke="#D4537E" stroke-width="1" transform="translate(220 150) scale(0.92 0.98) translate(-220 -150)"></path>
+<ellipse cx="185" cy="115" fill="#9FE1CB" opacity="0.7" rx="42" ry="65" stroke="#1D9E75" stroke-width="1.2" transform="translate(220 150) scale(0.92 0.98) translate(-220 -150)"></ellipse>
+<ellipse cx="250" cy="120" fill="#AFA9EC" opacity="0.55" rx="32" ry="58" stroke="#7F77DD" stroke-width="1" transform="translate(220 150) scale(0.92 0.98) translate(-220 -150)"></ellipse>
+<rect fill="#FAC775" height="26" opacity="0.85" rx="10" stroke="#EF9F27" stroke-width="1.2" transform="translate(220 150) scale(0.92 0.98) translate(-220 -150)" width="120" x="152" y="230"></rect>
+<text fill="#633806" font-size="10" text-anchor="middle" x="212" y="247">carpal tunnel zone</text>
+<ellipse cx="160" cy="272" fill="#9FE1CB" opacity="0.75" rx="28" ry="14" stroke="#1D9E75" stroke-width="1" transform="translate(220 150) scale(0.92 0.98) translate(-220 -150)"></ellipse>
+<text fill="#085041" font-size="9" text-anchor="middle" x="160" y="276">thenar</text>
+<circle class="rip" cx="185" cy="105" fill="none" opacity="0.6" r="10" stroke="#1D9E75" stroke-width="1.5"></circle>
+<circle class="dot" cx="185" cy="105" fill="#1D9E75" r="7"></circle>
+<circle class="dot2" cx="250" cy="108" fill="#1D9E75" r="7"></circle>
+<circle class="rip2" cx="212" cy="230" fill="none" opacity="0.7" r="8" stroke="#BA7517" stroke-width="1.5"></circle>
+<circle class="dot3" cx="212" cy="230" fill="#1D9E75" r="6"></circle>
+<circle class="dot" cx="160" cy="272" fill="#1D9E75" r="6"></circle>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="185" x2="110" y1="105" y2="78"></line>
+<text fill="var(--t1)" font-size="13" x="40" y="76">Flexor group</text>
+<g class="callout-ico" transform="translate(38.0,83.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="58.0" y="91">Pipetting, gripping, bottling</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="250" x2="370" y1="108" y2="75"></line>
+<text fill="var(--t1)" font-size="13" x="375" y="73">Extensor group</text>
+<g class="callout-ico" transform="translate(373.0,80.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="393.0" y="88">Balancing loads, pronation</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="212" x2="370" y1="230" y2="210"></line>
+<text fill="var(--t1)" font-size="13" x="375" y="208">Wrist / carpal</text>
+<g class="callout-ico" transform="translate(373.0,215.0)"><rect fill="#DFF8EE" height="5" rx="1.2" stroke="#5DCAA5" stroke-width="1" width="4" x="5" y="4.5"></rect><circle class="ci-start" cx="4" cy="7" r="1.6"></circle><circle class="ci-start" cx="10" cy="7" r="1.6"></circle><circle class="ci-end" cx="1.4" cy="7" r="1.6"></circle><circle class="ci-end" cx="12.6" cy="7" r="1.6"></circle><line class="ci-path" x1="4" x2="1.4" y1="7" y2="7"></line><line class="ci-path" x1="10" x2="12.6" y1="7" y2="7"></line><path class="ci-end-stroke" d="M3.3 5 L1.4 7 L3.3 9"></path><path class="ci-end-stroke" d="M10.7 5 L12.6 7 L10.7 9"></path></g><text fill="var(--t2)" font-size="11" x="393.0" y="223">Decompress gently only</text>
+<line stroke="var(--b2)" stroke-dasharray="3 3" stroke-width="0.5" x1="160" x2="370" y1="272" y2="272"></line>
+<text fill="var(--t1)" font-size="13" x="375" y="270">Thenar (thumb base)</text>
+<g class="callout-ico" transform="translate(373.0,277.0)"><circle class="ci-start" cx="2" cy="7" r="2"></circle><circle class="ci-end" cx="12" cy="7" r="2"></circle><line class="ci-path" x1="2" x2="12" y1="7" y2="7"></line><path class="ci-end-stroke" d="M9.5 4.5 L12 7 L9.5 9.5"></path></g><text fill="var(--t2)" font-size="11" x="393.0" y="285">Lab &amp; pipetting fatigue</text>
+</svg>
+<div class="info-warn" style="margin-bottom:12px"><i aria-hidden="true" class="ti ti-info-circle"></i> <strong>Wine work context:</strong> Pipetting and micro-handling overload the flexor digitorum superficialis and intrinsic hand muscles. Barrel-lifting and case-carrying load the extensor carpi groups and pronator teres. Both are addressed in the sequence below.</div>
+<div class="step-card">
+<div class="step-num">1</div>
+<div class="step-body">
+<p class="step-title">Forearm flexor strip — palm up, elbow to wrist</p>
+<p class="step-desc">Hold one arm out palm up. Use the opposite thumb to press at the elbow crease and stroke slowly toward the wrist. These are the flexors — they fire every time you grip, pipette, or pour. Tendons have no direct blood supply, so mechanical loading and release from massage is one of the best ways to support their recovery. Do 3 passes: slightly inner, central, and outer.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#1D9E75" height="22" rx="3" style="animation-direction:reverse" width="6" x="14" y="6"></rect></svg>
+<div class="tech-chips"><span class="tc">thumb</span><span class="tc">long stroke to wrist</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="16" cy="18" r="4"></circle><circle class="mv-end" cx="58" cy="18" r="4"></circle><line class="mv-path" x1="16" x2="58" y1="18" y2="18"></line><line class="mv-line" x1="16" x2="58" y1="18" y2="18"></line><path class="mv-end-stroke" d="M52 12 L58 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Elbow to wrist</div><div class="mg-desc">Start higher on the forearm and glide down toward the wrist.</div></div>
+</div>
+</div>
+<p class="step-feel">3 passes per arm. 90 sec each side.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">2</div>
+<div class="step-body">
+<p class="step-title">Extensor strip — palm down, elbow to wrist</p>
+<p class="step-desc">Flip the arm over, palm down. The extensors take heavy braking loads from barrel-handling and eccentrically control every downward movement. Same technique: firm thumb stroke from elbow to wrist. Pay close attention to the outer elbow area near the lateral epicondyle — this is where wine-work repetitive strain and lateral epicondylitis (tennis elbow) typically develops first.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#7F77DD" height="22" rx="3" style="animation-direction:reverse" width="6" x="14" y="6"></rect></svg>
+<div class="tech-chips"><span class="tc">thumb</span><span class="tc">stroke to wrist</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="16" cy="18" r="4"></circle><circle class="mv-end" cx="58" cy="18" r="4"></circle><line class="mv-path" x1="16" x2="58" y1="18" y2="18"></line><line class="mv-line" x1="16" x2="58" y1="18" y2="18"></line><path class="mv-end-stroke" d="M52 12 L58 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Elbow to wrist</div><div class="mg-desc">Start higher on the forearm and glide down toward the wrist.</div></div>
+</div>
+</div>
+<p class="step-feel">3 passes per arm. Check the outer elbow carefully.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">3</div>
+<div class="step-body">
+<p class="step-title">Palm press — thenar and hypothenar</p>
+<p class="step-desc">Palm up. Use the opposite thumb to press into the fleshy pad at the base of your thumb — the thenar eminence. This contains the abductor and flexor pollicis brevis, which fire constantly during lab micropipetting. Then do the hypothenar eminence (pinky side). Make slow, deep circles on both sides of the palm.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><g class="ap"><circle cx="17" cy="17" fill="none" r="8" stroke="#1D9E75" stroke-dasharray="4 3" stroke-width="1.5"></circle><circle cx="17" cy="9" fill="#1D9E75" r="3"></circle></g></svg>
+<div class="tech-chips"><span class="tc">thumb</span><span class="tc">deep circles</span><span class="tc pf">firm pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="37" cy="18" r="3.4"></circle><circle class="mv-path" cx="37" cy="18" r="10"></circle><path class="mv-line" d="M27 22a10 10 0 1 1 14-12"></path><path class="mv-end-stroke" d="M44 9 L47 14 L41 14"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Slow circles</div><div class="mg-desc">Stay over the area and move in slow, controlled circles.</div></div>
+</div>
+</div>
+<p class="step-feel">60 sec per hand, each side of the palm.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">4</div>
+<div class="step-body">
+<p class="step-title">Finger tendon glide + webbing press</p>
+<p class="step-desc">Grip each finger at its base and stroke toward the fingertip to glide the flexor tendon through its sheath. Then press and glide your thumb into the webbing between each finger — these are the dorsal interossei, fatigued by repetitive fine motor work. Finally, grip your knuckles from outside and squeeze gently — this mobilises the metacarpal joints.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#9FE1CB" height="18" rx="3" style="animation-direction:reverse" width="6" x="10" y="8"></rect><rect class="ag" fill="#9FE1CB" height="18" rx="3" style="animation-direction:reverse;animation-delay:0.3s" width="6" x="18" y="8"></rect></svg>
+<div class="tech-chips"><span class="tc">thumb &amp; finger</span><span class="tc">glide to tip</span><span class="tc pl">light–medium</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><circle class="mv-start" cx="16" cy="18" r="4"></circle><circle class="mv-end" cx="58" cy="18" r="4"></circle><line class="mv-path" x1="16" x2="58" y1="18" y2="18"></line><line class="mv-line" x1="16" x2="58" y1="18" y2="18"></line><path class="mv-end-stroke" d="M52 12 L58 18 L52 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Base to tip</div><div class="mg-desc">Start at the base and glide outward to the fingertip.</div></div>
+</div>
+</div>
+<p class="step-feel">Each finger 2–3 times per hand. About 2 min total.</p>
+</div>
+</div>
+<div class="step-card">
+<div class="step-num">5</div>
+<div class="step-body">
+<p class="step-title">Wrist decompression — gentle traction</p>
+<p class="step-desc">Wrap the opposite hand around your wrist with your thumb underneath. Gently pull the hand away from the forearm to create mild joint traction. This temporarily decompresses the carpal tunnel and radiocarpal joint — reducing pressure on the median nerve that causes tingling after repetitive grip work. Hold 20 sec, release, slowly circle the wrist.</p>
+<div class="tech-row">
+<svg height="34" viewbox="0 0 34 34" width="34"><rect class="ag" fill="#9FE1CB" height="18" rx="4" width="10" x="12" y="8"></rect></svg>
+<div class="tech-chips"><span class="tc">full grip</span><span class="tc">gentle traction</span><span class="tc pl">light pressure</span></div>
+</div>
+<div class="motion-guide">
+<div class="mg-top"><span class="mg-label">Giver view</span><span class="mg-hint">blue = start • yellow = finish</span></div>
+<div class="mg-body">
+<div class="mg-visual"><svg aria-hidden="true" class="mv-svg" viewbox="0 0 74 36"><rect fill="#DFF8EE" height="12" rx="4" stroke="#5DCAA5" stroke-width="1.1" width="14" x="30" y="12"></rect><circle class="mv-start" cx="25" cy="18" r="3.4"></circle><circle class="mv-start" cx="49" cy="18" r="3.4"></circle><circle class="mv-end" cx="12" cy="18" r="3.4"></circle><circle class="mv-end" cx="62" cy="18" r="3.4"></circle><line class="mv-line" x1="25" x2="12" y1="18" y2="18"></line><line class="mv-line" x1="49" x2="62" y1="18" y2="18"></line><path class="mv-end-stroke" d="M18 12 L12 18 L18 24"></path><path class="mv-end-stroke" d="M56 12 L62 18 L56 24"></path></svg></div>
+<div class="mg-copy"><div class="mg-title">Pull apart gently</div><div class="mg-desc">Create a light separating pull rather than pushing into the joint.</div></div>
+</div>
+</div>
+<p class="step-feel">3 times each wrist. Do this during breaks at work too.</p>
+</div>
+</div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> If you have wrist pain, pins &amp; needles, or numbness in any fingers — stop and see a doctor. These can be signs of carpal tunnel syndrome or nerve compression requiring proper assessment.</div>
+</div>
+<!-- SCALP & FACE -->
+<div class="panel" id="p-scalp">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px"><span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> fingertips</span><span class="tool-chip"><i aria-hidden="true" class="ti ti-droplet"></i> warm cloth optional</span></div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. The orange-to-red bead shows where pressure is being applied.</div><svg role="img" viewbox="0 0 680 260" width="100%"><title>Scalp and face massage areas</title><desc>Scalp, forehead, and temple massage map</desc><circle cx="340" cy="115" fill="#F5C4B3" r="90" stroke="#D4537E" stroke-width="1.2"></circle><path d="M250 88 Q285 24 340 26 Q395 24 430 88 Q400 58 340 60 Q280 58 250 88Z" fill="#2E2E2E"></path></svg>
+<div class="step-card"><div class="step-num">1</div><div class="step-body"><p class="step-title">Scalp circles</p><p class="step-desc">Use finger pads, not nails. Make slow circles through the scalp, letting the skin move under your fingers instead of rubbing over the hair.</p><div class="tech-chips"><span class="tc">finger pads</span><span class="tc">slow circles</span><span class="tc pm">medium pressure</span></div><p class="step-feel">60 seconds over the top and sides of the head.</p></div></div>
+<div class="step-card"><div class="step-num">2</div><div class="step-body"><p class="step-title">Forehead sweep</p><p class="step-desc">Place flat fingertips at the middle of the forehead and glide outward toward the temples. Keep it light and slow.</p><div class="tech-chips"><span class="tc">flat fingertips</span><span class="tc">outward glide</span><span class="tc pl">light pressure</span></div><p class="step-feel">6-8 passes, both sides together.</p></div></div>
+<div class="step-card"><div class="step-num">3</div><div class="step-body"><p class="step-title">Behind-ear soft hold</p><p class="step-desc">Place fingertips just behind the ear and hold steady pressure. Keep it gentle and stop if it feels sharp or nervy.</p><div class="tech-chips"><span class="tc">fingertips</span><span class="tc">hold still</span><span class="tc pl">light pressure</span></div><p class="step-feel">20-30 seconds each side.</p></div></div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Avoid pressing hard over the temples or jaw joint. Keep face work light.</div>
+</div>
+<!-- QUADS & KNEES -->
+<div class="panel" id="p-quads">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px"><span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> hands</span><span class="tool-chip"><i aria-hidden="true" class="ti ti-cylinder"></i> foam roller optional</span></div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. Work the muscle above the knee, not directly on the kneecap.</div><svg role="img" viewbox="0 0 680 260" width="100%"><title>Front thigh and knee massage areas</title><desc>Quadriceps and knee-adjacent soft tissue map</desc><rect fill="#F5C4B3" height="210" rx="55" stroke="#D4537E" stroke-width="1.2" width="90" x="295" y="25"></rect></svg>
+<div class="step-card"><div class="step-num">1</div><div class="step-body"><p class="step-title">Quad long stroke</p><p class="step-desc">Start just above the knee and glide up the front thigh toward the hip with a full palm. Stay on the muscle belly.</p><div class="tech-chips"><span class="tc">full palm</span><span class="tc">knee to hip</span><span class="tc pm">medium pressure</span></div><p class="step-feel">8-10 slow passes each thigh.</p></div></div>
+<div class="step-card"><div class="step-num">2</div><div class="step-body"><p class="step-title">Outer quad slow strip</p><p class="step-desc">Use the heel of your hand down the outer-front thigh. Move slowly and stay above the knee joint.</p><div class="tech-chips"><span class="tc">heel of hand</span><span class="tc">slow glide</span><span class="tc pf">firm pressure</span></div><p class="step-feel">5-6 passes. Firm but not sharp.</p></div></div>
+<div class="step-card"><div class="step-num">3</div><div class="step-body"><p class="step-title">Above-knee circles</p><p class="step-desc">Make small circles in the soft tissue above the kneecap. Do not push directly into the kneecap.</p><div class="tech-chips"><span class="tc">fingertips</span><span class="tc">small circles</span><span class="tc pl">light pressure</span></div><p class="step-feel">30-45 seconds each side.</p></div></div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Skip this if the knee is swollen, hot, unstable, or recently injured.</div>
+</div>
+<!-- FEET & ANKLES -->
+<div class="panel" id="p-feet">
+<div style="margin-bottom:8px;font-size:12px;color:var(--t3);font-family:var(--font-sans)">things you need</div>
+<div style="margin-bottom:14px"><span class="tool-chip"><i aria-hidden="true" class="ti ti-hand-finger"></i> thumbs</span><span class="tool-chip"><i aria-hidden="true" class="ti ti-circle"></i> tennis ball optional</span></div>
+<div class="body-map-note"><strong>Interactive body map:</strong> tap a move below. Use light to medium pressure around the ankle and firmer pressure only on the fleshy heel/foot areas.</div><svg role="img" viewbox="0 0 680 260" width="100%"><title>Foot and ankle massage areas</title><desc>Foot top, ankle, and heel massage map</desc><ellipse cx="340" cy="150" fill="#F5C4B3" rx="120" ry="55" stroke="#D4537E" stroke-width="1.2"></ellipse></svg>
+<div class="step-card"><div class="step-num">1</div><div class="step-body"><p class="step-title">Top-of-foot glide</p><p class="step-desc">Use both thumbs from the toes toward the ankle on the top of the foot. Keep pressure comfortable.</p><div class="tech-chips"><span class="tc">thumbs</span><span class="tc">toes to ankle</span><span class="tc pm">medium pressure</span></div><p class="step-feel">5-8 slow passes each foot.</p></div></div>
+<div class="step-card"><div class="step-num">2</div><div class="step-body"><p class="step-title">Ankle circles</p><p class="step-desc">Circle around the soft tissue beside the ankle bones. Do not dig into the bone itself.</p><div class="tech-chips"><span class="tc">fingertips</span><span class="tc">small circles</span><span class="tc pl">light pressure</span></div><p class="step-feel">30 seconds around each ankle.</p></div></div>
+<div class="step-card"><div class="step-num">3</div><div class="step-body"><p class="step-title">Foot pad hold</p><p class="step-desc">Hold steady pressure through the padded area behind the toes, then gently rock side to side. Stay on soft tissue, not the toe joints.</p><div class="tech-chips"><span class="tc">both thumbs</span><span class="tc">hold + rock</span><span class="tc pm">medium pressure</span></div><p class="step-feel">20-30 seconds each foot.</p></div></div>
+<div class="warn"><i aria-hidden="true" class="ti ti-alert-triangle"></i> Avoid strong pressure if there is swelling, bruising, numbness, or recent ankle injury.</div>
+</div>
+<script>
+  function sw(id,btn){
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+    document.getElementById('p-'+id).classList.add('on');
+    btn.classList.add('on');
+  }
+  </script>
+<script>
+(function(){
+  const routeData = {
+    neck: [
+      {step:1,label:"Skull base press",type:"hold",pressure:"medium",speedLabel:"still hold",speedHint:"Hold 30–60 sec",start:[340,122],end:[340,122],path:"M340 127 C340 122 340 117 340 112",instruction:"Stand or sit behind your partner. Place two fingertips or thumbs just under the base of the skull. Press inward and slightly upward, then hold still. Do not rub here.",hint:"30–60 seconds. Aim for dull pressure, not sharp pain."},
+      {step:2,label:"Trap squeeze",type:"squeeze",pressure:"firm",speedLabel:"slow",speedHint:"1 squeeze every 2–3 sec",start:[404,154],end:[466,184],path:"M404 154 C420 160 442 174 466 184",instruction:"Stand behind your partner. Place your full hand over the upper trap between the neck and shoulder. Start near the neck, squeeze the muscle between your fingers and palm, then release slowly as you move slightly outward.",hint:"8–10 squeezes each side. Firm, slow, comfortable."},
+      {step:3,label:"Ball on mid trap",type:"glide",pressure:"firm",speedLabel:"very slow",speedHint:"Tiny roll over 3–4 sec",start:[458,208],end:[446,232],path:"M458 208 C455 216 452 223 446 232",instruction:"Put the tennis ball between your partner’s upper back and a wall. Guide them to lean into the ball. Start on the marked spot and make tiny slow rolls up and down.",hint:"20–30 seconds per sore spot. No rolling over spine bones."}
+    ],
+    back: [
+      {step:1,label:"Shoulder blade circles",type:"circle",pressure:"medium",speedLabel:"slow",speedHint:"1 full circle every 2 sec",start:[460,112],end:[460,112],path:"M460 112 m-12 0 a12 10 0 1 1 24 0 a12 10 0 1 1 -24 0",instruction:"Stand behind your partner. Ask them to cross one arm across their chest so the shoulder blade opens. Use fingertips to make slow circles along the inner blade edge.",hint:"60 seconds each side."},
+      {step:2,label:"Two-ball glide",type:"glide",pressure:"firm",speedLabel:"very slow",speedHint:"One pass in 4–5 sec",start:[340,90],end:[338,162],path:"M340 90 C332 108 334 128 340 146 C344 154 341 159 338 162",instruction:"Place two tennis balls in a sock on either side of the spine, not on the spine. Help your partner slowly glide up and down between the shoulder blades.",hint:"Pause 20–30 seconds on each sore point."},
+      {step:4,label:"Lower back hold",type:"hold",pressure:"firm",speedLabel:"still hold",speedHint:"Hold 20–30 sec",start:[380,220],end:[380,220],path:"M380 226 C380 220 380 214 380 208",instruction:"Stand behind your partner. Place your fists or heel of hand on the thick muscles beside the lower spine. Press inward and slightly upward, holding steady.",hint:"Keep off the spine bones. Skip if sciatica flares."}
+    ],
+    scalp: [
+      {step:1,label:"Scalp circles",type:"circle",pressure:"medium",speedLabel:"slow",speedHint:"1 circle every 2-3 sec",instruction:"Use finger pads, not nails. Make slow circles through the scalp, letting the skin move under your fingers instead of rubbing across the hair.",hint:"60 seconds across the top and sides."},
+      {step:2,label:"Forehead sweep",type:"glide",pressure:"light",speedLabel:"slow",speedHint:"1 sweep in 3 sec",instruction:"Place flat fingertips near the middle of the forehead and glide outward toward the temples. Keep it light and smooth.",hint:"6-8 slow passes."},
+      {step:3,label:"Behind-ear soft hold",type:"hold",pressure:"light",speedLabel:"still hold",speedHint:"Hold 20-30 sec",instruction:"Place fingertips just behind the ear and hold steady gentle pressure. Keep it soft and stop if it feels sharp or nervy.",hint:"20-30 seconds each side."}
+    ],
+    jaw: [
+      {step:1,label:"TMJ jaw hinge hold",type:"hold",pressure:"light",speedLabel:"still hold",speedHint:"Hold while they open/close slowly",start:[455,148],end:[455,148],path:"M455 153 C455 148 455 143 455 138",instruction:"Sit facing your partner. Place two fingertips just in front of the ear where the jaw hinge moves. Ask them to slowly open and close while you keep light steady pressure.",hint:"Light pressure only. Stop if clicking becomes painful."},
+      {step:2,label:"Masseter circles",type:"circle",pressure:"medium",speedLabel:"slow",speedHint:"1 circle every 2 sec",start:[445,188],end:[445,188],path:"M445 188 m-10 0 a10 12 0 1 1 20 0 a10 12 0 1 1 -20 0",instruction:"Ask your partner to gently clench to find the cheek muscle, then relax. Use 2–3 fingers to make slow circles over that muscle from cheekbone toward jawline.",hint:"60–90 seconds each side."},
+      {step:3,label:"Temple circles",type:"circle",pressure:"light",speedLabel:"slow",speedHint:"1 circle every 2–3 sec",start:[458,78],end:[458,78],path:"M458 78 m-12 0 a12 12 0 1 1 24 0 a12 12 0 1 1 -24 0",instruction:"Use flat fingertips on the temple. Make slow circles backward toward the ear. Keep it light and calm.",hint:"60 seconds each side."}
+    ],
+    belly: [
+      {step:1,label:"Clockwise belly circles",type:"circle",pressure:"light",speedLabel:"very slow",speedHint:"1 circle every 3–4 sec",start:[340,210],end:[340,210],path:"M340 210 m-45 0 a45 45 0 1 1 90 0 a45 45 0 1 1 -90 0",instruction:"Have your partner lie on their back. Use a flat palm and move clockwise around the belly, following the direction of digestion. Keep pressure very gentle.",hint:"2–3 minutes. Avoid deep pressure."},
+      {step:2,label:"Upper belly upward stroke",type:"glide",pressure:"light",speedLabel:"slow",speedHint:"1 stroke in 3 sec",start:[420,98],end:[448,68],path:"M420 98 C424 88 432 79 440 73 C443 71 446 69 448 68",instruction:"Place your hand under the ribs and stroke gently upward and outward. Use a light palm, not thumbs.",hint:"Slow, warm, non-invasive pressure."},
+      {step:3,label:"Side body stroke",type:"glide",pressure:"light",speedLabel:"slow",speedHint:"1 stroke in 3 sec",start:[248,220],end:[292,180],path:"M248 220 C255 208 266 196 278 188 C283 184 287 182 292 180",instruction:"Place your palm low on the side body and glide gently upward toward the ribs. Repeat slowly.",hint:"Keep checking that it feels relaxing."}
+    ],
+    calves: [
+      {step:1,label:"Foot/calf warm-up",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 3 sec",start:[305,236],end:[298,160],path:"M305 236 C300 214 296 188 297 171 C297 166 297 163 298 160",instruction:"Have your partner lie face down or sit with the leg supported. Start low near the ankle and glide up the calf toward the knee with a full palm.",hint:"Always move from ankle toward knee for this warm-up."},
+      {step:2,label:"Calf squeeze",type:"squeeze",pressure:"firm",speedLabel:"slow",speedHint:"1 squeeze every 2–3 sec",start:[292,172],end:[336,138],path:"M292 172 C304 160 319 149 336 138",instruction:"Wrap both hands around the calf. Start lower, squeeze the muscle inward with both hands, then release as you move upward.",hint:"Firm but comfortable. Never squeeze behind the knee."},
+      {step:3,label:"Achilles cross-fibre",type:"cross",pressure:"light",speedLabel:"slow",speedHint:"1 side-to-side sweep every 1–2 sec",start:[292,236],end:[320,236],path:"M292 236 C301 236 311 236 320 236",instruction:"Use thumb and finger beside the Achilles tendon. Move side-to-side across the tendon gently, not up and down the tendon.",hint:"Light pressure. Stop if tendon pain is sharp."}
+    ],
+    hams: [
+      {step:1,label:"Hamstring long stroke",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 3–4 sec",start:[335,224],end:[336,132],path:"M335 224 C330 197 329 166 332 148 C333 142 334 137 336 132",instruction:"Have your partner lie face down. Use both palms. Start above the knee and glide up the back of the thigh toward the glute.",hint:"Slow full-hand strokes, not poking."},
+      {step:2,label:"Glute knead",type:"circle",pressure:"firm",speedLabel:"slow",speedHint:"1 circle every 2 sec",start:[335,105],end:[335,105],path:"M335 105 m-18 0 a18 15 0 1 1 36 0 a18 15 0 1 1 -36 0",instruction:"Use the heel of your hand or knuckles over the glute muscle. Make slow broad circles, avoiding the tailbone and hip bones.",hint:"Firm pressure is okay if it feels good."},
+      {step:3,label:"Piriformis ball hold",type:"hold",pressure:"firm",speedLabel:"still hold",speedHint:"Hold 20–30 sec",start:[390,115],end:[390,115],path:"M390 121 C390 115 390 109 390 103",instruction:"Use a tennis ball against the wall or floor. Guide your partner to place the ball on the marked glute spot and hold steady pressure.",hint:"Stop if symptoms travel down the leg."}
+    ],
+    hips: [
+      {step:1,label:"Hip flexor hold",type:"hold",pressure:"light",speedLabel:"still hold",speedHint:"Hold 15–20 sec",start:[330,175],end:[330,175],path:"M330 181 C330 175 330 169 330 163",instruction:"Have your partner lie on their back. Use flat fingers near the front hip crease. Apply gentle pressure and hold; do not dig deeply into the abdomen.",hint:"Light to medium pressure only."},
+      {step:2,label:"TFL ball press",type:"hold",pressure:"firm",speedLabel:"still hold",speedHint:"Hold 20–30 sec",start:[285,150],end:[285,150],path:"M285 156 C285 150 285 144 285 138",instruction:"Use a tennis ball on the side/front of the hip. Help your partner lean into the wall and hold on the sore spot.",hint:"Avoid rolling hard down the IT band."},
+      {step:3,label:"IT band slow roll",type:"glide",pressure:"medium",speedLabel:"very slow",speedHint:"One pass in 4–5 sec",start:[392,132],end:[388,222],path:"M392 132 C404 159 405 187 392 222",instruction:"Use a foam roller very slowly down the outside thigh. Start high near the hip and finish well above the knee.",hint:"Stop 10 cm above the knee. This can be intense."}
+    ],
+    quads: [
+      {step:1,label:"Quad long stroke",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 3-4 sec",instruction:"Start just above the knee and glide up the front thigh toward the hip with a full palm. Stay on the muscle belly.",hint:"8-10 slow passes each thigh."},
+      {step:2,label:"Outer quad slow strip",type:"glide",pressure:"firm",speedLabel:"very slow",speedHint:"One pass in 4-5 sec",instruction:"Use the heel of your hand down the outer-front thigh. Move slowly and stay above the knee joint.",hint:"Firm but not sharp."},
+      {step:3,label:"Above-knee circles",type:"circle",pressure:"light",speedLabel:"slow",speedHint:"1 circle every 2-3 sec",instruction:"Make small circles in the soft tissue above the kneecap. Do not push directly into the kneecap.",hint:"30-45 seconds each side."}
+    ],
+    feet: [
+      {step:1,label:"Top-of-foot glide",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 2-3 sec",instruction:"Use both thumbs from the toes toward the ankle on the top of the foot. Keep pressure comfortable.",hint:"5-8 slow passes each foot."},
+      {step:2,label:"Ankle circles",type:"circle",pressure:"light",speedLabel:"slow",speedHint:"1 circle every 2 sec",instruction:"Circle around the soft tissue beside the ankle bones. Do not dig into the bone itself.",hint:"30 seconds around each ankle."},
+      {step:3,label:"Foot pad hold",type:"hold",pressure:"medium",speedLabel:"still hold",speedHint:"Hold 20-30 sec",instruction:"Hold steady pressure through the padded area behind the toes, then gently rock side to side. Stay on soft tissue, not the toe joints.",hint:"20-30 seconds each foot."}
+    ],
+    hands: [
+      {step:1,label:"Forearm flexor glide",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 2–3 sec",start:[300,145],end:[392,146],path:"M300 145 C328 136 360 139 392 146",instruction:"Hold your partner’s forearm with palm facing up. Use your thumb or palm to glide from inner elbow toward wrist.",hint:"Good after gripping, bottling, and pipetting."},
+      {step:2,label:"Forearm extensor glide",type:"glide",pressure:"medium",speedLabel:"slow",speedHint:"1 pass in 2–3 sec",start:[300,105],end:[392,104],path:"M300 105 C330 115 360 112 392 104",instruction:"Turn their palm down. Glide along the top of the forearm from elbow toward wrist with slow pressure.",hint:"Medium pressure. Avoid sharp wrist pain."},
+      {step:3,label:"Wrist traction",type:"traction",pressure:"light",speedLabel:"gentle pull",speedHint:"Pull and release over 2 sec",start:[430,145],end:[470,145],path:"M430 145 C444 142 456 143 470 145",instruction:"Hold their wrist and hand gently. Pull the hand away from the forearm just enough to create a mild stretch, then release.",hint:"Gentle only. Stop with pins and needles."}
+    ]
+  };
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const pressureCfg = {
+    light:  {ring: 15, start: 7, end: 7, bead: 5, stroke: 3.0, dash: '6 7', speed: '2.5s'},
+    medium: {ring: 10, start: 7, end: 7, bead: 4.5, stroke: 3.5, dash: '8 7', speed: '2.0s'},
+    firm:   {ring: 6,  start: 7, end: 6, bead: 4, stroke: 4.0, dash: '9 6', speed: '1.6s'}
+  };
+  const stylePaces = {
+    relaxation: {
+      label: 'Relaxation',
+      note: 'slow, calming movement',
+      scale: 1.35,
+      vars: {
+        '--pace-pulse': '2.8s',
+        '--pace-pulse2': '3.2s',
+        '--pace-glide': '1.6s',
+        '--pace-squeeze': '2.4s',
+        '--pace-circle': '3.4s',
+        '--pace-hold': '2.8s',
+        '--pace-dot': '3s',
+        '--pace-route-dash': '1.55s',
+        '--pace-bead-pulse': '1.8s',
+        '--pace-glow': '2.2s',
+        '--pace-press': '1.8s'
+      }
+    },
+    remedial: {
+      label: 'Remedial',
+      note: 'steady, deliberate pressure',
+      scale: 1,
+      vars: {
+        '--pace-pulse': '2s',
+        '--pace-pulse2': '2.3s',
+        '--pace-glide': '1s',
+        '--pace-squeeze': '1.6s',
+        '--pace-circle': '2.4s',
+        '--pace-hold': '1.8s',
+        '--pace-dot': '2.2s',
+        '--pace-route-dash': '1.1s',
+        '--pace-bead-pulse': '1.2s',
+        '--pace-glow': '1.6s',
+        '--pace-press': '1.2s'
+      }
+    },
+    sports: {
+      label: 'Sports recovery',
+      note: 'brisk warm-up and recovery strokes',
+      scale: 0.72,
+      vars: {
+        '--pace-pulse': '1.45s',
+        '--pace-pulse2': '1.7s',
+        '--pace-glide': '.75s',
+        '--pace-squeeze': '1.15s',
+        '--pace-circle': '1.8s',
+        '--pace-hold': '1.2s',
+        '--pace-dot': '1.55s',
+        '--pace-route-dash': '.75s',
+        '--pace-bead-pulse': '.9s',
+        '--pace-glow': '1.15s',
+        '--pace-press': '.9s'
+      }
+    },
+    lymphatic: {
+      label: 'Lymphatic gentle',
+      note: 'very slow and light movement',
+      scale: 1.8,
+      vars: {
+        '--pace-pulse': '3.6s',
+        '--pace-pulse2': '4.1s',
+        '--pace-glide': '2.2s',
+        '--pace-squeeze': '3s',
+        '--pace-circle': '4.2s',
+        '--pace-hold': '3.5s',
+        '--pace-dot': '3.8s',
+        '--pace-route-dash': '2.2s',
+        '--pace-bead-pulse': '2.4s',
+        '--pace-glow': '2.8s',
+        '--pace-press': '2.2s'
+      }
+    }
+  };
+  let currentStyleKey = 'relaxation';
+  const currentRoutes = {};
+  const bodyReferenceSrc = '__BODY_REFERENCE_IMAGE__';
+  const photoCrops = {
+    neck: {x:650, y:80, w:360, h:360, label:'Neck and traps'},
+    'neck:1': {x:705, y:105, w:250, h:280, label:'Base of skull', kind:'hold', center:[.5,.45], duration:30},
+    'neck:2': {x:625, y:210, w:430, h:280, label:'Upper trap', kind:'squeeze', start:[.28,.44], end:[.55,.5], duration:2.5},
+    'neck:3': {x:650, y:260, w:380, h:340, label:'Mid trap', kind:'glide', start:[.55,.34], end:[.5,.58], duration:3.5},
+    back: {x:620, y:220, w:430, h:540, label:'Upper back'},
+    'back:1': {x:650, y:245, w:370, h:350, label:'Shoulder blade', kind:'circle', center:[.68,.35], rx:32, ry:28, duration:2},
+    'back:2': {x:670, y:260, w:330, h:450, label:'Between shoulder blades', kind:'glide', start:[.5,.24], end:[.5,.6], duration:4.5},
+    'back:4': {x:640, y:430, w:390, h:350, label:'Lower back', kind:'hold', center:[.53,.44], duration:25},
+    scalp: {x:210, y:0, w:300, h:300, label:'Scalp and face'},
+    'scalp:1': {x:225, y:0, w:250, h:210, label:'Scalp circles', kind:'circle', center:[330,72], rx:28, ry:20, duration:2.5},
+    'scalp:2': {x:245, y:80, w:220, h:180, label:'Forehead sweep', kind:'glide', start:[318,150], end:[370,145], duration:3},
+    'scalp:3': {x:245, y:70, w:220, h:210, label:'Behind ear', kind:'hold', start:[374,170], end:[374,150], center:[374,150], duration:25},
+    jaw: {x:235, y:60, w:240, h:330, label:'Jaw and temples'},
+    'jaw:1': {x:245, y:90, w:220, h:270, label:'TMJ / jaw hinge', kind:'hold', start:[356,208], end:[356,192], center:[356,192], duration:5},
+    'jaw:2': {x:245, y:105, w:220, h:265, label:'Cheek muscle', kind:'circle', center:[342,214], rx:16, ry:18, duration:2},
+    'jaw:3': {x:245, y:50, w:220, h:240, label:'Temple', kind:'circle', center:[350,145], rx:13, ry:13, duration:2.5},
+    belly: {x:175, y:345, w:350, h:440, label:'Belly and pelvis'},
+    'belly:1': {x:185, y:360, w:330, h:400, label:'Belly circles', kind:'circle', center:[.5,.48], duration:4},
+    'belly:2': {x:175, y:310, w:350, h:330, label:'Upper belly', kind:'glide', start:[.58,.48], end:[.62,.3], duration:3},
+    'belly:3': {x:175, y:430, w:350, h:360, label:'Side body', kind:'glide', start:[.3,.62], end:[.42,.38], duration:3},
+    calves: {x:640, y:815, w:220, h:565, label:'Calves and Achilles'},
+    'calves:1': {x:640, y:815, w:205, h:540, label:'Calf warm-up', kind:'glide', start:[725,1248], end:[735,975], duration:3},
+    'calves:2': {x:640, y:875, w:205, h:420, label:'Calf squeeze', kind:'squeeze', start:[725,1138], end:[740,1015], duration:2.5},
+    'calves:3': {x:660, y:1110, w:170, h:270, label:'Achilles', kind:'cross', start:[712,1222], end:[736,1222], duration:1.5},
+    hams: {x:620, y:560, w:300, h:500, label:'Hamstrings and glutes'},
+    'hams:1': {x:635, y:635, w:230, h:360, label:'Hamstring', kind:'glide', start:[724,955], end:[735,750], duration:3.5},
+    'hams:2': {x:650, y:500, w:400, h:360, label:'Glute', kind:'circle', center:[.52,.42], rx:36, ry:32, duration:2},
+    'hams:3': {x:650, y:500, w:400, h:360, label:'Piriformis', kind:'hold', center:[.62,.48], duration:25},
+    hips: {x:155, y:460, w:440, h:670, label:'Hips and IT band'},
+    'hips:1': {x:170, y:450, w:350, h:420, label:'Hip flexor', kind:'hold', center:[.48,.42], duration:18},
+    'hips:2': {x:165, y:520, w:390, h:430, label:'Side hip', kind:'hold', center:[.33,.32], duration:25},
+    'hips:3': {x:340, y:650, w:200, h:410, label:'Outer thigh', kind:'glide', start:[438,755], end:[422,970], duration:4.5},
+    quads: {x:270, y:650, w:240, h:500, label:'Quads and knees'},
+    'quads:1': {x:290, y:650, w:170, h:500, label:'Quad long stroke', kind:'glide', start:[390,1030], end:[382,745], duration:3.5},
+    'quads:2': {x:335, y:650, w:170, h:500, label:'Outer quad', kind:'glide', start:[438,1020], end:[425,760], duration:4.5},
+    'quads:3': {x:300, y:840, w:190, h:260, label:'Above knee', kind:'circle', center:[382,965], rx:18, ry:18, duration:2.5},
+    feet: {x:310, y:1210, w:180, h:190, label:'Feet and ankles'},
+    'feet:1': {x:320, y:1220, w:160, h:180, label:'Top of foot', kind:'glide', start:[388,1338], end:[405,1302], duration:2.5},
+    'feet:2': {x:310, y:1190, w:170, h:190, label:'Ankle circles', kind:'circle', center:[394,1278], rx:16, ry:14, duration:2},
+    'feet:3': {x:320, y:1240, w:160, h:160, label:'Foot pad', kind:'hold', start:[392,1340], end:[392,1325], center:[392,1325], duration:25},
+    hands: {x:70, y:410, w:440, h:430, label:'Hands and forearms'},
+    'hands:1': {x:70, y:410, w:180, h:410, label:'Forearm flexors', kind:'glide', start:[.48,.3], end:[.28,.72], duration:2.5},
+    'hands:2': {x:370, y:410, w:190, h:410, label:'Forearm extensors', kind:'glide', start:[.38,.3], end:[.65,.72], duration:2.5},
+    'hands:3': {x:65, y:600, w:180, h:230, label:'Wrist traction', kind:'traction', start:[.45,.55], end:[.3,.55], duration:2}
+  };
+
+  function clearRoutes(svg){ svg.querySelectorAll('.interactive-route-layer').forEach(g => g.remove()); }
+
+  function originalViewBox(svg){
+    if(!svg.dataset.originalViewBox){
+      svg.dataset.originalViewBox = svg.getAttribute('viewBox') || svg.getAttribute('viewbox') || '0 0 680 280';
+    }
+    return svg.dataset.originalViewBox.split(/\s+/).map(Number);
+  }
+
+  function focusedBox(panelId, route, svg){
+    const base = originalViewBox(svg);
+    const bounds = {
+      neck: {w: 280, h: 170},
+      back: {w: 290, h: 185},
+      scalp: {w: 245, h: 170},
+      jaw: {w: 245, h: 170},
+      belly: {w: 285, h: 190},
+      calves: {w: 250, h: 195},
+      hams: {w: 280, h: 205},
+      hips: {w: 275, h: 205},
+      quads: {w: 250, h: 205},
+      feet: {w: 250, h: 185},
+      hands: {w: 285, h: 185}
+    }[panelId] || {w: 280, h: 190};
+    const x1 = Math.min(route.start[0], route.end[0]);
+    const x2 = Math.max(route.start[0], route.end[0]);
+    const y1 = Math.min(route.start[1], route.end[1]);
+    const y2 = Math.max(route.start[1], route.end[1]);
+    const w = Math.max(bounds.w, x2 - x1 + 120);
+    const h = Math.max(bounds.h, y2 - y1 + 120);
+    const cx = (route.start[0] + route.end[0]) / 2;
+    const cy = (route.start[1] + route.end[1]) / 2;
+    const maxX = base[0] + base[2] - w;
+    const maxY = base[1] + base[3] - h;
+    const x = Math.min(Math.max(base[0], cx - w / 2), maxX);
+    const y = Math.min(Math.max(base[1], cy - h / 2), maxY);
+
+    return `${x} ${y} ${w} ${h}`;
+  }
+
+  function focusBodyMap(panelId, route, svg){
+    svg.setAttribute('viewBox', focusedBox(panelId, route, svg));
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  }
+
+  function seconds(value){
+    return Number(String(value).replace('s', '')) || 1;
+  }
+
+  function pacedSeconds(value){
+    return Math.max(0.25, seconds(value) * stylePaces[currentStyleKey].scale);
+  }
+
+  function pacedDuration(value){
+    return pacedSeconds(value).toFixed(2).replace(/\.?0+$/, '') + 's';
+  }
+
+  function formattedDuration(secondsValue){
+    return secondsValue.toFixed(2).replace(/\.?0+$/, '') + 's';
+  }
+
+  function restartMotion(anim){
+    if(anim && typeof anim.beginElement === 'function'){
+      try { anim.beginElement(); } catch (_) {}
+    }
+  }
+
+  function pressureColors(pressure){
+    if(pressure === 'firm') return ['#F97316', '#EF4444', '#B91C1C', '#EF4444', '#F97316'];
+    if(pressure === 'medium') return ['#F59E0B', '#F97316', '#DC2626', '#F97316', '#F59E0B'];
+    return ['#FBBF24', '#F97316', '#EA580C', '#F97316', '#FBBF24'];
+  }
+
+  function syncRouteAnimations(){
+    Object.entries(currentRoutes).forEach(([panelId, route]) => {
+      const panel = document.getElementById('p-' + panelId);
+      const anim = panel ? panel.querySelector('.body-reference-overlay animateMotion') : null;
+      const colorAnim = panel ? panel.querySelector('.body-reference-overlay .route-bead animate') : null;
+      const duration = formattedDuration(realDuration(route, cropFor(panelId, route)));
+      if(anim){
+        anim.setAttribute('dur', duration);
+        restartMotion(anim);
+      }
+      if(colorAnim){
+        colorAnim.setAttribute('dur', duration);
+        restartMotion(colorAnim);
+      }
+    });
+  }
+
+  function applyStylePace(styleKey){
+    currentStyleKey = stylePaces[styleKey] ? styleKey : 'relaxation';
+    const style = stylePaces[currentStyleKey];
+    document.body.dataset.massageStyle = currentStyleKey;
+    Object.entries(style.vars).forEach(([name, value]) => {
+      document.documentElement.style.setProperty(name, value);
+      document.body.style.setProperty(name, value);
+    });
+    const current = document.getElementById('style-current');
+    if(current) current.textContent = `${style.label}: ${style.note}.`;
+    document.querySelectorAll('.style-btn').forEach(btn => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.style === currentStyleKey));
+      btn.classList.toggle('on', btn.dataset.style === currentStyleKey);
+    });
+    Object.entries(currentRoutes).forEach(([panelId, route]) => {
+      setCoach(panelId, route);
+    });
+    syncRouteAnimations();
+  }
+
+  function cropFor(panelId, route){
+    return photoCrops[panelId + ':' + route.step] || photoCrops[panelId] || photoCrops.neck;
+  }
+
+  function point(crop, x, y){
+    return [crop.x + crop.w * x, crop.y + crop.h * y];
+  }
+
+  function cropPoint(crop, fallback){
+    const coords = fallback || crop.center || [.5, .5];
+    if(Math.abs(coords[0]) > 1 || Math.abs(coords[1]) > 1) return coords;
+    return point(crop, coords[0], coords[1]);
+  }
+
+  function routeGeometry(crop, route){
+    const kind = crop.kind || route.type;
+    const center = crop.center || [crop.cx ?? .5, crop.cy ?? .5];
+    const cx = center[0];
+    const cy = center[1];
+    const sx = crop.w * .18;
+    const sy = crop.h * .18;
+
+    if(kind === 'circle'){
+      const c = cropPoint(crop, center);
+      const rx = crop.rx || crop.w * .12;
+      const ry = crop.ry || crop.h * .1;
+      return {
+        start: [c[0] + rx, c[1]],
+        end: [c[0] + rx, c[1]],
+        label: 'circle',
+        path: `M${c[0]} ${c[1]} m-${rx} 0 a${rx} ${ry} 0 1 1 ${rx * 2} 0 a${rx} ${ry} 0 1 1 -${rx * 2} 0`
+      };
+    }
+
+    if(kind === 'hold'){
+      const end = cropPoint(crop, crop.end || center);
+      const startFallback = (Math.abs(cx) > 1 || Math.abs(cy) > 1) ? [cx, cy + crop.h * .12] : [cx, cy + .12];
+      const start = cropPoint(crop, crop.start || startFallback);
+      return {
+        start,
+        end,
+        label: 'hold',
+        path: `M${start[0]} ${start[1]} C${end[0]} ${start[1] - sy * .25} ${end[0]} ${end[1] + sy * .25} ${end[0]} ${end[1]}`
+      };
+    }
+
+    if(kind === 'squeeze'){
+      const start = cropPoint(crop, crop.start || [cx - .16, cy]);
+      const end = cropPoint(crop, crop.end || [cx + .16, cy]);
+      return {
+        start,
+        end,
+        label: 'finish',
+        path: `M${start[0]} ${start[1]} C${start[0] + sx * .4} ${start[1] - sy * .35} ${end[0] - sx * .4} ${end[1] - sy * .35} ${end[0]} ${end[1]}`
+      };
+    }
+
+    if(kind === 'cross' || kind === 'traction'){
+      const start = cropPoint(crop, crop.start || [cx - .14, cy]);
+      const end = cropPoint(crop, crop.end || [cx + .14, cy]);
+      return {
+        start,
+        end,
+        label: kind === 'traction' ? 'release' : 'finish',
+        path: `M${start[0]} ${start[1]} C${crop.x + crop.w * cx} ${start[1] - sy * .1} ${crop.x + crop.w * cx} ${end[1] + sy * .1} ${end[0]} ${end[1]}`
+      };
+    }
+
+    const start = cropPoint(crop, crop.start || [cx, cy + .2]);
+    const end = cropPoint(crop, crop.end || [cx, cy - .18]);
+    return {
+      start,
+      end,
+      label: 'finish',
+      path: `M${start[0]} ${start[1]} C${start[0] - sx * .35} ${start[1] - sy} ${end[0] + sx * .35} ${end[1] + sy} ${end[0]} ${end[1]}`
+    };
+  }
+
+  function ensurePhotoMap(panel, sourceSvg){
+    let frame = panel.querySelector('.body-reference-map');
+    if(frame) return frame;
+
+    sourceSvg.classList.add('source-body-map');
+    frame = document.createElement('div');
+    frame.className = 'body-reference-map';
+    frame.innerHTML = `<svg class="body-reference-svg" role="img" viewBox="0 0 1122 1402" preserveAspectRatio="xMidYMid meet">
+      <image class="body-reference-image" href="${bodyReferenceSrc}" x="0" y="0" width="1122" height="1402" preserveAspectRatio="none"></image>
+      <g class="body-reference-overlay"></g>
+    </svg>`;
+    sourceSvg.insertAdjacentElement('beforebegin', frame);
+    return frame;
+  }
+
+  function realDuration(route, crop){
+    const fallback = pressureCfg[route.pressure || 'medium'].speed;
+    const base = crop.duration || route.duration || seconds(fallback);
+    return Math.max(.75, base * stylePaces[currentStyleKey].scale);
+  }
+
+  function durationText(secondsValue){
+    if(secondsValue >= 10) return Math.round(secondsValue) + 's loop';
+    const value = secondsValue.toFixed(1);
+    return value.replace(/\.0$/, '') + 's loop';
+  }
+
+  function realDurationLabel(route, crop){
+    return durationText(realDuration(route, crop));
+  }
+
+  function drawRoute(panelId, route){
+    const panel = document.getElementById('p-' + panelId); if(!panel) return;
+    const sourceSvg = panel.querySelector(':scope > svg'); if(!sourceSvg) return;
+    const frame = ensurePhotoMap(panel, sourceSvg);
+    const svg = frame.querySelector('.body-reference-svg');
+    const overlay = frame.querySelector('.body-reference-overlay');
+    overlay.innerHTML = '';
+    const cfg = pressureCfg[route.pressure || 'medium'];
+    const crop = cropFor(panelId, route);
+    const geometry = routeGeometry(crop, route);
+    const [startX, startY] = geometry.start;
+    const [endX, endY] = geometry.end;
+    svg.setAttribute('viewBox', `${crop.x} ${crop.y} ${crop.w} ${crop.h}`);
+
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'interactive-route-layer');
+
+    const defs = document.createElementNS(ns, 'defs');
+    const marker = document.createElementNS(ns, 'marker');
+    marker.setAttribute('id', 'arrow-' + panelId); marker.setAttribute('viewBox', '0 0 10 10'); marker.setAttribute('refX', '8'); marker.setAttribute('refY', '5');
+    marker.setAttribute('markerWidth', '7'); marker.setAttribute('markerHeight', '7'); marker.setAttribute('orient', 'auto-start-reverse');
+    const arrow = document.createElementNS(ns, 'path');
+    arrow.setAttribute('d', 'M2 1 L8 5 L2 9'); arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', '#D85A30'); arrow.setAttribute('stroke-width', '1.7');
+    arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round'); marker.appendChild(arrow); defs.appendChild(marker); g.appendChild(defs);
+
+    const pressure = route.pressure || 'medium';
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('class', 'route-pressure-ring pressure-' + pressure); ring.setAttribute('cx', startX); ring.setAttribute('cy', startY); ring.setAttribute('r', cfg.ring * (crop.w / 280));
+    ring.setAttribute('stroke-width', (cfg.ring <= 6 ? 2.4 : cfg.ring <=10 ? 2 : 1.6) * (crop.w / 280));
+    g.appendChild(ring);
+
+    const guide = document.createElementNS(ns, 'path');
+    guide.setAttribute('class', 'route-guide'); guide.setAttribute('d', geometry.path); guide.setAttribute('marker-end', 'url(#arrow-' + panelId + ')'); g.appendChild(guide);
+
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('class', 'route-path'); path.setAttribute('d', geometry.path); path.setAttribute('stroke-width', cfg.stroke); path.setAttribute('stroke-dasharray', cfg.dash); g.appendChild(path);
+
+    const start = document.createElementNS(ns, 'circle');
+    start.setAttribute('class', 'route-start'); start.setAttribute('cx', startX); start.setAttribute('cy', startY); start.setAttribute('r', cfg.start * (crop.w / 280)); g.appendChild(start);
+
+    const end = document.createElementNS(ns, 'circle');
+    end.setAttribute('class', 'route-end'); end.setAttribute('cx', endX); end.setAttribute('cy', endY); end.setAttribute('r', ((route.type === 'hold' || route.type === 'circle') ? Math.max(5, cfg.end-1) : cfg.end) * (crop.w / 280)); g.appendChild(end);
+
+    const startTxt = document.createElementNS(ns, 'text');
+    startTxt.setAttribute('class', 'route-start-label'); startTxt.setAttribute('x', startX + crop.w * .035); startTxt.setAttribute('y', startY - crop.h * .035); startTxt.textContent = 'start'; g.appendChild(startTxt);
+
+    const endTxt = document.createElementNS(ns, 'text');
+    endTxt.setAttribute('class', 'route-end-label'); endTxt.setAttribute('x', endX + crop.w * .035); endTxt.setAttribute('y', endY - crop.h * .035);
+    endTxt.textContent = geometry.label;
+    g.appendChild(endTxt);
+
+    const caption = document.createElementNS(ns, 'text');
+    caption.setAttribute('class', 'reference-caption');
+    caption.setAttribute('x', crop.x + crop.w * .05);
+    caption.setAttribute('y', crop.y + crop.h * .1);
+    caption.textContent = crop.label;
+    g.appendChild(caption);
+
+    const bead = document.createElementNS(ns, 'circle');
+    bead.setAttribute('class', 'route-bead pressure-' + pressure); bead.setAttribute('r', cfg.bead * (crop.w / 280));
+    const duration = formattedDuration(realDuration(route, crop));
+    const colorAnim = document.createElementNS(ns, 'animate');
+    colorAnim.setAttribute('attributeName', 'fill'); colorAnim.setAttribute('dur', duration); colorAnim.setAttribute('repeatCount', 'indefinite');
+    colorAnim.setAttribute('values', pressureColors(pressure).join(';'));
+    const anim = document.createElementNS(ns, 'animateMotion'); anim.setAttribute('dur', duration); anim.setAttribute('repeatCount', 'indefinite'); anim.setAttribute('path', geometry.path);
+    bead.appendChild(colorAnim); bead.appendChild(anim); g.appendChild(bead);
+
+    overlay.appendChild(g);
+  }
+
+  function pressureChip(pressure){
+    return `<span class="pressure-chip ${pressure}"><span class="pdot"></span>${pressure} pressure</span>`;
+  }
+  function speedChip(label, hint){
+    const style = stylePaces[currentStyleKey];
+    return `<span class="speed-chip"><span class="sicon">⏱</span>${style.label}: ${label} • ${hint}</span>`;
+  }
+  function pathName(type){
+    if(type === 'glide') return 'curved glide';
+    if(type === 'hold') return 'hold still';
+    if(type === 'circle') return 'circles';
+    if(type === 'cross') return 'cross-fibre';
+    if(type === 'traction') return 'gentle traction';
+    if(type === 'squeeze') return 'squeeze + release';
+    return type;
+  }
+
+  function setCoach(panelId, route){
+    const panel = document.getElementById('p-' + panelId); if(!panel) return;
+    const coach = panel.querySelector('.partner-coach'); if(!coach) return;
+    currentRoutes[panelId] = route;
+    coach.querySelector('.coach-title').textContent = route.step + '. ' + route.label;
+    coach.querySelector('.coach-instruction').textContent = route.instruction;
+    coach.querySelector('.coach-hint').textContent = route.hint;
+    const meta = coach.querySelector('.coach-meta');
+    const crop = cropFor(panelId, route);
+    const paceHint = `${route.speedHint} - visual ${realDurationLabel(route, crop)}`;
+    if(meta) meta.innerHTML = pressureChip(route.pressure) + speedChip(route.speedLabel, paceHint) + `<span class="coach-type">Move: ${pathName(route.type)}</span>`;
+    const dnote = coach.querySelector('.design-note');
+    if(dnote) dnote.textContent = 'Blue dot = start, yellow dot = finish, orange-to-red moving bead = where pressure is applied, pressure ring size = lighter/broader vs firmer/focused pressure.';
+    coach.querySelectorAll('.coach-btn').forEach(btn => btn.classList.toggle('on', Number(btn.dataset.step) === route.step));
+    panel.querySelectorAll('.step-card').forEach(card => {
+      const num = card.querySelector('.step-num');
+      card.classList.toggle('active-step', num && Number(num.textContent.trim()) === route.step);
+    });
+    drawRoute(panelId, route);
+  }
+
+  function buildCoach(panelId){
+    const panel = document.getElementById('p-' + panelId); const data = routeData[panelId];
+    if(!panel || !data || !data.length || panel.querySelector('.partner-coach')) return;
+    const svg = panel.querySelector(':scope > svg');
+    const coach = document.createElement('div'); coach.className = 'partner-coach';
+    coach.innerHTML = `
+      <div class="coach-main">
+        <div class="coach-kicker">Giving the massage</div>
+        <div class="coach-title"></div>
+        <div class="coach-instruction"></div>
+        <div class="coach-meta"></div>
+        <div class="coach-hint"></div>
+        <div class="design-note"></div>
+      </div>
+      <div class="coach-controls"></div>`;
+    const controls = coach.querySelector('.coach-controls');
+    data.forEach(route => {
+      const btn = document.createElement('button'); btn.className = 'coach-btn'; btn.type = 'button'; btn.dataset.step = route.step; btn.textContent = route.step + '. ' + route.label;
+      btn.addEventListener('click', () => setCoach(panelId, route)); controls.appendChild(btn);
+    });
+    svg.insertAdjacentElement('afterend', coach); setCoach(panelId, data[0]);
+  }
+
+  document.addEventListener('click', event => {
+    const target = event.target;
+    const btn = target && target.closest ? target.closest('.style-btn') : null;
+    if(!btn) return;
+    event.preventDefault();
+    applyStylePace(btn.dataset.style);
+  });
+
+  Object.keys(routeData).forEach(buildCoach);
+  applyStylePace(currentStyleKey);
+
+  const originalSw = window.sw;
+  window.sw = function(id, btn){
+    if(typeof originalSw === 'function') originalSw(id, btn);
+    const data = routeData[id]; const panel = document.getElementById('p-' + id);
+    const active = panel ? panel.querySelector('.coach-btn.on') : null; const step = active ? Number(active.dataset.step) : (data && data[0] ? data[0].step : null);
+    const route = data ? data.find(r => r.step === step) || data[0] : null; if(route) setCoach(id, route);
+  };
+
+  document.querySelectorAll('.panel').forEach(panel => {
+    const panelId = panel.id ? panel.id.replace('p-','') : '';
+    panel.querySelectorAll('.step-card').forEach(card => {
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => {
+        const num = card.querySelector('.step-num'); if(!num || !routeData[panelId]) return;
+        const route = routeData[panelId].find(r => r.step === Number(num.textContent.trim()));
+        if(route) setCoach(panelId, route);
+      });
+    });
+  });
+})();
+</script></body>
+</html>

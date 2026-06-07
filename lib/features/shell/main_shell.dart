@@ -9,6 +9,7 @@ import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
+import '../massage/massage_screen.dart';
 import '../notes/actions_screen.dart';
 import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
@@ -100,6 +101,7 @@ class _MainShellState extends State<MainShell> {
 
   String _title(AppMode mode) {
     if (mode == AppMode.personal) return 'Personal Mode';
+    if (mode == AppMode.massage) return 'Massage';
     if (mode == AppMode.paye) return 'PAYE job - $title';
 
     return title;
@@ -221,8 +223,9 @@ class _MainShellState extends State<MainShell> {
         final wide = constraints.maxWidth >= 820;
         final maxContentWidth = wide ? 980.0 : 430.0;
         final personalMode = appMode == AppMode.personal;
+        final massageMode = appMode == AppMode.massage;
         final payeMode = appMode == AppMode.paye;
-        final standaloneMode = personalMode;
+        final standaloneMode = personalMode || massageMode;
 
         return Scaffold(
           appBar: AppBar(
@@ -258,6 +261,13 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     PopupMenuItem(
+                      value: AppMode.massage,
+                      child: ListTile(
+                        leading: Icon(Icons.spa_outlined),
+                        title: Text('Massage'),
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: AppMode.paye,
                       child: ListTile(
                         leading: Icon(Icons.business_center_outlined),
@@ -280,6 +290,8 @@ class _MainShellState extends State<MainShell> {
                         Icon(
                           personalMode
                               ? Icons.person_outline_rounded
+                              : massageMode
+                              ? Icons.spa_outlined
                               : payeMode
                               ? Icons.business_center_outlined
                               : Icons.work_outline_rounded,
@@ -318,6 +330,8 @@ class _MainShellState extends State<MainShell> {
                       child: RepaintBoundary(
                         child: personalMode
                             ? const PersonalScreen()
+                            : massageMode
+                            ? const MassageScreen()
                             : _screen(),
                       ),
                     ),
