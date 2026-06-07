@@ -456,10 +456,6 @@ Safety concerns
         bold: true,
       ),
       _personalParagraph('Type: ${entry.type.label}'),
-      if (entry.type == EntryType.homeVisit)
-        _personalParagraph(
-          'Kilometres: ${entry.kilometres.toStringAsFixed(1)}',
-        ),
       _personalSpacer,
       for (final section in sections) ...[
         _personalParagraph(section.title, style: 'Heading1'),

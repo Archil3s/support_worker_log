@@ -52,11 +52,17 @@ class AppState extends ChangeNotifier {
   StreamSubscription<StoredAppData?>? _cloudDataSubscription;
   String? _cloudDataSubscriptionUserId;
   Timer? _driveInvoiceSyncDebounce;
+  Timer? _driveWorkSheetSyncDebounce;
   Timer? _drivePersonalSyncDebounce;
+  Timer? _drivePayeActionsSyncDebounce;
   bool _driveInvoiceSyncRunning = false;
   bool _driveInvoiceSyncQueued = false;
+  bool _driveWorkSheetSyncRunning = false;
+  bool _driveWorkSheetSyncQueued = false;
   bool _drivePersonalSyncRunning = false;
   bool _drivePersonalSyncQueued = false;
+  bool _drivePayeActionsSyncRunning = false;
+  bool _drivePayeActionsSyncQueued = false;
   bool _cloudSyncReady = false;
   String? _cloudSyncError;
 
@@ -186,6 +192,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(_syncLocalAndCloudSafely());
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
     _scheduleDrivePersonalSync();
   }
 
@@ -292,8 +299,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     if (scope == GoogleExportAccountScope.work) {
       _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
     } else if (scope == GoogleExportAccountScope.personal) {
       _scheduleDrivePersonalSync();
+    } else if (scope == GoogleExportAccountScope.paye) {
+      _scheduleDrivePayeActionsSync();
     }
     return connection.accessToken;
   }
@@ -451,6 +461,7 @@ class AppState extends ChangeNotifier {
 
     await _syncLocalAndCloudSafely();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
     _scheduleDrivePersonalSync();
     notifyListeners();
   }
@@ -491,6 +502,7 @@ class AppState extends ChangeNotifier {
 
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
     _scheduleDrivePersonalSync();
   }
 
@@ -527,6 +539,9 @@ class AppState extends ChangeNotifier {
     _settings = settings;
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
+    _scheduleDrivePersonalSync();
+    _scheduleDrivePayeActionsSync();
   }
 
   void setAppMode(AppMode mode) {
@@ -563,7 +578,12 @@ class AppState extends ChangeNotifier {
     }
     _activeVisit = null;
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   void addEntry(WorkEntry entry) {
@@ -573,12 +593,18 @@ class AppState extends ChangeNotifier {
       _entries.insert(0, entry);
     }
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   void addPayeEntry(WorkEntry entry) {
     _payeEntries.insert(0, entry);
     _persistAndNotify();
+    _scheduleDrivePayeActionsSync();
   }
 
   void addGeneralAction(GeneralActionItem action) {
@@ -641,7 +667,12 @@ class AppState extends ChangeNotifier {
       _entries.insertAll(0, entries);
     }
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   void updateEntry(WorkEntry updatedEntry) {
@@ -661,7 +692,12 @@ class AppState extends ChangeNotifier {
         ? updatedEntry.copyWith(googleCalendarEntered: false)
         : updatedEntry;
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   void updatePayeEntry(WorkEntry updatedEntry) {
@@ -672,6 +708,7 @@ class AppState extends ChangeNotifier {
 
     _payeEntries[index] = updatedEntry;
     _persistAndNotify();
+    _scheduleDrivePayeActionsSync();
   }
 
   RemovedEntry? deleteEntry(WorkEntry entry) {
@@ -681,7 +718,12 @@ class AppState extends ChangeNotifier {
 
     final removed = activeEntries.removeAt(index);
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
 
     return RemovedEntry(entry: removed, index: index);
   }
@@ -692,6 +734,7 @@ class AppState extends ChangeNotifier {
 
     final removed = _payeEntries.removeAt(index);
     _persistAndNotify();
+    _scheduleDrivePayeActionsSync();
 
     return RemovedEntry(entry: removed, index: index);
   }
@@ -700,6 +743,7 @@ class AppState extends ChangeNotifier {
     final index = _boundedPayeIndex(removedEntry.index);
     _payeEntries.insert(index, removedEntry.entry);
     _persistAndNotify();
+    _scheduleDrivePayeActionsSync();
   }
 
   void restoreEntry(RemovedEntry removedEntry) {
@@ -709,7 +753,12 @@ class AppState extends ChangeNotifier {
         : _boundedIndex(removedEntry.index);
     activeEntries.insert(index, removedEntry.entry);
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   void duplicateEntry(WorkEntry entry) {
@@ -724,7 +773,12 @@ class AppState extends ChangeNotifier {
       ),
     );
     _persistAndNotify();
-    if (!isPayeMode) _scheduleDriveInvoiceSync();
+    if (isPayeMode) {
+      _scheduleDrivePayeActionsSync();
+    } else {
+      _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
+    }
   }
 
   bool addClient(String client) {
@@ -806,6 +860,8 @@ class AppState extends ChangeNotifier {
 
     _persistAndNotify();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
+    _scheduleDrivePayeActionsSync();
 
     return true;
   }
@@ -846,7 +902,9 @@ class AppState extends ChangeNotifier {
       _cloudSyncError = null;
       _startCloudDataSubscription();
       _scheduleDriveInvoiceSync();
+      _scheduleDriveWorkSheetSync();
       _scheduleDrivePersonalSync();
+      _scheduleDrivePayeActionsSync();
       return;
     }
 
@@ -864,7 +922,9 @@ class AppState extends ChangeNotifier {
     _cloudSyncError = null;
     _startCloudDataSubscription();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
     _scheduleDrivePersonalSync();
+    _scheduleDrivePayeActionsSync();
   }
 
   Future<void> _syncLocalAndCloudSafely() async {
@@ -921,7 +981,9 @@ class AppState extends ChangeNotifier {
     _cloudSyncError = null;
     notifyListeners();
     _scheduleDriveInvoiceSync();
+    _scheduleDriveWorkSheetSync();
     _scheduleDrivePersonalSync();
+    _scheduleDrivePayeActionsSync();
   }
 
   void _scheduleDriveInvoiceSync() {
@@ -931,6 +993,16 @@ class AppState extends ChangeNotifier {
     _driveInvoiceSyncDebounce?.cancel();
     _driveInvoiceSyncDebounce = Timer(const Duration(seconds: 2), () {
       unawaited(_syncDriveInvoicesSafely());
+    });
+  }
+
+  void _scheduleDriveWorkSheetSync() {
+    if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
+    if (_workGoogleDriveAccessToken == null) return;
+
+    _driveWorkSheetSyncDebounce?.cancel();
+    _driveWorkSheetSyncDebounce = Timer(const Duration(seconds: 2), () {
+      unawaited(_syncDriveWorkSheetSafely());
     });
   }
 
@@ -947,6 +1019,20 @@ class AppState extends ChangeNotifier {
     _drivePersonalSyncDebounce?.cancel();
     _drivePersonalSyncDebounce = Timer(const Duration(seconds: 2), () {
       unawaited(_syncDrivePersonalLogsSafely());
+    });
+  }
+
+  void _scheduleDrivePayeActionsSync() {
+    if (_payeEntries.isEmpty) return;
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.paye,
+    )) {
+      return;
+    }
+
+    _drivePayeActionsSyncDebounce?.cancel();
+    _drivePayeActionsSyncDebounce = Timer(const Duration(seconds: 2), () {
+      unawaited(_syncDrivePayeActionsSafely());
     });
   }
 
@@ -1020,6 +1106,75 @@ class AppState extends ChangeNotifier {
       invoicesFolderId: invoicesFolderId,
       entries: _entries,
       settings: syncSettings,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+  }
+
+  Future<void> _syncDriveWorkSheetSafely() async {
+    if (_driveWorkSheetSyncRunning) {
+      _driveWorkSheetSyncQueued = true;
+      return;
+    }
+
+    _driveWorkSheetSyncRunning = true;
+
+    try {
+      await syncWorkLivingSheetToDrive();
+    } catch (error) {
+      _cloudSyncError = error.toString();
+      notifyListeners();
+    } finally {
+      _driveWorkSheetSyncRunning = false;
+
+      if (_driveWorkSheetSyncQueued) {
+        _driveWorkSheetSyncQueued = false;
+        _scheduleDriveWorkSheetSync();
+      }
+    }
+  }
+
+  Future<void> _syncDrivePayeActionsSafely() async {
+    if (_drivePayeActionsSyncRunning) {
+      _drivePayeActionsSyncQueued = true;
+      return;
+    }
+
+    _drivePayeActionsSyncRunning = true;
+
+    try {
+      await _syncDrivePayeActions();
+    } catch (error) {
+      _cloudSyncError = error.toString();
+      notifyListeners();
+    } finally {
+      _drivePayeActionsSyncRunning = false;
+
+      if (_drivePayeActionsSyncQueued) {
+        _drivePayeActionsSyncQueued = false;
+        _scheduleDrivePayeActionsSync();
+      }
+    }
+  }
+
+  Future<void> _syncDrivePayeActions() async {
+    if (_payeEntries.isEmpty) return;
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    final notesFolderId = await _ensurePayeNotesDriveFolder(accessToken);
+    final rootFolderId = _settings.payeGoogleDriveRootFolderId;
+    final parentFolderId = rootFolderId == null || rootFolderId.isEmpty
+        ? notesFolderId
+        : rootFolderId;
+
+    await _googleDriveService.syncPayeNextActionsSheet(
+      accessToken: accessToken,
+      parentFolderId: parentFolderId,
+      entries: _payeEntries,
     );
 
     _cloudSyncReady = true;
@@ -1434,7 +1589,9 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _driveInvoiceSyncDebounce?.cancel();
+    _driveWorkSheetSyncDebounce?.cancel();
     _drivePersonalSyncDebounce?.cancel();
+    _drivePayeActionsSyncDebounce?.cancel();
     unawaited(_stopCloudDataSubscription());
     super.dispose();
   }

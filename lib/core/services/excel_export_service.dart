@@ -47,8 +47,8 @@ class ExcelExportService {
       entries: sortedEntries,
       settings: settings,
     );
-    _buildLiveOpenActionsSheet(
-      sheet: excel['Open Actions'],
+    _buildLiveNextActionsSheet(
+      sheet: excel['Next Actions'],
       entries: sortedEntries,
     );
     _buildLiveWorkEntriesSheet(
@@ -62,6 +62,51 @@ class ExcelExportService {
     final bytes = excel.encode() ?? <int>[];
     return ExcelWorkbookResult(
       fileName: 'Support Worker Log - Live Dashboard.xlsx',
+      bytes: Uint8List.fromList(bytes),
+    );
+  }
+
+  ExcelWorkbookResult buildNextActionsWorkbook({
+    required List<WorkEntry> entries,
+    required String fileName,
+    required String title,
+  }) {
+    final excel = Excel.createExcel();
+    final sortedEntries = [...entries]..sort(_newestWorkEntryFirst);
+
+    _buildLiveNextActionsSheet(
+      sheet: excel['Next Actions'],
+      entries: sortedEntries,
+    );
+
+    final dashboard = excel['Dashboard'];
+    _setColumnWidths(dashboard, const [18, 18, 18, 18]);
+    _appendTitle(dashboard, title);
+    _appendRow(dashboard, ['Updated', formatDate(DateTime.now())]);
+    _appendSpacer(dashboard);
+    final allActions = sortedEntries.expand((entry) => entry.nextActions);
+    final completed = allActions.where((action) => action.isCompleted).length;
+    final open = allActions.where((action) => !action.isCompleted).length;
+    _appendMetricCards(dashboard, [
+      _DashboardMetric(
+        label: 'Completed',
+        value: '$completed',
+        signal: 'Done',
+        color: '#2F6B4F',
+      ),
+      _DashboardMetric(
+        label: 'Not updated',
+        value: '$open',
+        signal: 'Open',
+        color: '#9A3412',
+      ),
+    ]);
+
+    _finalizeWorkbook(excel, 'Dashboard');
+
+    final bytes = excel.encode() ?? <int>[];
+    return ExcelWorkbookResult(
+      fileName: fileName,
       bytes: Uint8List.fromList(bytes),
     );
   }
@@ -473,12 +518,12 @@ class ExcelExportService {
     }
   }
 
-  void _buildLiveOpenActionsSheet({
+  void _buildLiveNextActionsSheet({
     required Sheet sheet,
     required List<WorkEntry> entries,
   }) {
-    _setColumnWidths(sheet, const [13, 20, 18, 50, 14, 16, 18]);
-    _appendTitle(sheet, 'Open Actions');
+    _setColumnWidths(sheet, const [13, 20, 18, 50, 16, 16, 16, 18]);
+    _appendTitle(sheet, 'Next Actions');
     _appendHeader(sheet, [
       'Source date',
       'Client',
@@ -486,22 +531,32 @@ class ExcelExportService {
       'Action',
       'Status',
       'Created',
+      'Completed',
       'Age',
     ]);
 
     for (final entry in entries) {
       for (final action in entry.nextActions) {
-        if (action.isCompleted) continue;
-
+        final rowIndex = sheet.maxRows;
+        final completedAt = action.completedAt;
         _appendRow(sheet, [
           formatDate(entry.date),
           entry.client,
           entry.type.label,
           _phoneBullets([action.text], maxItems: 1),
-          'Open',
+          action.isCompleted ? 'Completed' : 'Not updated',
           formatDate(action.createdAt),
-          _ageText(action.createdAt),
+          completedAt == null ? '' : formatDate(completedAt),
+          completedAt == null ? _ageText(action.createdAt) : 'Done',
         ]);
+        _styleCell(
+          sheet,
+          rowIndex,
+          4,
+          action.isCompleted
+              ? _completedStatusStyle()
+              : _notUpdatedStatusStyle(),
+        );
       }
     }
   }
@@ -1028,6 +1083,24 @@ class ExcelExportService {
       bold: true,
       fontColorHex: ExcelColor.white,
       backgroundColorHex: ExcelColor.fromHexString(color),
+      horizontalAlign: HorizontalAlign.Center,
+    );
+  }
+
+  CellStyle _completedStatusStyle() {
+    return CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.white,
+      backgroundColorHex: ExcelColor.fromHexString('#2F6B4F'),
+      horizontalAlign: HorizontalAlign.Center,
+    );
+  }
+
+  CellStyle _notUpdatedStatusStyle() {
+    return CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.white,
+      backgroundColorHex: ExcelColor.fromHexString('#9A3412'),
       horizontalAlign: HorizontalAlign.Center,
     );
   }

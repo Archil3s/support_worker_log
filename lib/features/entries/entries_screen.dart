@@ -109,6 +109,7 @@ class _EntriesScreenState extends State<EntriesScreen> {
         return EditEntrySheet(
           entry: entry,
           clients: appState.clients,
+          showTravel: !appState.isPayeMode,
           onSave: (updatedEntry) {
             final calendarNeedsReentry =
                 entry.googleCalendarEntered &&
@@ -222,7 +223,10 @@ class _EntriesScreenState extends State<EntriesScreen> {
         ),
         const SizedBox(height: 12),
       ],
-      _ClientAnalyticsSection(entries: currentPeriodEntries),
+      _ClientAnalyticsSection(
+        entries: currentPeriodEntries,
+        showKilometres: !payeMode,
+      ),
       const SizedBox(height: 12),
       _FilterSection(
         searchController: searchController,
@@ -261,10 +265,11 @@ class _EntriesScreenState extends State<EntriesScreen> {
               title: 'Earnings',
               value: money(totalEarnings(filteredEntries, settings)),
             ),
-          StatCard(
-            title: 'KM',
-            value: totalKilometres(filteredEntries).toStringAsFixed(1),
-          ),
+          if (!payeMode)
+            StatCard(
+              title: 'KM',
+              value: totalKilometres(filteredEntries).toStringAsFixed(1),
+            ),
         ],
       ),
       const SizedBox(height: 12),
@@ -311,9 +316,13 @@ class _EntriesScreenState extends State<EntriesScreen> {
 }
 
 class _ClientAnalyticsSection extends StatelessWidget {
-  const _ClientAnalyticsSection({required this.entries});
+  const _ClientAnalyticsSection({
+    required this.entries,
+    required this.showKilometres,
+  });
 
   final List<WorkEntry> entries;
+  final bool showKilometres;
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +338,10 @@ class _ClientAnalyticsSection extends StatelessWidget {
           : Column(
               children: [
                 for (final summary in summaries)
-                  _ClientSummaryTile(summary: summary),
+                  _ClientSummaryTile(
+                    summary: summary,
+                    showKilometres: showKilometres,
+                  ),
               ],
             ),
     );
@@ -366,9 +378,13 @@ class _ClientAnalyticsSection extends StatelessWidget {
 }
 
 class _ClientSummaryTile extends StatelessWidget {
-  const _ClientSummaryTile({required this.summary});
+  const _ClientSummaryTile({
+    required this.summary,
+    required this.showKilometres,
+  });
 
   final _ClientSummary summary;
+  final bool showKilometres;
 
   @override
   Widget build(BuildContext context) {
@@ -402,13 +418,15 @@ class _ClientSummaryTile extends StatelessWidget {
                   value: summary.hours.toStringAsFixed(2),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniMetric(
-                  label: 'KM',
-                  value: summary.kilometres.toStringAsFixed(1),
+              if (showKilometres) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniMetric(
+                    label: 'KM',
+                    value: summary.kilometres.toStringAsFixed(1),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(width: 8),
               Expanded(
                 child: _MiniMetric(

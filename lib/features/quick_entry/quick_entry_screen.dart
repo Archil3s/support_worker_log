@@ -351,6 +351,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     final notes = _buildVisitNotes(selectedNotes: selectedNotes);
     final startedAt = _startDateTimeForSelectedDate();
+    final trackKilometres =
+        !appState.isPayeMode && selectedType == EntryType.homeVisit;
 
     appState.startActiveVisit(
       ActiveVisit(
@@ -358,7 +360,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         client: client,
         type: selectedType,
         startedAt: startedAt,
-        odometerStart: selectedType == EntryType.homeVisit
+        odometerStart: trackKilometres
             ? _readDouble(startOdometerController)
             : null,
         notes: notes,
@@ -422,11 +424,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   }
 
   Future<void> _finishVisit(AppState appState, ActiveVisit activeVisit) async {
-    final finishOdometer = activeVisit.type == EntryType.homeVisit
+    final trackKilometres =
+        !appState.isPayeMode && activeVisit.type == EntryType.homeVisit;
+    final finishOdometer = trackKilometres
         ? _readDouble(finishOdometerController)
         : null;
 
-    if (activeVisit.type == EntryType.homeVisit &&
+    if (trackKilometres &&
         activeVisit.odometerStart != null &&
         finishOdometer != null &&
         finishOdometer < activeVisit.odometerStart!) {
@@ -444,7 +448,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       DateTime.now(),
     );
     final kilometres =
-        activeVisit.type == EntryType.homeVisit &&
+        trackKilometres &&
             activeVisit.odometerStart != null &&
             finishOdometer != null
         ? math.max(0.0, finishOdometer - activeVisit.odometerStart!)
@@ -485,12 +489,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       textContactDirection:
           textCloseOut?.textContactDirection ?? TextContactDirection.received,
       textReplyNeeded: textCloseOut?.textReplyNeeded ?? false,
-      odometerStart: activeVisit.type == EntryType.homeVisit
-          ? activeVisit.odometerStart
-          : null,
-      odometerEnd: activeVisit.type == EntryType.homeVisit
-          ? finishOdometer
-          : null,
+      odometerStart: trackKilometres ? activeVisit.odometerStart : null,
+      odometerEnd: trackKilometres ? finishOdometer : null,
     );
 
     setState(() {
@@ -598,6 +598,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final appState = context.watch<AppState>();
     final clients = appState.clients;
     final activeVisit = appState.activeVisit;
+    final showKilometres = !appState.isPayeMode;
 
     if (selectedClient == null && clients.isNotEmpty) {
       selectedClient = clients.first;
@@ -628,6 +629,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         noteController: noteController,
         elapsedText: _elapsedText(activeVisit.startedAt, null),
         startedAtText: _dateTimeText(context, activeVisit.startedAt),
+        showKilometres: showKilometres,
         onNoteToggle: (note, selected) {
           setState(() {
             if (selected) {
@@ -652,6 +654,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       selectedNotes: selectedNotes,
       visitDate: selectedVisitDate,
       startOdometerController: startOdometerController,
+      showKilometres: showKilometres,
       onClientSelected: (client) {
         setState(() => selectedClient = client);
       },
@@ -1790,6 +1793,7 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
+    final payeMode = context.watch<AppState>().isPayeMode;
     final entry = widget.entry;
 
     return ListView(
@@ -1812,12 +1816,16 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
               _InfoRow(label: 'Date', value: formatDate(entry.date)),
               _InfoRow(label: 'Minutes', value: '${entry.minutes} min'),
               _InfoRow(label: 'Hours', value: entry.hours.toStringAsFixed(2)),
-              if (entry.type == EntryType.homeVisit)
+              if (!payeMode && entry.type == EntryType.homeVisit)
                 _InfoRow(
                   label: 'KM',
                   value: entry.kilometres.toStringAsFixed(1),
                 ),
-              _InfoRow(label: 'Earned', value: money(entry.earnings(settings))),
+              if (!payeMode)
+                _InfoRow(
+                  label: 'Earned',
+                  value: money(entry.earnings(settings)),
+                ),
             ],
           ),
         ),
@@ -1970,6 +1978,7 @@ class _StartVisitView extends StatelessWidget {
     required this.selectedNotes,
     required this.visitDate,
     required this.startOdometerController,
+    required this.showKilometres,
     required this.onClientSelected,
     required this.onTypeSelected,
     required this.onNoteToggle,
@@ -1985,6 +1994,7 @@ class _StartVisitView extends StatelessWidget {
   final Set<String> selectedNotes;
   final DateTime visitDate;
   final TextEditingController startOdometerController;
+  final bool showKilometres;
   final ValueChanged<String> onClientSelected;
   final ValueChanged<EntryType> onTypeSelected;
   final void Function(String note, bool selected) onNoteToggle;
@@ -1995,7 +2005,8 @@ class _StartVisitView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final noteOptions = context.watch<AppState>().settings.noteOptions;
+    final appState = context.watch<AppState>();
+    final noteOptions = appState.settings.noteOptions;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -2007,7 +2018,11 @@ class _StartVisitView extends StatelessWidget {
           icon: Icons.play_arrow_rounded,
         ),
         const SizedBox(height: 12),
-        const GoogleAccountConnectionCard(scope: GoogleExportAccountScope.work),
+        GoogleAccountConnectionCard(
+          scope: appState.isPayeMode
+              ? GoogleExportAccountScope.paye
+              : GoogleExportAccountScope.work,
+        ),
         const SizedBox(height: 12),
         _Panel(
           title: 'Visit Date',
@@ -2075,7 +2090,7 @@ class _StartVisitView extends StatelessWidget {
             ],
           ),
         ),
-        if (selectedType == EntryType.homeVisit) ...[
+        if (showKilometres && selectedType == EntryType.homeVisit) ...[
           const SizedBox(height: 12),
           _Panel(
             title: '3. Starting Odometer',
@@ -2144,6 +2159,7 @@ class _ActiveVisitView extends StatelessWidget {
     required this.noteController,
     required this.elapsedText,
     required this.startedAtText,
+    required this.showKilometres,
     required this.onNoteToggle,
     required this.onSaveStartOdometer,
     required this.onSaveDraft,
@@ -2158,6 +2174,7 @@ class _ActiveVisitView extends StatelessWidget {
   final TextEditingController noteController;
   final String elapsedText;
   final String startedAtText;
+  final bool showKilometres;
   final void Function(String note, bool selected) onNoteToggle;
   final VoidCallback onSaveStartOdometer;
   final VoidCallback onSaveDraft;
@@ -2192,7 +2209,7 @@ class _ActiveVisitView extends StatelessWidget {
               _InfoRow(label: 'Started', value: startedAtText),
               _InfoRow(label: 'Elapsed so far', value: elapsedText),
               _InfoRow(label: 'Estimated earned', value: money(gross)),
-              if (activeVisit.type == EntryType.homeVisit)
+              if (showKilometres && activeVisit.type == EntryType.homeVisit)
                 _InfoRow(
                   label: 'Starting odo',
                   value: activeVisit.odometerStart?.toStringAsFixed(1) ?? '-',
@@ -2201,7 +2218,8 @@ class _ActiveVisitView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        if (activeVisit.type == EntryType.homeVisit &&
+        if (showKilometres &&
+            activeVisit.type == EntryType.homeVisit &&
             activeVisit.odometerStart == null)
           _Panel(
             title: 'Starting Odometer',
@@ -2229,10 +2247,11 @@ class _ActiveVisitView extends StatelessWidget {
               ],
             ),
           ),
-        if (activeVisit.type == EntryType.homeVisit &&
+        if (showKilometres &&
+            activeVisit.type == EntryType.homeVisit &&
             activeVisit.odometerStart == null)
           const SizedBox(height: 12),
-        if (activeVisit.type == EntryType.homeVisit)
+        if (showKilometres && activeVisit.type == EntryType.homeVisit)
           _Panel(
             title: 'Finish Odometer',
             child: TextField(
@@ -2247,7 +2266,8 @@ class _ActiveVisitView extends StatelessWidget {
               ),
             ),
           ),
-        if (activeVisit.type == EntryType.homeVisit) const SizedBox(height: 12),
+        if (showKilometres && activeVisit.type == EntryType.homeVisit)
+          const SizedBox(height: 12),
         _VisitContextTabs(
           noteOptions: noteOptions,
           selectedNotes: selectedNotes,

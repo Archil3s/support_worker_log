@@ -14,11 +14,13 @@ class EditEntrySheet extends StatefulWidget {
     super.key,
     required this.entry,
     required this.clients,
+    required this.showTravel,
     required this.onSave,
   });
 
   final WorkEntry entry;
   final List<String> clients;
+  final bool showTravel;
   final ValueChanged<WorkEntry> onSave;
 
   @override
@@ -147,7 +149,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   double get previewHours => previewBreakdown.billableHours;
 
   double get previewKilometres {
-    if (selectedType != EntryType.homeVisit) return 0;
+    if (!widget.showTravel || selectedType != EntryType.homeVisit) return 0;
 
     final directKilometres = _parseOdometer(kilometresController);
     if (directKilometres != null) return directKilometres;
@@ -202,16 +204,19 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   }
 
   void save() {
-    final directKilometres = selectedType == EntryType.homeVisit
+    final directKilometres =
+        widget.showTravel && selectedType == EntryType.homeVisit
         ? _parseOdometer(kilometresController)
         : null;
     final directKilometresEntered =
+        widget.showTravel &&
         selectedType == EntryType.homeVisit &&
         kilometresController.text.trim().isNotEmpty;
-    final odometerStart = selectedType == EntryType.homeVisit
+    final odometerStart =
+        widget.showTravel && selectedType == EntryType.homeVisit
         ? _parseOdometer(odometerStartController)
         : null;
-    final odometerEnd = selectedType == EntryType.homeVisit
+    final odometerEnd = widget.showTravel && selectedType == EntryType.homeVisit
         ? _parseOdometer(odometerEndController)
         : null;
 
@@ -229,7 +234,8 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       return;
     }
 
-    if (selectedType == EntryType.homeVisit &&
+    if (widget.showTravel &&
+        selectedType == EntryType.homeVisit &&
         !directKilometresEntered &&
         odometerStart != null &&
         odometerEnd != null &&
@@ -304,13 +310,15 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                 onNow: () {
                   setState(() => startTime = TimeOfDay.now());
                 },
-                onClearOdo: () {
-                  setState(() {
-                    odometerStartController.clear();
-                    odometerEndController.clear();
-                    kilometresController.clear();
-                  });
-                },
+                onClearOdo: widget.showTravel
+                    ? () {
+                        setState(() {
+                          odometerStartController.clear();
+                          odometerEndController.clear();
+                          kilometresController.clear();
+                        });
+                      }
+                    : null,
               ),
               const SizedBox(height: 12),
               SectionCard(
@@ -378,7 +386,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                   onAdjust: adjustDuration,
                 ),
               ),
-              if (selectedType == EntryType.homeVisit) ...[
+              if (widget.showTravel && selectedType == EntryType.homeVisit) ...[
                 const SizedBox(height: 12),
                 SectionCard(
                   title: 'Travel',
@@ -538,12 +546,14 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                       label: 'Hours',
                       value: previewHours.toStringAsFixed(2),
                     ),
-                    if (selectedType == EntryType.homeVisit)
+                    if (widget.showTravel &&
+                        selectedType == EntryType.homeVisit)
                       ReviewRow(
                         label: 'KM',
                         value: '${previewKilometres.toStringAsFixed(1)} km',
                       ),
-                    if (selectedType == EntryType.homeVisit)
+                    if (widget.showTravel &&
+                        selectedType == EntryType.homeVisit)
                       ReviewRow(
                         label: 'Odometer',
                         value:
@@ -615,7 +625,7 @@ class _QuickFixPanel extends StatelessWidget {
 
   final VoidCallback onToday;
   final VoidCallback onNow;
-  final VoidCallback onClearOdo;
+  final VoidCallback? onClearOdo;
 
   @override
   Widget build(BuildContext context) {
@@ -635,11 +645,12 @@ class _QuickFixPanel extends StatelessWidget {
             icon: const Icon(Icons.schedule_outlined),
             label: const Text('Set Time Now'),
           ),
-          OutlinedButton.icon(
-            onPressed: onClearOdo,
-            icon: const Icon(Icons.clear),
-            label: const Text('Clear Travel'),
-          ),
+          if (onClearOdo != null)
+            OutlinedButton.icon(
+              onPressed: onClearOdo,
+              icon: const Icon(Icons.clear),
+              label: const Text('Clear Travel'),
+            ),
         ],
       ),
     );

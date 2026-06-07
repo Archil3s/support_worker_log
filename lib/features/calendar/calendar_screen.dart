@@ -203,10 +203,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 title: 'Earned',
                 value: money(totalEarnings(visibleEntries, settings)),
               ),
-            StatCard(
-              title: 'KM',
-              value: totalKilometres(visibleEntries).toStringAsFixed(1),
-            ),
+            if (!payeMode)
+              StatCard(
+                title: 'KM',
+                value: totalKilometres(visibleEntries).toStringAsFixed(1),
+              ),
           ],
         ),
         const SizedBox(height: 12),

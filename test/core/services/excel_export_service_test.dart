@@ -9,6 +9,7 @@ import 'package:support_worker_log/core/services/excel_export_service.dart';
 
 void main() {
   test('live work workbook uses short phone friendly note bullets', () {
+    final now = DateTime(2026, 6, 7);
     final result = const ExcelExportService().buildLiveWorkDriveWorkbook(
       entries: [
         WorkEntry(
@@ -30,7 +31,13 @@ void main() {
             NextActionItem(
               id: 'action-1',
               text: 'Follow up with a very long provider action tomorrow',
-              createdAt: DateTime(2026, 6, 7),
+              createdAt: now,
+            ),
+            NextActionItem(
+              id: 'action-2',
+              text: 'Completed safety plan update',
+              createdAt: now,
+              completedAt: now.add(const Duration(hours: 2)),
             ),
           ],
         ),
@@ -45,6 +52,46 @@ void main() {
     expect(text, isNot(contains('- Third note')));
     expect(text, isNot(contains('Fourth note should not be included')));
     expect(text, isNot(contains("Instance of 'num'")));
+    expect(text, contains('Next Actions'));
+    expect(text, contains('Not updated'));
+    expect(text, contains('Completed'));
+  });
+
+  test('next actions workbook includes completed and not updated statuses', () {
+    final now = DateTime(2026, 6, 7);
+    final result = const ExcelExportService().buildNextActionsWorkbook(
+      fileName: 'PAYE Next Actions - Live.xlsx',
+      title: 'PAYE Next Actions',
+      entries: [
+        WorkEntry(
+          id: 'entry-1',
+          client: 'Jane',
+          type: EntryType.phoneCall,
+          date: now,
+          startTime: const TimeOfDay(hour: 11, minute: 0),
+          minutes: 30,
+          notes: const [],
+          nextActions: [
+            NextActionItem(id: 'action-1', text: 'Send plan', createdAt: now),
+            NextActionItem(
+              id: 'action-2',
+              text: 'Confirm appointment',
+              createdAt: now,
+              completedAt: now.add(const Duration(days: 1)),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final text = _workbookText(result);
+
+    expect(result.fileName, 'PAYE Next Actions - Live.xlsx');
+    expect(text, contains('PAYE Next Actions'));
+    expect(text, contains('Send plan'));
+    expect(text, contains('Not updated'));
+    expect(text, contains('Confirm appointment'));
+    expect(text, contains('Completed'));
   });
 
   test('live personal workbook uses short phone friendly note bullets', () {

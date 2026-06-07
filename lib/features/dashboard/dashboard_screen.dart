@@ -66,10 +66,11 @@ class DashboardScreen extends StatelessWidget {
                   title: 'Earned',
                   value: money(totalEarnings(todayEntries, settings)),
                 ),
-              StatCard(
-                title: 'KM',
-                value: totalKilometres(todayEntries).toStringAsFixed(1),
-              ),
+              if (!payeMode)
+                StatCard(
+                  title: 'KM',
+                  value: totalKilometres(todayEntries).toStringAsFixed(1),
+                ),
             ],
           ),
         ),
@@ -100,10 +101,11 @@ class DashboardScreen extends StatelessWidget {
                       title: 'Earned',
                       value: money(totalEarnings(periodEntries, settings)),
                     ),
-                  StatCard(
-                    title: 'KM',
-                    value: totalKilometres(periodEntries).toStringAsFixed(1),
-                  ),
+                  if (!payeMode)
+                    StatCard(
+                      title: 'KM',
+                      value: totalKilometres(periodEntries).toStringAsFixed(1),
+                    ),
                 ],
               ),
             ],
@@ -189,9 +191,7 @@ class _LastEntryCard extends StatelessWidget {
         '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
       ),
       trailing: Text(
-        payeMode
-            ? '${entry.kilometres.toStringAsFixed(1)} km'
-            : money(entry.earnings(settings)),
+        payeMode ? '${entry.baseMinutes} min' : money(entry.earnings(settings)),
       ),
     );
   }

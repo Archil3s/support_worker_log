@@ -401,6 +401,27 @@ class GoogleDriveService {
     );
   }
 
+  Future<GoogleDriveFile> syncPayeNextActionsSheet({
+    required String accessToken,
+    required String parentFolderId,
+    required List<WorkEntry> entries,
+  }) {
+    final workbook = const ExcelExportService().buildNextActionsWorkbook(
+      entries: entries,
+      fileName: 'PAYE Next Actions - Live.xlsx',
+      title: 'PAYE Next Actions',
+    );
+
+    return uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: parentFolderId,
+      name: workbook.fileName,
+      mimeType: _xlsxMimeType,
+      contentMimeType: _xlsxMimeType,
+      bytes: workbook.bytes,
+    );
+  }
+
   Future<GoogleDriveFile> syncPersonalLivingSheet({
     required String accessToken,
     required String parentFolderId,

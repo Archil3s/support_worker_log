@@ -78,7 +78,7 @@ void main() {
           'Work Entries',
           'Client Summary',
           'Visit Mix',
-          'Open Actions',
+          'Next Actions',
         ]),
       );
 

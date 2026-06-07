@@ -426,10 +426,10 @@ void main() {
       expect(upload.mimeType, _docxMimeType);
       expect(documentText, contains('PAYE Support Note'));
       expect(documentText, contains('Jane Smith'));
-      expect(documentText, contains('Kilometres: 4.5'));
       expect(documentText, contains('Roster question answered'));
       expect(documentText, contains('Shift confirmed'));
       expect(documentText, contains('Send policy link'));
+      expect(documentText, isNot(contains('Kilometres')));
       expect(documentText, isNot(contains('Invoice')));
     },
   );
