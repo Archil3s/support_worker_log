@@ -191,6 +191,7 @@ class _EntriesScreenState extends State<EntriesScreen> {
     final appState = context.watch<AppState>();
     final entries = appState.entries;
     final settings = appState.settings;
+    final payeMode = appState.isPayeMode;
     final filteredEntries = _filteredEntries(entries);
 
     final currentRange = currentFortnight(
@@ -199,26 +200,28 @@ class _EntriesScreenState extends State<EntriesScreen> {
     final currentPeriodEntries = entriesInRange(entries, currentRange);
 
     final headerWidgets = <Widget>[
-      SectionCard(
-        title: 'Import Entries',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FilledButton.icon(
-              onPressed: _showImportSheet,
-              icon: const Icon(Icons.upload_file_outlined),
-              label: const Text('Import ChatGPT / CSV Rows'),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-            ),
-          ],
+      if (!payeMode) ...[
+        SectionCard(
+          title: 'Import Entries',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton.icon(
+                onPressed: _showImportSheet,
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Import ChatGPT / CSV Rows'),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+              ),
+            ],
+          ),
         ),
-      ),
-      const SizedBox(height: 12),
+        const SizedBox(height: 12),
+      ],
       _ClientAnalyticsSection(entries: currentPeriodEntries),
       const SizedBox(height: 12),
       _FilterSection(
@@ -253,10 +256,11 @@ class _EntriesScreenState extends State<EntriesScreen> {
             title: 'Hours',
             value: totalHours(filteredEntries).toStringAsFixed(2),
           ),
-          StatCard(
-            title: 'Earnings',
-            value: money(totalEarnings(filteredEntries, settings)),
-          ),
+          if (!payeMode)
+            StatCard(
+              title: 'Earnings',
+              value: money(totalEarnings(filteredEntries, settings)),
+            ),
           StatCard(
             title: 'KM',
             value: totalKilometres(filteredEntries).toStringAsFixed(1),

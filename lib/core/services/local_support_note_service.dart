@@ -173,6 +173,57 @@ class LocalSupportNoteService {
     return meta;
   }
 
+  static Future<EntrySupportNoteMeta> savePayeNote({
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
+  }) async {
+    final cleanedInitials = initials.trim().toUpperCase();
+
+    if (cleanedInitials.isEmpty) {
+      throw StateError('Enter initials first.');
+    }
+
+    final existing = await loadMeta(entry.id);
+    final fileName = noteFileName(
+      entry: entry,
+      initials: cleanedInitials,
+      status: status,
+    );
+    final docxBytes = buildPayeNoteDocx(
+      entry: entry.copyWith(supportNoteBreakdown: noteText),
+    );
+    final contents = '__BASE64__:${base64Encode(docxBytes)}';
+
+    if (existing != null && existing.fileName.isNotEmpty) {
+      if (existing.fileName != fileName) {
+        await _platform.renameFile(
+          oldFileName: existing.fileName,
+          newFileName: fileName,
+          contents: contents,
+        );
+      } else {
+        await _platform.writeFile(fileName: fileName, contents: contents);
+      }
+    } else {
+      await _platform.writeFile(fileName: fileName, contents: contents);
+    }
+
+    final meta = EntrySupportNoteMeta(
+      entryId: entry.id,
+      initials: cleanedInitials,
+      status: status,
+      fileName: fileName,
+      noteText: noteText,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_metaKey(entry.id), jsonEncode(meta.toJson()));
+
+    return meta;
+  }
+
   static Future<bool> openNote(EntrySupportNoteMeta meta) {
     return _platform.openFile(meta.fileName);
   }
@@ -211,6 +262,26 @@ class LocalSupportNoteService {
     return savedBreakdown.isNotEmpty
         ? savedBreakdown
         : supportNoteBreakdownTemplate;
+  }
+
+  static String defaultPayeNoteTextForEntry(WorkEntry entry) {
+    final savedBreakdown = entry.supportNoteBreakdown.trim();
+    if (savedBreakdown.isNotEmpty) return savedBreakdown;
+
+    return '''
+Main topic(s)
+
+Outcome(s)
+
+Next action(s)
+
+Overall impression
+
+Local referral tracking
+
+Safety concerns
+'''
+        .trim();
   }
 
   static String noteTitle({
@@ -309,6 +380,23 @@ class LocalSupportNoteService {
     }
   }
 
+  static List<int> buildPayeNoteDocx({required WorkEntry entry}) {
+    final archive = Archive();
+
+    void addTextFile(String name, String contents) {
+      final bytes = utf8.encode(contents);
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    addTextFile('[Content_Types].xml', _personalContentTypesXml);
+    addTextFile('_rels/.rels', _personalRootRelationshipsXml);
+    addTextFile('docProps/app.xml', _personalAppPropertiesXml);
+    addTextFile('docProps/core.xml', _payeCorePropertiesXml(entry));
+    addTextFile('word/document.xml', _payeDocumentXml(entry));
+
+    return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
   static List<int> _personalLogDocx(PersonalLogEntry entry) {
     final archive = Archive();
 
@@ -339,6 +427,43 @@ class LocalSupportNoteService {
       for (final section in sections) ...[
         _personalParagraph(section.title, style: 'Heading1'),
         _personalParagraph(section.body),
+        _personalSpacer,
+      ],
+    ].join();
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    $paragraphs
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+''';
+  }
+
+  static String _payeDocumentXml(WorkEntry entry) {
+    final sections = _PayeSupportSections.fromEntry(entry);
+    final paragraphs = <String>[
+      _personalParagraph('PAYE Support Note', style: 'Title'),
+      _personalParagraph(entry.client.trim(), style: 'Subtitle'),
+      _personalParagraph('Date: ${formatDate(entry.date)}', bold: true),
+      _personalParagraph(
+        'Time: ${formatTime(entry.startTime)} / ${entry.baseMinutes} minutes',
+        bold: true,
+      ),
+      _personalParagraph('Type: ${entry.type.label}'),
+      if (entry.type == EntryType.homeVisit)
+        _personalParagraph(
+          'Kilometres: ${entry.kilometres.toStringAsFixed(1)}',
+        ),
+      _personalSpacer,
+      for (final section in sections) ...[
+        _personalParagraph(section.title, style: 'Heading1'),
+        _personalParagraph(_blankIfEmpty(section.body)),
         _personalSpacer,
       ],
     ].join();
@@ -452,6 +577,22 @@ class LocalSupportNoteService {
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <dc:title>${_xml(title)}</dc:title>
   <dc:subject>Personal ${_xml(entry.category.label)} progress log</dc:subject>
+  <dc:creator>Support Worker Log</dc:creator>
+  <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
+</cp:coreProperties>
+''';
+  }
+
+  static String _payeCorePropertiesXml(WorkEntry entry) {
+    final title = entry.client.trim().isEmpty
+        ? 'PAYE Support Note'
+        : entry.client;
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${_xml(title)}</dc:title>
+  <dc:subject>PAYE support note</dc:subject>
   <dc:creator>Support Worker Log</dc:creator>
   <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
 </cp:coreProperties>
@@ -734,6 +875,92 @@ class _PersonalLogSection {
 
   final String title;
   final String body;
+}
+
+class _PayeSupportSections {
+  const _PayeSupportSections({
+    required this.mainTopic,
+    required this.outcomes,
+    required this.nextActions,
+    required this.impression,
+    required this.referrals,
+    required this.safety,
+  });
+
+  final String mainTopic;
+  final String outcomes;
+  final String nextActions;
+  final String impression;
+  final String referrals;
+  final String safety;
+
+  List<_PersonalLogSection> get sections {
+    return [
+      _PersonalLogSection('Main topic(s)', mainTopic),
+      _PersonalLogSection('Outcome(s)', outcomes),
+      _PersonalLogSection('Next action(s)', nextActions),
+      _PersonalLogSection('Overall impression', impression),
+      _PersonalLogSection('Local referral tracking', referrals),
+      _PersonalLogSection('Safety concerns', safety),
+    ];
+  }
+
+  static List<_PersonalLogSection> fromEntry(WorkEntry entry) {
+    final breakdown = entry.supportNoteBreakdown.trim();
+    if (breakdown.isEmpty) {
+      final notes = entry.notes
+          .map((note) => note.trim())
+          .where((note) => note.isNotEmpty)
+          .join('\n');
+
+      return [
+        _PersonalLogSection('Main topic(s)', notes),
+        const _PersonalLogSection('Outcome(s)', '-'),
+        const _PersonalLogSection('Next action(s)', '-'),
+        const _PersonalLogSection('Overall impression', '-'),
+        const _PersonalLogSection('Local referral tracking', '-'),
+        const _PersonalLogSection('Safety concerns', '-'),
+      ];
+    }
+
+    return _PayeSupportSections(
+      mainTopic: _section(breakdown, 'Main topic'),
+      outcomes: _section(breakdown, 'Outcome'),
+      nextActions: _section(breakdown, 'Next action'),
+      impression: _section(breakdown, 'Overall impression'),
+      referrals: _section(breakdown, 'Local referral tracking'),
+      safety: _section(breakdown, 'Safety concerns'),
+    ).sections;
+  }
+
+  static String _section(String source, String headingPrefix) {
+    final lines = source.split(RegExp(r'\r?\n'));
+    final buffer = <String>[];
+    var reading = false;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      final lower = trimmed.toLowerCase();
+      final isHeading = [
+        'main topic',
+        'outcome',
+        'next action',
+        'overall impression',
+        'local referral tracking',
+        'safety concerns',
+      ].any((heading) => lower.startsWith(heading));
+
+      if (lower.startsWith(headingPrefix.toLowerCase())) {
+        reading = true;
+        continue;
+      }
+
+      if (reading && isHeading) break;
+      if (reading && trimmed.isNotEmpty) buffer.add(trimmed);
+    }
+
+    return buffer.join('\n');
+  }
 }
 
 class _SupportNoteSections {

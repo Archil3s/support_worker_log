@@ -13,6 +13,9 @@ void main() {
       googleDrivePersonalNotesFolderId: 'personal-notes',
       googleWorkAccountEmail: 'work@example.com',
       googlePersonalAccountEmail: 'personal@example.com',
+      googlePayeAccountEmail: 'paye@example.com',
+      payeGoogleDriveRootFolderId: 'paye-root',
+      payeGoogleDriveNotesFolderId: 'paye-notes',
       personalGoogleDriveRootFolderId: 'personal-root',
       personalGoogleDrivePersonalNotesFolderId: 'personal-drive-notes',
     );
@@ -28,6 +31,9 @@ void main() {
     expect(restored.googleDrivePersonalNotesFolderId, 'personal-notes');
     expect(restored.googleWorkAccountEmail, 'work@example.com');
     expect(restored.googlePersonalAccountEmail, 'personal@example.com');
+    expect(restored.googlePayeAccountEmail, 'paye@example.com');
+    expect(restored.payeGoogleDriveRootFolderId, 'paye-root');
+    expect(restored.payeGoogleDriveNotesFolderId, 'paye-notes');
     expect(restored.personalGoogleDriveRootFolderId, 'personal-root');
     expect(
       restored.personalGoogleDrivePersonalNotesFolderId,

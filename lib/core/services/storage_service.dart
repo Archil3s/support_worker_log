@@ -15,6 +15,7 @@ class StoredAppData {
     required this.settings,
     required this.clients,
     required this.entries,
+    this.payeEntries = const [],
     this.activeVisit,
     this.generalActions = const [],
     this.invoiceStatuses = const {},
@@ -26,6 +27,7 @@ class StoredAppData {
   final AppSettings settings;
   final List<String> clients;
   final List<WorkEntry> entries;
+  final List<WorkEntry> payeEntries;
   final ActiveVisit? activeVisit;
   final List<GeneralActionItem> generalActions;
   final Map<String, InvoiceStatus> invoiceStatuses;
@@ -46,6 +48,7 @@ class StoredAppData {
       'settings': settings.toJson(),
       'clients': clients,
       'entries': entries.map((entry) => entry.toJson()).toList(),
+      'payeEntries': payeEntries.map((entry) => entry.toJson()).toList(),
       'activeVisit': activeVisit?.toJson(),
       'generalActions': generalActions.map((item) => item.toJson()).toList(),
       'invoiceStatuses': invoiceStatuses.map(
@@ -75,6 +78,8 @@ class StoredAppData {
 
     final rawEntries = json['entries'];
     final entries = <WorkEntry>[];
+    final rawPayeEntries = json['payeEntries'];
+    final payeEntries = <WorkEntry>[];
 
     if (rawEntries is List) {
       for (final rawEntry in rawEntries) {
@@ -83,6 +88,18 @@ class StoredAppData {
             entries.add(WorkEntry.fromJson(rawEntry));
           } catch (_) {
             // Strip malformed records during load/import.
+          }
+        }
+      }
+    }
+
+    if (rawPayeEntries is List) {
+      for (final rawEntry in rawPayeEntries) {
+        if (rawEntry is Map<String, dynamic>) {
+          try {
+            payeEntries.add(WorkEntry.fromJson(rawEntry));
+          } catch (_) {
+            // Strip malformed PAYE records during load/import.
           }
         }
       }
@@ -164,6 +181,7 @@ class StoredAppData {
       settings: settings,
       clients: clients.isEmpty ? ['Client A'] : clients,
       entries: entries,
+      payeEntries: payeEntries,
       activeVisit: activeVisit,
       generalActions: generalActions,
       invoiceStatuses: invoiceStatuses,

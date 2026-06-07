@@ -26,14 +26,20 @@ class _DriveScreenState extends State<DriveScreen> {
 
   bool connecting = false;
   bool connectingPersonal = false;
+  bool connectingPaye = false;
   bool creatingFolders = false;
   bool creatingPersonalFolders = false;
+  bool creatingPayeFolders = false;
   bool uploadingTemplates = false;
+  bool syncingWorkSheet = false;
+  bool syncingPersonalSheet = false;
   bool loadingFiles = false;
   String? message;
   bool messageIsError = false;
   List<GoogleDriveFile> rootFiles = const [];
   List<GoogleDriveFile> templateFiles = const [];
+  GoogleDriveFile? workLiveSheetFile;
+  GoogleDriveFile? personalLiveSheetFile;
 
   Future<String> _connectDrive(GoogleExportAccountScope scope) async {
     final token = await context.read<AppState>().connectGoogleDrive(
@@ -57,6 +63,15 @@ class _DriveScreenState extends State<DriveScreen> {
       idle: () => connectingPersonal = false,
       successMessage: 'Personal Google Drive and Calendar connected.',
       action: () => _connectDrive(GoogleExportAccountScope.personal),
+    );
+  }
+
+  Future<void> _connectPaye() async {
+    await _run(
+      busy: () => connectingPaye = true,
+      idle: () => connectingPaye = false,
+      successMessage: 'PAYE Google Drive connected.',
+      action: () => _connectDrive(GoogleExportAccountScope.paye),
     );
   }
 
@@ -91,6 +106,22 @@ class _DriveScreenState extends State<DriveScreen> {
     );
   }
 
+  Future<void> _createPayeFolders() async {
+    await _run(
+      busy: () => creatingPayeFolders = true,
+      idle: () => creatingPayeFolders = false,
+      successMessage: 'PAYE Google Drive notes folder created.',
+      action: () async {
+        final appState = context.read<AppState>();
+        final token = await appState.connectPayeGoogle();
+        final setup = await driveService.createPayeFolderSetup(
+          accessToken: token,
+        );
+        appState.updateSettings(setup.applyTo(appState.settings));
+      },
+    );
+  }
+
   Future<void> _uploadTemplates() async {
     await _run(
       busy: () => uploadingTemplates = true,
@@ -112,6 +143,44 @@ class _DriveScreenState extends State<DriveScreen> {
         await _loadFilesWithToken(token, appState.settings);
       },
     );
+  }
+
+  Future<void> _syncWorkLiveSheet() async {
+    GoogleDriveFile? file;
+
+    await _run(
+      busy: () => syncingWorkSheet = true,
+      idle: () => syncingWorkSheet = false,
+      successMessage: 'Work live Excel sheet created or refreshed.',
+      action: () async {
+        file = await context.read<AppState>().syncWorkLivingSheetToDrive();
+      },
+    );
+
+    if (!mounted || file == null) return;
+
+    setState(() {
+      workLiveSheetFile = file;
+    });
+  }
+
+  Future<void> _syncPersonalLiveSheet() async {
+    GoogleDriveFile? file;
+
+    await _run(
+      busy: () => syncingPersonalSheet = true,
+      idle: () => syncingPersonalSheet = false,
+      successMessage: 'Personal live Excel sheet created or refreshed.',
+      action: () async {
+        file = await context.read<AppState>().syncPersonalLivingSheetToDrive();
+      },
+    );
+
+    if (!mounted || file == null) return;
+
+    setState(() {
+      personalLiveSheetFile = file;
+    });
   }
 
   Future<void> _loadFiles() async {
@@ -224,13 +293,23 @@ class _DriveScreenState extends State<DriveScreen> {
     final personalFoldersReady =
         settings.personalGoogleDriveRootFolderId != null &&
         settings.personalGoogleDrivePersonalNotesFolderId != null;
+    final payeFoldersReady =
+        settings.payeGoogleDriveRootFolderId != null &&
+        settings.payeGoogleDriveNotesFolderId != null;
     final anyBusy =
         connecting ||
         connectingPersonal ||
+        connectingPaye ||
         creatingFolders ||
         creatingPersonalFolders ||
+        creatingPayeFolders ||
         uploadingTemplates ||
+        syncingWorkSheet ||
+        syncingPersonalSheet ||
         loadingFiles;
+    final workLiveSheet =
+        workLiveSheetFile ??
+        _fileNamed(rootFiles, 'Support Worker Log - Live Dashboard.xlsx');
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -309,6 +388,31 @@ class _DriveScreenState extends State<DriveScreen> {
                       : 'Upload Templates',
                 ),
               ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: syncingWorkSheet || anyBusy
+                    ? null
+                    : _syncWorkLiveSheet,
+                icon: syncingWorkSheet
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.table_chart_outlined),
+                label: Text(
+                  syncingWorkSheet
+                      ? 'Refreshing Work Excel'
+                      : 'Create / Refresh Work Excel Sheet',
+                ),
+              ),
+              if (workLiveSheet?.webViewLink != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _openDriveFile(workLiveSheet!),
+                  icon: const Icon(Icons.open_in_new_outlined),
+                  label: const Text('Open Work Excel Sheet'),
+                ),
+              ],
               if (settings.googleDriveRootFolderId != null) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -391,6 +495,31 @@ class _DriveScreenState extends State<DriveScreen> {
                       : 'Create Personal Folder',
                 ),
               ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: syncingPersonalSheet || anyBusy
+                    ? null
+                    : _syncPersonalLiveSheet,
+                icon: syncingPersonalSheet
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.table_view_outlined),
+                label: Text(
+                  syncingPersonalSheet
+                      ? 'Refreshing Personal Excel'
+                      : 'Create / Refresh Personal Excel Sheet',
+                ),
+              ),
+              if (personalLiveSheetFile?.webViewLink != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _openDriveFile(personalLiveSheetFile!),
+                  icon: const Icon(Icons.open_in_new_outlined),
+                  label: const Text('Open Personal Excel Sheet'),
+                ),
+              ],
               if (settings.personalGoogleDriveRootFolderId != null) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -399,6 +528,74 @@ class _DriveScreenState extends State<DriveScreen> {
                   ),
                   icon: const Icon(Icons.open_in_new_outlined),
                   label: const Text('Open Personal Drive Folder'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'PAYE Google Drive',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _StatusRow(
+                icon: Icons.cloud_done_outlined,
+                label: 'PAYE Google account',
+                value: appState.payeGoogleServicesConnected
+                    ? appState.payeGoogleAccountEmail ?? 'Connected'
+                    : 'Not connected',
+                color: appState.payeGoogleServicesConnected
+                    ? const Color(0xFF31E981)
+                    : const Color(0xFFFFC857),
+              ),
+              _StatusRow(
+                icon: Icons.folder_outlined,
+                label: 'PAYE notes folder',
+                value: payeFoldersReady ? 'Saved' : 'Not created',
+                color: payeFoldersReady
+                    ? const Color(0xFF31E981)
+                    : const Color(0xFFFFC857),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: connectingPaye || anyBusy ? null : _connectPaye,
+                icon: connectingPaye
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.business_center_outlined),
+                label: Text(
+                  connectingPaye
+                      ? 'Connecting PAYE Google'
+                      : 'Connect PAYE Google',
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: creatingPayeFolders || anyBusy
+                    ? null
+                    : _createPayeFolders,
+                icon: creatingPayeFolders
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.create_new_folder_outlined),
+                label: Text(
+                  payeFoldersReady
+                      ? 'Recreate PAYE Folder'
+                      : 'Create PAYE Folder',
+                ),
+              ),
+              if (settings.payeGoogleDriveRootFolderId != null) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      _openDriveFolder(settings.payeGoogleDriveRootFolderId!),
+                  icon: const Icon(Icons.open_in_new_outlined),
+                  label: const Text('Open PAYE Drive Folder'),
                 ),
               ],
             ],
@@ -447,6 +644,14 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 }
 
+GoogleDriveFile? _fileNamed(List<GoogleDriveFile> files, String name) {
+  for (final file in files) {
+    if (file.name == name) return file;
+  }
+
+  return null;
+}
+
 class _FolderList extends StatelessWidget {
   const _FolderList({required this.settings});
 
@@ -469,6 +674,8 @@ class _FolderList extends StatelessWidget {
         'Personal - Personal Notes',
         settings.personalGoogleDrivePersonalNotesFolderId,
       ),
+      ('PAYE - Support Worker Log', settings.payeGoogleDriveRootFolderId),
+      ('PAYE - Notes', settings.payeGoogleDriveNotesFolderId),
     ];
 
     return Column(

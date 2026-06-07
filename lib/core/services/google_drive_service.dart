@@ -10,6 +10,7 @@ import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../utils/pay_period_utils.dart';
 import 'google_drive/google_drive_api_platform.dart';
+import 'excel_export_service.dart';
 import 'invoice_pdf_service.dart';
 import 'local_support_note_service.dart';
 
@@ -58,6 +59,23 @@ class GoogleDrivePersonalFolderSetup {
     return settings.copyWith(
       personalGoogleDriveRootFolderId: rootFolder.id,
       personalGoogleDrivePersonalNotesFolderId: personalNotesFolder.id,
+    );
+  }
+}
+
+class GoogleDrivePayeFolderSetup {
+  const GoogleDrivePayeFolderSetup({
+    required this.rootFolder,
+    required this.notesFolder,
+  });
+
+  final GoogleDriveFile rootFolder;
+  final GoogleDriveFile notesFolder;
+
+  AppSettings applyTo(AppSettings settings) {
+    return settings.copyWith(
+      payeGoogleDriveRootFolderId: rootFolder.id,
+      payeGoogleDriveNotesFolderId: notesFolder.id,
     );
   }
 }
@@ -194,6 +212,8 @@ class GoogleDriveService {
   final GoogleDriveApiPlatform _api;
   static const String _docxMimeType =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  static const String _xlsxMimeType =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   static String _supportNoteMetaKey(String entryId) {
     return 'entry_google_drive_support_note_$entryId';
   }
@@ -319,6 +339,22 @@ class GoogleDriveService {
     );
   }
 
+  Future<GoogleDrivePayeFolderSetup> createPayeFolderSetup({
+    required String accessToken,
+  }) async {
+    final root = await _api.createFolder(
+      accessToken: accessToken,
+      name: 'Support Worker Log - PAYE',
+    );
+    final notes = await _api.createFolder(
+      accessToken: accessToken,
+      name: 'PAYE Notes',
+      parentId: root.id,
+    );
+
+    return GoogleDrivePayeFolderSetup(rootFolder: root, notesFolder: notes);
+  }
+
   Future<void> syncPersonalLogEntries({
     required String accessToken,
     required String personalNotesFolderId,
@@ -342,6 +378,72 @@ class GoogleDriveService {
         bytes: bytes,
       );
     }
+  }
+
+  Future<GoogleDriveFile> syncWorkLivingSheet({
+    required String accessToken,
+    required String rootFolderId,
+    required List<WorkEntry> entries,
+    required AppSettings settings,
+  }) {
+    final workbook = const ExcelExportService().buildLiveWorkDriveWorkbook(
+      entries: entries,
+      settings: settings,
+    );
+
+    return uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: rootFolderId,
+      name: workbook.fileName,
+      mimeType: _xlsxMimeType,
+      contentMimeType: _xlsxMimeType,
+      bytes: workbook.bytes,
+    );
+  }
+
+  Future<GoogleDriveFile> syncPersonalLivingSheet({
+    required String accessToken,
+    required String parentFolderId,
+    required List<PersonalLogEntry> entries,
+  }) {
+    final workbook = const ExcelExportService().buildLivePersonalDriveWorkbook(
+      entries: entries,
+    );
+
+    return uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: parentFolderId,
+      name: workbook.fileName,
+      mimeType: _xlsxMimeType,
+      contentMimeType: _xlsxMimeType,
+      bytes: workbook.bytes,
+    );
+  }
+
+  Future<GoogleDriveFile> savePayeNote({
+    required String accessToken,
+    required String notesFolderId,
+    required WorkEntry entry,
+  }) async {
+    final personFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: notesFolderId,
+      name: _folderName(entry.client),
+    );
+    final yearFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: personFolder.id,
+      name: entry.date.year.toString(),
+    );
+    final bytes = LocalSupportNoteService.buildPayeNoteDocx(entry: entry);
+
+    return uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: yearFolder.id,
+      name: _payeNoteFileName(entry),
+      mimeType: _docxMimeType,
+      bytes: bytes,
+    );
   }
 
   Future<GoogleDriveFile> _personalLogFolder({
@@ -709,6 +811,11 @@ class GoogleDriveService {
   String _personalLogFileName(PersonalLogEntry entry) {
     final title = _folderName(entry.title).replaceAll(' ', '_');
     return '${_dateKey(entry.date)}_${entry.category.name}_$title.docx';
+  }
+
+  String _payeNoteFileName(WorkEntry entry) {
+    final person = _folderName(entry.client).replaceAll(' ', '_');
+    return '${_dateKey(entry.date)}_$person.docx';
   }
 
   _PersonalGymTitleParts _personalGymTitleParts(String title) {

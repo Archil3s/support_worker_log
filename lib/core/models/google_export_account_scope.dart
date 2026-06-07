@@ -1,6 +1,7 @@
 enum GoogleExportAccountScope {
   work,
-  personal;
+  personal,
+  paye;
 
   String get label {
     switch (this) {
@@ -8,6 +9,8 @@ enum GoogleExportAccountScope {
         return 'Work';
       case GoogleExportAccountScope.personal:
         return 'Personal';
+      case GoogleExportAccountScope.paye:
+        return 'PAYE job';
     }
   }
 }

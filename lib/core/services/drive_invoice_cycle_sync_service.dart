@@ -18,11 +18,19 @@ class DriveInvoiceCycleSyncService {
 
   Future<void> syncInvoiceCycles({
     required String accessToken,
+    required String rootFolderId,
     required String clientNotesFolderId,
     required String invoicesFolderId,
     required List<WorkEntry> entries,
     required AppSettings settings,
   }) async {
+    await _driveService.syncWorkLivingSheet(
+      accessToken: accessToken,
+      rootFolderId: rootFolderId,
+      entries: entries,
+      settings: settings,
+    );
+
     final grouped = _groupEntriesByPeriod(
       entries: entries,
       anchorDate: settings.payPeriodAnchorDate,

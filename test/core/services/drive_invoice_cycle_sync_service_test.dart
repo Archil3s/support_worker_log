@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
+import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +29,7 @@ void main() {
 
       await syncService.syncInvoiceCycles(
         accessToken: 'token',
+        rootFolderId: 'root',
         clientNotesFolderId: 'client-notes',
         invoicesFolderId: 'invoices',
         entries: [
@@ -60,8 +62,25 @@ void main() {
       final livingLogUploads = driveService.uploads.where(
         (upload) => upload.name == 'Living_Text_Notes_Log.docx',
       );
+      final dashboardUpload = driveService.uploads.singleWhere(
+        (upload) => upload.name == 'Support Worker Log - Live Dashboard.xlsx',
+      );
 
       expect(livingLogUploads, hasLength(2));
+      expect(dashboardUpload.parentId, 'root');
+      expect(dashboardUpload.mimeType, _xlsxMimeType);
+      expect(dashboardUpload.contentMimeType, _xlsxMimeType);
+      expect(
+        Excel.decodeBytes(dashboardUpload.bytes).sheets.keys,
+        containsAll([
+          'Dashboard',
+          'Weekly Analytics',
+          'Work Entries',
+          'Client Summary',
+          'Visit Mix',
+          'Open Actions',
+        ]),
+      );
 
       final abLogUpload = livingLogUploads.singleWhere(
         (upload) => upload.parentId == 'client-notes/AB',
@@ -148,6 +167,7 @@ class _FakeGoogleDriveService extends GoogleDriveService {
         parentId: parentId,
         name: name,
         mimeType: mimeType,
+        contentMimeType: contentMimeType,
         bytes: bytes,
       ),
     );
@@ -161,11 +181,16 @@ class _DriveUpload {
     required this.parentId,
     required this.name,
     required this.mimeType,
+    required this.contentMimeType,
     required this.bytes,
   });
 
   final String parentId;
   final String name;
   final String mimeType;
+  final String? contentMimeType;
   final List<int> bytes;
 }
+
+const _xlsxMimeType =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

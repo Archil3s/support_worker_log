@@ -33,6 +33,7 @@ class DashboardScreen extends StatelessWidget {
     final appState = context.watch<AppState>();
     final settings = appState.settings;
     final entries = appState.entries;
+    final payeMode = appState.isPayeMode;
 
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
@@ -45,7 +46,11 @@ class DashboardScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        const GoogleAccountConnectionCard(scope: GoogleExportAccountScope.work),
+        GoogleAccountConnectionCard(
+          scope: payeMode
+              ? GoogleExportAccountScope.paye
+              : GoogleExportAccountScope.work,
+        ),
         const SizedBox(height: 12),
         SectionCard(
           title: 'Today',
@@ -56,10 +61,11 @@ class DashboardScreen extends StatelessWidget {
                 title: 'Hours',
                 value: totalHours(todayEntries).toStringAsFixed(2),
               ),
-              StatCard(
-                title: 'Earned',
-                value: money(totalEarnings(todayEntries, settings)),
-              ),
+              if (!payeMode)
+                StatCard(
+                  title: 'Earned',
+                  value: money(totalEarnings(todayEntries, settings)),
+                ),
               StatCard(
                 title: 'KM',
                 value: totalKilometres(todayEntries).toStringAsFixed(1),
@@ -89,10 +95,11 @@ class DashboardScreen extends StatelessWidget {
                     title: 'Hours',
                     value: totalHours(periodEntries).toStringAsFixed(2),
                   ),
-                  StatCard(
-                    title: 'Earned',
-                    value: money(totalEarnings(periodEntries, settings)),
-                  ),
+                  if (!payeMode)
+                    StatCard(
+                      title: 'Earned',
+                      value: money(totalEarnings(periodEntries, settings)),
+                    ),
                   StatCard(
                     title: 'KM',
                     value: totalKilometres(periodEntries).toStringAsFixed(1),
@@ -119,12 +126,14 @@ class DashboardScreen extends StatelessWidget {
                 icon: const Icon(Icons.fact_check_outlined),
                 label: const Text('Admin Review'),
               ),
-              const SizedBox(height: 8),
-              FilledButton.tonalIcon(
-                onPressed: onPayPeriod,
-                icon: const Icon(Icons.calendar_month_outlined),
-                label: const Text('View Pay Period'),
-              ),
+              if (!payeMode) ...[
+                const SizedBox(height: 8),
+                FilledButton.tonalIcon(
+                  onPressed: onPayPeriod,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('View Pay Period'),
+                ),
+              ],
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: onEntries,
@@ -170,6 +179,7 @@ class _LastEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
+    final payeMode = context.watch<AppState>().isPayeMode;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -178,7 +188,11 @@ class _LastEntryCard extends StatelessWidget {
       subtitle: Text(
         '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
       ),
-      trailing: Text(money(entry.earnings(settings))),
+      trailing: Text(
+        payeMode
+            ? '${entry.kilometres.toStringAsFixed(1)} km'
+            : money(entry.earnings(settings)),
+      ),
     );
   }
 }

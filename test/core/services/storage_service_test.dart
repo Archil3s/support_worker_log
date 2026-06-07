@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:support_worker_log/core/models/app_mode.dart';
 import 'package:support_worker_log/core/models/app_settings.dart';
+import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/general_action.dart';
 import 'package:support_worker_log/core/models/invoice_status.dart';
 import 'package:support_worker_log/core/models/personal_log_entry.dart';
+import 'package:support_worker_log/core/models/work_entry.dart';
 import 'package:support_worker_log/core/services/storage_service.dart';
 
 void main() {
@@ -89,5 +92,44 @@ void main() {
       PersonalLogCategory.gym,
     );
     expect(restored.personalLogEntries.single.metric, 'Squat 3x5 at 80kg');
+  });
+
+  test('persists PAYE logs separately from invoice work entries', () {
+    final data = StoredAppData(
+      settings: const AppSettings(),
+      clients: const ['AB'],
+      entries: [
+        WorkEntry(
+          id: 'work-1',
+          client: 'AB',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 7),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const ['Invoice work'],
+        ),
+      ],
+      payeEntries: [
+        WorkEntry(
+          id: 'paye-1',
+          client: 'PAYE job',
+          type: EntryType.professionalContact,
+          date: DateTime(2026, 6, 8),
+          startTime: const TimeOfDay(hour: 8, minute: 30),
+          minutes: 0,
+          notes: const ['Blank shift note'],
+        ),
+      ],
+      appMode: AppMode.paye,
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.entries, hasLength(1));
+    expect(restored.entries.single.client, 'AB');
+    expect(restored.payeEntries, hasLength(1));
+    expect(restored.payeEntries.single.client, 'PAYE job');
+    expect(restored.payeEntries.single.minutes, 0);
+    expect(restored.appMode, AppMode.paye);
   });
 }

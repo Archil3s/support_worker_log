@@ -100,6 +100,7 @@ class _MainShellState extends State<MainShell> {
 
   String _title(AppMode mode) {
     if (mode == AppMode.personal) return 'Personal Mode';
+    if (mode == AppMode.paye) return 'PAYE job - $title';
 
     return title;
   }
@@ -129,59 +130,30 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  void _onRailTap(int index) {
-    switch (index) {
-      case 0:
-        _go(_Section.actions);
-        break;
-      case 1:
-        _go(_Section.quick);
-        break;
-      case 2:
-        _go(_Section.notes);
-        break;
-      case 3:
-        _go(_Section.calendar);
-        break;
-      case 4:
-        _go(_Section.entries);
-        break;
-      case 5:
-        _go(_Section.pay);
-        break;
-      case 6:
-        _go(_Section.drive);
-        break;
-      case 7:
-        _go(_Section.more);
-        break;
-    }
+  void _onRailTap(int index, AppMode mode) {
+    final sections = _railSections(mode);
+    if (index < 0 || index >= sections.length) return;
+    _go(sections[index]);
   }
 
-  int get railIndex {
-    switch (section) {
-      case _Section.actions:
-        return 0;
-      case _Section.quick:
-        return 1;
-      case _Section.notes:
-        return 2;
-      case _Section.calendar:
-        return 3;
-      case _Section.entries:
-        return 4;
-      case _Section.pay:
-        return 5;
-      case _Section.drive:
-        return 6;
-      case _Section.admin:
-      case _Section.more:
-      case _Section.home:
-      case _Section.charts:
-      case _Section.tax:
-      case _Section.settings:
-        return 7;
-    }
+  List<_Section> _railSections(AppMode mode) {
+    return [
+      _Section.actions,
+      _Section.quick,
+      _Section.notes,
+      _Section.calendar,
+      _Section.entries,
+      if (mode != AppMode.paye) _Section.pay,
+      _Section.drive,
+      _Section.more,
+    ];
+  }
+
+  int _railIndex(AppMode mode) {
+    final sections = _railSections(mode);
+    final index = sections.indexOf(section);
+    if (index != -1) return index;
+    return sections.indexOf(_Section.more);
   }
 
   Widget _screen() {
@@ -206,7 +178,11 @@ class _MainShellState extends State<MainShell> {
       case _Section.home:
         return DashboardScreen(
           onQuickEntry: () => _go(_Section.quick),
-          onPayPeriod: () => _go(_Section.pay),
+          onPayPeriod: () {
+            if (context.read<AppState>().appMode != AppMode.paye) {
+              _go(_Section.pay);
+            }
+          },
           onEntries: () => _go(_Section.entries),
           onAdminReview: () => _go(_Section.admin),
         );
@@ -224,6 +200,7 @@ class _MainShellState extends State<MainShell> {
           onCharts: () => _go(_Section.charts),
           onDrive: () => _go(_Section.drive),
           onSettings: () => _go(_Section.settings),
+          showMoneyTools: context.watch<AppState>().appMode != AppMode.paye,
         );
       case _Section.tax:
         return const TaxScreen();
@@ -244,6 +221,8 @@ class _MainShellState extends State<MainShell> {
         final wide = constraints.maxWidth >= 820;
         final maxContentWidth = wide ? 980.0 : 430.0;
         final personalMode = appMode == AppMode.personal;
+        final payeMode = appMode == AppMode.paye;
+        final standaloneMode = personalMode;
 
         return Scaffold(
           appBar: AppBar(
@@ -256,7 +235,13 @@ class _MainShellState extends State<MainShell> {
                 child: PopupMenuButton<AppMode>(
                   tooltip: 'App mode',
                   initialValue: appMode,
-                  onSelected: appState.setAppMode,
+                  onSelected: (mode) {
+                    appState.setAppMode(mode);
+                    if (mode == AppMode.paye &&
+                        (section == _Section.pay || section == _Section.tax)) {
+                      setState(() => section = _Section.actions);
+                    }
+                  },
                   itemBuilder: (context) => const [
                     PopupMenuItem(
                       value: AppMode.work,
@@ -270,6 +255,13 @@ class _MainShellState extends State<MainShell> {
                       child: ListTile(
                         leading: Icon(Icons.person_outline_rounded),
                         title: Text('Personal Mode'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: AppMode.paye,
+                      child: ListTile(
+                        leading: Icon(Icons.business_center_outlined),
+                        title: Text('PAYE job'),
                       ),
                     ),
                   ],
@@ -288,6 +280,8 @@ class _MainShellState extends State<MainShell> {
                         Icon(
                           personalMode
                               ? Icons.person_outline_rounded
+                              : payeMode
+                              ? Icons.business_center_outlined
                               : Icons.work_outline_rounded,
                           size: 20,
                           color: const Color(0xFF4F8DF7),
@@ -311,8 +305,12 @@ class _MainShellState extends State<MainShell> {
             bottom: false,
             child: Row(
               children: [
-                if (wide && !personalMode)
-                  _SideRail(selectedIndex: railIndex, onTap: _onRailTap),
+                if (wide && !standaloneMode)
+                  _SideRail(
+                    sections: _railSections(appMode),
+                    selectedIndex: _railIndex(appMode),
+                    onTap: (index) => _onRailTap(index, appMode),
+                  ),
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -328,7 +326,7 @@ class _MainShellState extends State<MainShell> {
               ],
             ),
           ),
-          bottomNavigationBar: wide || personalMode
+          bottomNavigationBar: wide || standaloneMode
               ? null
               : SafeArea(
                   top: false,
@@ -347,8 +345,13 @@ class _MainShellState extends State<MainShell> {
 }
 
 class _SideRail extends StatelessWidget {
-  const _SideRail({required this.selectedIndex, required this.onTap});
+  const _SideRail({
+    required this.sections,
+    required this.selectedIndex,
+    required this.onTap,
+  });
 
+  final List<_Section> sections;
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
@@ -381,50 +384,69 @@ class _SideRail extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
-        destinations: const [
-          NavigationRailDestination(
-            icon: Icon(Icons.checklist_rtl_outlined),
-            selectedIcon: Icon(Icons.checklist_rtl_rounded),
-            label: Text('Actions'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.bolt_outlined),
-            selectedIcon: Icon(Icons.bolt_rounded),
-            label: Text('Quick'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.note_alt_outlined),
-            selectedIcon: Icon(Icons.note_alt_rounded),
-            label: Text('Notes'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: Text('Calendar'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt_rounded),
-            label: Text('Entries'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long_rounded),
-            label: Text('Pay'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.add_to_drive_outlined),
-            selectedIcon: Icon(Icons.add_to_drive),
-            label: Text('Drive'),
-          ),
-          NavigationRailDestination(
-            icon: Icon(Icons.more_horiz_outlined),
-            selectedIcon: Icon(Icons.more_horiz_rounded),
-            label: Text('More'),
-          ),
+        destinations: [
+          for (final section in sections) _railDestination(section),
         ],
       ),
     );
+  }
+
+  NavigationRailDestination _railDestination(_Section section) {
+    switch (section) {
+      case _Section.actions:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.checklist_rtl_outlined),
+          selectedIcon: Icon(Icons.checklist_rtl_rounded),
+          label: Text('Actions'),
+        );
+      case _Section.quick:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.bolt_outlined),
+          selectedIcon: Icon(Icons.bolt_rounded),
+          label: Text('Quick'),
+        );
+      case _Section.notes:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.note_alt_outlined),
+          selectedIcon: Icon(Icons.note_alt_rounded),
+          label: Text('Notes'),
+        );
+      case _Section.calendar:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month_rounded),
+          label: Text('Calendar'),
+        );
+      case _Section.entries:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.list_alt_outlined),
+          selectedIcon: Icon(Icons.list_alt_rounded),
+          label: Text('Entries'),
+        );
+      case _Section.pay:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.receipt_long_outlined),
+          selectedIcon: Icon(Icons.receipt_long_rounded),
+          label: Text('Pay'),
+        );
+      case _Section.drive:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.add_to_drive_outlined),
+          selectedIcon: Icon(Icons.add_to_drive),
+          label: Text('Drive'),
+        );
+      case _Section.admin:
+      case _Section.more:
+      case _Section.home:
+      case _Section.charts:
+      case _Section.tax:
+      case _Section.settings:
+        return const NavigationRailDestination(
+          icon: Icon(Icons.more_horiz_outlined),
+          selectedIcon: Icon(Icons.more_horiz_rounded),
+          label: Text('More'),
+        );
+    }
   }
 }
 
@@ -562,6 +584,7 @@ class _MoreScreen extends StatelessWidget {
     required this.onCharts,
     required this.onDrive,
     required this.onSettings,
+    required this.showMoneyTools,
   });
 
   final VoidCallback onHome;
@@ -572,6 +595,7 @@ class _MoreScreen extends StatelessWidget {
   final VoidCallback onCharts;
   final VoidCallback onDrive;
   final VoidCallback onSettings;
+  final bool showMoneyTools;
 
   @override
   Widget build(BuildContext context) {
@@ -599,20 +623,22 @@ class _MoreScreen extends StatelessWidget {
           onTap: onEntries,
         ),
         const SizedBox(height: 12),
-        _MoreTile(
-          icon: Icons.receipt_long_outlined,
-          title: 'Pay Period',
-          subtitle: 'Invoices, owed money, PDF build, and breakdowns',
-          onTap: onPay,
-        ),
-        const SizedBox(height: 12),
-        _MoreTile(
-          icon: Icons.account_balance_wallet_outlined,
-          title: 'Tax',
-          subtitle: 'GST, ACC, KiwiSaver, and net estimate',
-          onTap: onTax,
-        ),
-        const SizedBox(height: 12),
+        if (showMoneyTools) ...[
+          _MoreTile(
+            icon: Icons.receipt_long_outlined,
+            title: 'Pay Period',
+            subtitle: 'Invoices, owed money, PDF build, and breakdowns',
+            onTap: onPay,
+          ),
+          const SizedBox(height: 12),
+          _MoreTile(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Tax',
+            subtitle: 'GST, ACC, KiwiSaver, and net estimate',
+            onTap: onTax,
+          ),
+          const SizedBox(height: 12),
+        ],
         _MoreTile(
           icon: Icons.bar_chart_outlined,
           title: 'Charts',

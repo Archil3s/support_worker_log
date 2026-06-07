@@ -93,6 +93,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final appState = context.watch<AppState>();
     final entries = appState.entries;
     final settings = appState.settings;
+    final payeMode = appState.isPayeMode;
     final days = _visibleDays();
     final visibleEntries = _entriesForDays(entries, days);
     final selectedEntries = _entriesForDay(entries, selectedDate);
@@ -197,10 +198,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
               title: 'Hours',
               value: totalHours(visibleEntries).toStringAsFixed(2),
             ),
-            StatCard(
-              title: 'Earned',
-              value: money(totalEarnings(visibleEntries, settings)),
-            ),
+            if (!payeMode)
+              StatCard(
+                title: 'Earned',
+                value: money(totalEarnings(visibleEntries, settings)),
+              ),
             StatCard(
               title: 'KM',
               value: totalKilometres(visibleEntries).toStringAsFixed(1),

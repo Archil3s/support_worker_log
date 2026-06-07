@@ -1074,6 +1074,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     if (!mounted) return;
 
     suppressAutoSave = true;
+    final appState = context.read<AppState>();
 
     setState(() {
       meta = loaded;
@@ -1086,10 +1087,12 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       } else if (loaded == null) {
         initialsController.text =
             LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
-        noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
-          entry: widget.entry,
-          status: status,
-        );
+        noteController.text = appState.isPayeMode
+            ? LocalSupportNoteService.defaultPayeNoteTextForEntry(widget.entry)
+            : LocalSupportNoteService.defaultNoteTextForEntry(
+                entry: widget.entry,
+                status: status,
+              );
       } else {
         initialsController.text = loaded.initials;
         noteController.text = loaded.noteText;
@@ -1136,12 +1139,20 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     });
 
     try {
-      final updated = await LocalSupportNoteService.saveNote(
-        entry: widget.entry,
-        initials: initialsController.text,
-        status: status,
-        noteText: noteController.text,
-      );
+      final appState = context.read<AppState>();
+      final updated = appState.isPayeMode
+          ? await LocalSupportNoteService.savePayeNote(
+              entry: widget.entry,
+              initials: initialsController.text,
+              status: status,
+              noteText: noteController.text,
+            )
+          : await LocalSupportNoteService.saveNote(
+              entry: widget.entry,
+              initials: initialsController.text,
+              status: status,
+              noteText: noteController.text,
+            );
 
       if (!mounted) return;
 
@@ -1172,6 +1183,30 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
     try {
       final appState = context.read<AppState>();
+      if (appState.isPayeMode) {
+        final file = await appState.savePayeNoteToDrive(
+          widget.entry.copyWith(supportNoteBreakdown: noteController.text),
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          driveMeta = EntryDriveSupportNoteMeta(
+            entryId: widget.entry.id,
+            initials: initialsController.text.trim().toUpperCase(),
+            status: status,
+            fileId: file.id,
+            fileName: file.name,
+            noteText: noteController.text,
+            mimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            googleAccountEmail: appState.payeGoogleAccountEmail,
+          );
+          message = 'Saved PAYE blank note to Google Drive as ${file.name}';
+        });
+        return;
+      }
+
       final folderId = appState.settings.googleDriveClientNotesFolderId;
 
       if (folderId == null || folderId.isEmpty) {
@@ -1222,10 +1257,13 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
     if (meta == null && driveMeta == null) {
       suppressAutoSave = true;
-      noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
-        entry: widget.entry,
-        status: next,
-      );
+      final appState = context.read<AppState>();
+      noteController.text = appState.isPayeMode
+          ? LocalSupportNoteService.defaultPayeNoteTextForEntry(widget.entry)
+          : LocalSupportNoteService.defaultNoteTextForEntry(
+              entry: widget.entry,
+              status: next,
+            );
       suppressAutoSave = false;
       return;
     }
@@ -1250,34 +1288,60 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       final appState = driveMeta == null ? null : context.read<AppState>();
 
       if (meta != null) {
-        updatedLocal = await LocalSupportNoteService.saveNote(
-          entry: widget.entry,
-          initials: initialsController.text,
-          status: status,
-          noteText: noteController.text,
-        );
+        final payeMode = context.read<AppState>().isPayeMode;
+        updatedLocal = payeMode
+            ? await LocalSupportNoteService.savePayeNote(
+                entry: widget.entry,
+                initials: initialsController.text,
+                status: status,
+                noteText: noteController.text,
+              )
+            : await LocalSupportNoteService.saveNote(
+                entry: widget.entry,
+                initials: initialsController.text,
+                status: status,
+                noteText: noteController.text,
+              );
       }
 
       if (driveMeta != null && appState != null) {
-        final folderId = appState.settings.googleDriveClientNotesFolderId;
+        if (appState.isPayeMode) {
+          final file = await appState.savePayeNoteToDrive(
+            widget.entry.copyWith(supportNoteBreakdown: noteController.text),
+          );
 
-        if (folderId == null || folderId.isEmpty) {
-          throw StateError(
-            'Create Google Drive app folders first, then save this note to Drive.',
+          updatedDrive = EntryDriveSupportNoteMeta(
+            entryId: widget.entry.id,
+            initials: initialsController.text.trim().toUpperCase(),
+            status: status,
+            fileId: file.id,
+            fileName: file.name,
+            noteText: noteController.text,
+            mimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            googleAccountEmail: appState.payeGoogleAccountEmail,
+          );
+        } else {
+          final folderId = appState.settings.googleDriveClientNotesFolderId;
+
+          if (folderId == null || folderId.isEmpty) {
+            throw StateError(
+              'Create Google Drive app folders first, then save this note to Drive.',
+            );
+          }
+
+          final token = await appState.connectGoogleDrive();
+          updatedDrive = await driveService.saveSupportNote(
+            accessToken: token,
+            clientNotesFolderId: folderId,
+            entry: widget.entry,
+            initials: initialsController.text,
+            status: status,
+            noteText: noteController.text,
+            payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+            existingMeta: driveMeta,
           );
         }
-
-        final token = await appState.connectGoogleDrive();
-        updatedDrive = await driveService.saveSupportNote(
-          accessToken: token,
-          clientNotesFolderId: folderId,
-          entry: widget.entry,
-          initials: initialsController.text,
-          status: status,
-          noteText: noteController.text,
-          payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
-          existingMeta: driveMeta,
-        );
       }
 
       if (!mounted || version != autoSaveVersion) return;

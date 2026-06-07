@@ -22,11 +22,11 @@ class GoogleExportConnection {
 class GoogleExportAccountService {
   GoogleExportAccountService({FirebaseAuth? auth}) : _authOverride = auth;
 
-  static const _secondaryAppName = 'support_worker_log_google_exports';
+  static const _secondaryAppNamePrefix = 'support_worker_log_google_exports';
   static const _googleSignInTimeout = Duration(seconds: 90);
 
   final FirebaseAuth? _authOverride;
-  FirebaseAuth? _auth;
+  final Map<GoogleExportAccountScope, FirebaseAuth> _authByScope = {};
   final Map<GoogleExportAccountScope, GoogleExportConnection> _connections = {};
 
   String? accessTokenFor(GoogleExportAccountScope scope) {
@@ -46,14 +46,17 @@ class GoogleExportAccountService {
     required GoogleExportAccountScope scope,
     bool forceRefresh = false,
   }) async {
-    final auth = await _secondaryAuth();
-    await _resetSecondaryAuth(auth);
+    final auth = await _secondaryAuth(scope);
+    if (forceRefresh) {
+      await _resetSecondaryAuth(auth);
+    }
     late final UserCredential credential;
 
     try {
       credential = await _signInWithGoogle(
         auth,
         forceRefresh,
+        hasCurrentUser: auth.currentUser != null,
       ).timeout(_googleSignInTimeout);
     } on TimeoutException {
       await _resetSecondaryAuth(auth);
@@ -99,34 +102,40 @@ class GoogleExportAccountService {
     );
   }
 
-  Future<FirebaseAuth> _secondaryAuth() async {
+  Future<FirebaseAuth> _secondaryAuth(GoogleExportAccountScope scope) async {
     final override = _authOverride;
     if (override != null) return override;
 
-    final current = _auth;
+    final current = _authByScope[scope];
     if (current != null) return current;
 
-    final existing = Firebase.apps.where(
-      (app) => app.name == _secondaryAppName,
-    );
+    final appName = _secondaryAppNameFor(scope);
+    final existing = Firebase.apps.where((app) => app.name == appName);
     final app = existing.isNotEmpty
         ? existing.first
         : await Firebase.initializeApp(
-            name: _secondaryAppName,
+            name: appName,
             options: DefaultFirebaseOptions.currentPlatform,
           );
 
-    _auth = FirebaseAuth.instanceFor(app: app);
-    return _auth!;
+    final auth = FirebaseAuth.instanceFor(app: app);
+    _authByScope[scope] = auth;
+    return auth;
   }
 
   Future<UserCredential> _signInWithGoogle(
     FirebaseAuth auth,
-    bool forceRefresh,
-  ) {
+    bool forceRefresh, {
+    required bool hasCurrentUser,
+  }) {
+    final prompt = forceRefresh
+        ? 'consent select_account'
+        : hasCurrentUser
+        ? 'consent'
+        : 'select_account';
     final parameters = <String, String>{
       'include_granted_scopes': 'true',
-      'prompt': forceRefresh ? 'consent select_account' : 'select_account',
+      'prompt': prompt,
     };
     final provider = GoogleAuthProvider()
       ..addScope('email')
@@ -138,6 +147,10 @@ class GoogleExportAccountService {
 
     if (kIsWeb) return auth.signInWithPopup(provider);
     return auth.signInWithProvider(provider);
+  }
+
+  String _secondaryAppNameFor(GoogleExportAccountScope scope) {
+    return '${_secondaryAppNamePrefix}_${scope.name}';
   }
 
   Future<void> _resetSecondaryAuth(FirebaseAuth auth) async {

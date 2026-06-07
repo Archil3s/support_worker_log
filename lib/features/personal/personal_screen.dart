@@ -32,19 +32,25 @@ class _PersonalScreenState extends State<PersonalScreen> {
     });
 
     try {
-      await context.read<AppState>().syncPersonalLogsToDrive();
+      final file = await context
+          .read<AppState>()
+          .syncPersonalLivingSheetToDrive();
+      final link = file.webViewLink;
+      if (link != null && link.isNotEmpty) {
+        await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+      }
 
       if (!mounted) return;
 
       setState(() {
-        message = 'Personal notes synced to Google Drive.';
+        message = 'Personal Excel sheet refreshed.';
         messageIsError = false;
       });
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        message = 'Could not sync personal notes: $error';
+        message = 'Could not refresh personal Excel sheet: $error';
         messageIsError = true;
       });
     } finally {
@@ -151,8 +157,8 @@ class _PersonalScreenState extends State<PersonalScreen> {
                     : const Icon(Icons.add_to_drive_outlined),
                 label: Text(
                   syncingDrive
-                      ? 'Syncing Personal Notes'
-                      : 'Sync Personal Notes to Drive',
+                      ? 'Refreshing Personal Excel'
+                      : 'Refresh Personal Excel Sheet',
                 ),
               ),
               const SizedBox(height: 10),
@@ -263,7 +269,9 @@ class _WorkoutSplitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final completed = split.exercises
+    final displaySplit = _adaptiveSplitForEntries(split, gymEntries);
+    final displayExercises = displaySplit.exercises;
+    final completed = displayExercises
         .where((exercise) => _latestLogFor(exercise.name) != null)
         .length;
 
@@ -289,7 +297,7 @@ class _WorkoutSplitCard extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              '$completed/${split.exercises.length} logged this plan',
+              '$completed/${displayExercises.length} logged this plan',
               style: const TextStyle(
                 color: Color(0xFF8396C7),
                 fontWeight: FontWeight.w700,
@@ -300,13 +308,16 @@ class _WorkoutSplitCard extends StatelessWidget {
                 _FocusNote(text: split.focus),
                 const SizedBox(height: 10),
               ],
-              _SplitExerciseInsightsPanel(split: split, gymEntries: gymEntries),
+              _SplitExerciseInsightsPanel(
+                split: displaySplit,
+                gymEntries: gymEntries,
+              ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () =>
-                      _showGuidedWorkoutSheet(context, split: split),
+                      _showGuidedWorkoutSheet(context, split: displaySplit),
                   icon: const Icon(Icons.directions_run_rounded),
                   label: const Text('Start Flexible Workout'),
                 ),
@@ -318,9 +329,9 @@ class _WorkoutSplitCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 10),
-              for (final exercise in split.exercises)
+              for (final exercise in displayExercises)
                 _WorkoutExerciseRow(
-                  split: split,
+                  split: displaySplit,
                   exercise: exercise,
                   latestLog: _latestLogFor(exercise.name),
                 ),
@@ -525,6 +536,17 @@ class _WorkoutExerciseRow extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (exercise.adaptiveReason.trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      'Recommended for ${exercise.adaptiveReason}',
+                      style: const TextStyle(
+                        color: Color(0xFF31E981),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                   if (exercise.target.trim().isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(
@@ -535,6 +557,44 @@ class _WorkoutExerciseRow extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ],
+                  if (exercise.tracksLoad ||
+                      !_isStretchExerciseName(exercise.name)) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _MiniSciencePill(
+                          label: 'Reps',
+                          value: exercise.scienceRepRange,
+                        ),
+                        _MiniSciencePill(
+                          label: 'RIR',
+                          value: '${exercise.targetRir}',
+                        ),
+                        _MiniSciencePill(
+                          label: 'Sets/wk',
+                          value: '${exercise.weeklySetTarget}',
+                        ),
+                        _MiniSciencePill(
+                          label: 'Fatigue',
+                          value: exercise.fatigueProfile.label,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      exercise.scienceProgressionRule,
+                      style: const TextStyle(
+                        color: Color(0xFFB5C3EA),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _WorkoutExplanationBlock(exercise: exercise),
                   ],
                   if (lastMetric.isNotEmpty) ...[
                     const SizedBox(height: 5),
@@ -600,6 +660,99 @@ class _MetricPill extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniSciencePill extends StatelessWidget {
+  const _MiniSciencePill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Text(
+        '$label $value',
+        style: const TextStyle(
+          color: Color(0xFFD8E2FF),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkoutExplanationBlock extends StatelessWidget {
+  const _WorkoutExplanationBlock({required this.exercise});
+
+  final _WorkoutExercise exercise;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ExplanationLine(label: 'Why', value: _plainExerciseWhy(exercise)),
+          const SizedBox(height: 5),
+          _ExplanationLine(
+            label: 'Jeff-style',
+            value: _jeffStyleExerciseCheck(exercise),
+          ),
+          const SizedBox(height: 5),
+          _ExplanationLine(
+            label: 'Progress',
+            value: exercise.scienceProgressionRule,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExplanationLine extends StatelessWidget {
+  const _ExplanationLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          color: Color(0xFFB5C3EA),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          height: 1.25,
+        ),
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: const TextStyle(
+              color: Color(0xFF31E981),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          TextSpan(text: value),
         ],
       ),
     );
@@ -1055,6 +1208,12 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
         const SizedBox(height: 14),
         _SmartTrainingPanel(logs: filtered, totals: totals),
         const SizedBox(height: 14),
+        const _ScienceBackedPrinciplesPanel(),
+        const SizedBox(height: 14),
+        _WorkoutActionPlanPanel(logs: logs, entries: widget.entries),
+        const SizedBox(height: 14),
+        _ScienceDosePanel(logs: filtered),
+        const SizedBox(height: 14),
         _PersonalRecordBoard(logs: filtered),
         const SizedBox(height: 14),
         _CaloriesBurnedPanel(logs: filtered, bodyWeightKg: bodyWeightKg),
@@ -1222,6 +1381,351 @@ class _SmartTrainingPanel extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             intelligence.nextNudge,
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScienceBackedPrinciplesPanel extends StatelessWidget {
+  const _ScienceBackedPrinciplesPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: const [
+          Row(
+            children: [
+              Icon(Icons.school_outlined, color: Color(0xFF31E981)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Science / Jeff-style principles',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          _PrincipleRow(
+            icon: Icons.open_in_full_rounded,
+            title: 'Stretch plus tension',
+            detail:
+                'Prefer movements that load the target muscle through a useful range.',
+          ),
+          _PrincipleRow(
+            icon: Icons.center_focus_strong_rounded,
+            title: 'Stable setup',
+            detail:
+                'Less wasted balance means more effort goes into the muscle.',
+          ),
+          _PrincipleRow(
+            icon: Icons.trending_up_rounded,
+            title: 'Progression you can measure',
+            detail:
+                'Add reps first, then load when the top range is clean at target RIR.',
+          ),
+          _PrincipleRow(
+            icon: Icons.health_and_safety_outlined,
+            title: 'Pain-free stimulus',
+            detail:
+                'If joints or injury feedback trends up, swap before forcing the lift.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrincipleRow extends StatelessWidget {
+  const _PrincipleRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF4F8DF7), size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: Color(0xFFB5C3EA),
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkoutActionPlanPanel extends StatelessWidget {
+  const _WorkoutActionPlanPanel({required this.logs, required this.entries});
+
+  final List<_GymProgressLog> logs;
+  final List<PersonalLogEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final plan = _WorkoutActionPlan.fromLogs(logs: logs, entries: entries);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.task_alt_rounded, color: Color(0xFF31E981)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'What to do next',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ActionPlanRow(
+            icon: Icons.trending_down_rounded,
+            label: 'Weakest this week',
+            value: plan.weakestExercise,
+            detail: plan.weakestDetail,
+          ),
+          _ActionPlanRow(
+            icon: Icons.report_problem_outlined,
+            label: 'Pain / complaint trend',
+            value: plan.complaintTrend,
+            detail: plan.complaintDetail,
+          ),
+          _ActionPlanRow(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Suggested substitution',
+            value: plan.suggestedSubstitution,
+            detail: plan.substitutionDetail,
+          ),
+          _ActionPlanRow(
+            icon: Icons.self_improvement_rounded,
+            label: 'Next stretch focus',
+            value: plan.stretchFocus,
+            detail: plan.stretchDetail,
+          ),
+          _ActionPlanRow(
+            icon: Icons.accessibility_new_rounded,
+            label: 'Bodyweight progress',
+            value: plan.bodyweightTrend,
+            detail: plan.bodyweightDetail,
+          ),
+          _ActionPlanRow(
+            icon: Icons.science_outlined,
+            label: 'Science target',
+            value: plan.scienceTarget,
+            detail: plan.scienceDetail,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionPlanRow extends StatelessWidget {
+  const _ActionPlanRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF4F8DF7), size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: Color(0xFFB5C3EA),
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScienceDosePanel extends StatelessWidget {
+  const _ScienceDosePanel({required this.logs});
+
+  final List<_GymProgressLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) return const SizedBox.shrink();
+
+    final latestDate = logs.last.date;
+    final weekStart = latestDate.subtract(const Duration(days: 6));
+    final weekLogs = logs
+        .where((log) => !log.date.isBefore(weekStart))
+        .toList();
+    final hardSets = weekLogs.fold<int>(0, (total, log) => total + log.sets);
+    final rirValues = [
+      for (final log in weekLogs)
+        if (log.averageRir != null) log.averageRir!,
+    ];
+    final averageRir = rirValues.isEmpty
+        ? null
+        : rirValues.fold<double>(0, (total, value) => total + value) /
+              rirValues.length;
+    final setStatus = hardSets < 10
+        ? 'Build volume'
+        : hardSets > 20
+        ? 'Watch fatigue'
+        : 'Useful volume';
+    final rirStatus = averageRir == null
+        ? 'Start logging RIR'
+        : averageRir <= 1
+        ? 'Very hard'
+        : averageRir <= 3
+        ? 'On target'
+        : 'Too easy';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.science_outlined, color: Color(0xFF31E981)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Science-based lifting dose',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetricPill(label: 'Sets this week', value: '$hardSets'),
+              _MetricPill(
+                label: 'Avg RIR',
+                value: averageRir == null
+                    ? '-'
+                    : _formatCompactNumber(averageRir),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '$setStatus. $rirStatus. Use multiple hard sets, keep most work around RIR 1-3, and progress reps before load.',
             style: const TextStyle(
               color: Color(0xFFD8E2FF),
               fontWeight: FontWeight.w800,
@@ -2597,6 +3101,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
   double weightKg = 0;
   int exerciseIndex = 0;
   int reps = 12;
+  int rir = 2;
   double? lastWeightKg;
   int? lastReps;
   String selectedSwapReason = _swapReasons.first;
@@ -2619,6 +3124,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
   void _loadExercise() {
     weightKg = 0;
     reps = int.tryParse(exercise.defaultReps) ?? 12;
+    rir = exercise.targetRir;
   }
 
   void _jumpToExercise(int index) {
@@ -2692,6 +3198,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
           exerciseName: exercise.name,
           weightKg: exercise.tracksLoad ? weightKg : 0,
           reps: reps,
+          rir: rir,
           originalExerciseName: exercise.originalName,
           swapReason: exercise.swapReason,
         ),
@@ -2732,9 +3239,9 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
 
     for (final entry in grouped.entries) {
       final sets = entry.value;
-      final calories = _estimatedWorkoutCalories(
+      final calorieEstimate = _estimatedWorkoutCalories(
         bodyWeightKg: bodyWeightKg,
-        setCount: sets.length,
+        sets: sets,
       );
       final metric = [
         if (sets.first.originalExerciseName != null)
@@ -2743,7 +3250,9 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
           'Swap reason: ${sets.first.swapReason}',
         for (var index = 0; index < sets.length; index++)
           sets[index].summary(index + 1),
-        if (calories > 0) 'Estimated calories: $calories kcal',
+        if (calorieEstimate.calories > 0)
+          'Estimated calories: ${calorieEstimate.calories} kcal',
+        if (calorieEstimate.calories > 0) calorieEstimate.detail,
         'Body weight used: ${_formatWeightKg(bodyWeightKg)} kg',
       ].join('\n');
 
@@ -2817,6 +3326,8 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
               detail: 'Log what you actually did. Switch exercise anytime.',
             ),
           ],
+          const SizedBox(height: 10),
+          _ScienceCoachPanel(exercise: exercise),
           const SizedBox(height: 12),
           if (exercise.tracksLoad)
             Row(
@@ -2851,6 +3362,14 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
                 setState(() => reps = value);
               },
             ),
+          const SizedBox(height: 10),
+          _RirSelector(
+            value: rir,
+            target: exercise.targetRir,
+            onChanged: (value) {
+              setState(() => rir = value);
+            },
+          ),
           const SizedBox(height: 10),
           if (lastWeightKg != null || lastReps != null) ...[
             SizedBox(
@@ -2916,6 +3435,7 @@ class _LoggedWorkoutSet {
     required this.exerciseName,
     required this.weightKg,
     required this.reps,
+    required this.rir,
     this.originalExerciseName,
     this.swapReason = '',
   });
@@ -2923,6 +3443,7 @@ class _LoggedWorkoutSet {
   final String exerciseName;
   final double weightKg;
   final int reps;
+  final int rir;
   final String? originalExerciseName;
   final String swapReason;
 
@@ -2931,6 +3452,7 @@ class _LoggedWorkoutSet {
       'Set $setNumber',
       if (weightKg > 0) '${_formatWeightKg(weightKg)} kg',
       '$reps reps',
+      'RIR $rir',
     ].join(' | ');
   }
 }
@@ -3177,6 +3699,126 @@ class _LoggedSetsList extends StatelessWidget {
   }
 }
 
+class _ScienceCoachPanel extends StatelessWidget {
+  const _ScienceCoachPanel({required this.exercise});
+
+  final _WorkoutExercise exercise;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isStretchExerciseName(exercise.name)) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Science target',
+            style: TextStyle(
+              color: Color(0xFF8396C7),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetricPill(label: 'Reps', value: exercise.scienceRepRange),
+              _MetricPill(label: 'RIR', value: '${exercise.targetRir}'),
+              _MetricPill(
+                label: 'Weekly sets',
+                value: '${exercise.weeklySetTarget}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            exercise.scienceProgressionRule,
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RirSelector extends StatelessWidget {
+  const _RirSelector({
+    required this.value,
+    required this.target,
+    required this.onChanged,
+  });
+
+  final int value;
+  final int target;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RIR target $target',
+            style: const TextStyle(
+              color: Color(0xFF8396C7),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('0')),
+                ButtonSegment(value: 1, label: Text('1')),
+                ButtonSegment(value: 2, label: Text('2')),
+                ButtonSegment(value: 3, label: Text('3')),
+                ButtonSegment(value: 4, label: Text('4')),
+              ],
+              selected: {value},
+              onSelectionChanged: (values) => onChanged(values.first),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _rirCue(value, target),
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WeightStepper extends StatelessWidget {
   const _WeightStepper({
     required this.value,
@@ -3354,6 +3996,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
   late _WorkoutExercise selectedExercise;
   double weightKg = 0;
   int reps = 12;
+  int rir = 2;
   String timing = '3:2:1';
   String selectedSwapReason = _swapReasons.first;
 
@@ -3362,6 +4005,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
     super.initState();
     selectedExercise = widget.exercise;
     reps = int.tryParse(widget.exercise.defaultReps) ?? 12;
+    rir = widget.exercise.targetRir;
     _loadLatestLog();
     notesController.text = widget.exercise.cue;
   }
@@ -3392,6 +4036,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
     setState(() {
       selectedExercise = widget.exercise.swappedWith(name, selectedSwapReason);
       reps = int.tryParse(selectedExercise.defaultReps) ?? reps;
+      rir = selectedExercise.targetRir;
     });
   }
 
@@ -3411,6 +4056,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
           exerciseName: selectedExercise.name,
           weightKg: selectedExercise.tracksLoad ? weightKg : 0,
           reps: reps,
+          rir: rir,
           originalExerciseName: selectedExercise.originalName,
           swapReason: selectedExercise.swapReason,
         ),
@@ -3434,9 +4080,9 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
     final bodyWeightKg = _latestBodyWeightKg(
       context.read<AppState>().personalLogEntries,
     );
-    final calories = _estimatedWorkoutCalories(
+    final calorieEstimate = _estimatedWorkoutCalories(
       bodyWeightKg: bodyWeightKg,
-      setCount: loggedSets.length,
+      sets: loggedSets,
     );
     final metricParts = <String>[
       if (selectedExercise.originalName != null)
@@ -3445,7 +4091,9 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
         'Swap reason: ${selectedExercise.swapReason}',
       for (var index = 0; index < loggedSets.length; index++)
         loggedSets[index].summary(index + 1),
-      if (calories > 0) 'Estimated calories: $calories kcal',
+      if (calorieEstimate.calories > 0)
+        'Estimated calories: ${calorieEstimate.calories} kcal',
+      if (calorieEstimate.calories > 0) calorieEstimate.detail,
       'Body weight used: ${_formatWeightKg(bodyWeightKg)} kg',
       'tempo $timing',
     ];
@@ -3510,6 +4158,12 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
             ),
           ],
           const SizedBox(height: 14),
+          _ScienceCoachPanel(exercise: selectedExercise),
+          if (!_isStretchExerciseName(selectedExercise.name)) ...[
+            const SizedBox(height: 12),
+            _WorkoutExplanationBlock(exercise: selectedExercise),
+          ],
+          const SizedBox(height: 12),
           if (selectedExercise.tracksLoad) ...[
             _WeightStepper(
               value: weightKg,
@@ -3534,6 +4188,14 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _RirSelector(
+            value: rir,
+            target: selectedExercise.targetRir,
+            onChanged: (value) {
+              setState(() => rir = value);
+            },
           ),
           const SizedBox(height: 12),
           SegmentedButton<String>(
@@ -3724,6 +4386,15 @@ class _WorkoutSplit {
   final IconData icon;
   final String focus;
   final List<_WorkoutExercise> exercises;
+
+  _WorkoutSplit copyWith({List<_WorkoutExercise>? exercises}) {
+    return _WorkoutSplit(
+      name: name,
+      icon: icon,
+      focus: focus,
+      exercises: exercises ?? this.exercises,
+    );
+  }
 }
 
 class _WorkoutExercise {
@@ -3737,6 +4408,12 @@ class _WorkoutExercise {
     this.tracksLoad = true,
     this.originalName,
     this.swapReason = '',
+    this.adaptiveReason = '',
+    this.repRange = '',
+    this.targetRir = 2,
+    this.weeklySetTarget = 10,
+    this.progressionRule = '',
+    this.fatigueProfile = _FatigueProfile.moderate,
   });
 
   final String name;
@@ -3748,10 +4425,27 @@ class _WorkoutExercise {
   final bool tracksLoad;
   final String? originalName;
   final String swapReason;
+  final String adaptiveReason;
+  final String repRange;
+  final int targetRir;
+  final int weeklySetTarget;
+  final String progressionRule;
+  final _FatigueProfile fatigueProfile;
 
   String get defaultSets => '$defaultSetCount';
 
   String get defaultReps => '$defaultRepCount';
+
+  String get scienceRepRange => repRange.isEmpty ? defaultReps : repRange;
+
+  String get scienceProgressionRule {
+    if (progressionRule.isNotEmpty) return progressionRule;
+    if (!tracksLoad) {
+      return 'Add reps until the top range is clean, then choose a harder variation.';
+    }
+
+    return 'Add load when all sets hit the top rep range at target RIR.';
+  }
 
   bool get isSwap => originalName != null;
 
@@ -3771,6 +4465,15 @@ class _WorkoutExercise {
       tracksLoad: _tracksLoadForExerciseName(replacementName, tracksLoad),
       originalName: baseName,
       swapReason: reason,
+      adaptiveReason: adaptiveReason,
+      repRange: _repRangeForExerciseName(replacementName, repRange),
+      targetRir: _targetRirForExerciseName(replacementName, targetRir),
+      weeklySetTarget: weeklySetTarget,
+      progressionRule: progressionRule,
+      fatigueProfile: _fatigueProfileForExerciseName(
+        replacementName,
+        fatigueProfile,
+      ),
     );
   }
 
@@ -3785,8 +4488,44 @@ class _WorkoutExercise {
       tracksLoad: tracksLoad,
       originalName: originalName,
       swapReason: reason,
+      adaptiveReason: adaptiveReason,
+      repRange: repRange,
+      targetRir: targetRir,
+      weeklySetTarget: weeklySetTarget,
+      progressionRule: progressionRule,
+      fatigueProfile: fatigueProfile,
     );
   }
+
+  _WorkoutExercise withAdaptiveReason(String reason) {
+    return _WorkoutExercise(
+      name: name,
+      target: target,
+      cue: cue,
+      alternatives: alternatives,
+      defaultSetCount: defaultSetCount,
+      defaultRepCount: defaultRepCount,
+      tracksLoad: tracksLoad,
+      originalName: originalName,
+      swapReason: swapReason,
+      adaptiveReason: reason,
+      repRange: repRange,
+      targetRir: targetRir,
+      weeklySetTarget: weeklySetTarget,
+      progressionRule: progressionRule,
+      fatigueProfile: fatigueProfile,
+    );
+  }
+}
+
+enum _FatigueProfile {
+  low('Low fatigue'),
+  moderate('Moderate fatigue'),
+  high('High fatigue');
+
+  const _FatigueProfile(this.label);
+
+  final String label;
 }
 
 const _workoutSplits = [
@@ -3799,6 +4538,12 @@ const _workoutSplits = [
         name: 'Conventional deadlift',
         target: '5 sets x 5 reps',
         cue: 'Brace hard, push the floor away, keep the bar close.',
+        repRange: '3-6',
+        targetRir: 2,
+        weeklySetTarget: 5,
+        fatigueProfile: _FatigueProfile.high,
+        progressionRule:
+            'Add load only when every set is clean and back complaints are quiet.',
         alternatives: [
           'Chest-supported row',
           'Seated cable row',
@@ -3809,15 +4554,26 @@ const _workoutSplits = [
       ),
       _WorkoutExercise(
         name: 'Reverse lat pulldown machine',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 8,
         alternatives: ['Single-arm cable pulldown', 'Dumbbell row'],
       ),
       _WorkoutExercise(
         name: 'Cable lat prayers',
         cue: 'Hinge slightly, drive elbows down, keep lats loaded.',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Band straight-arm pulldown', 'Dumbbell pullover'],
       ),
       _WorkoutExercise(
         name: 'Reverse pec deck',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Cable face pull', 'Rear delt dumbbell fly'],
       ),
       _WorkoutExercise(
@@ -3830,10 +4586,18 @@ const _workoutSplits = [
       ),
       _WorkoutExercise(
         name: 'Bicep EZ bar',
+        repRange: '8-12',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Cable curl', 'Dumbbell curl'],
       ),
       _WorkoutExercise(
         name: 'Bicep alternating dumbbells',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Hammer curl', 'Cable curl'],
       ),
     ],
@@ -3848,6 +4612,11 @@ const _workoutSplits = [
         name: 'Glute bridges with sand bag holds',
         target: '3 sets to failure',
         cue: 'Pause hard at the top and keep glutes loaded.',
+        repRange: '10-20',
+        targetRir: 1,
+        weeklySetTarget: 8,
+        progressionRule:
+            'Add reps first; add load only when the top reps are clean.',
         alternatives: ['Hip thrust machine', 'Dumbbell glute bridge'],
       ),
       _WorkoutExercise(
@@ -3858,10 +4627,18 @@ const _workoutSplits = [
       _WorkoutExercise(
         name: 'Walking lunges',
         target: '6 sets x 25 reps',
+        repRange: '8-15',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
         alternatives: ['Reverse lunges', 'Step-ups'],
       ),
       _WorkoutExercise(
         name: 'Box squats',
+        repRange: '6-10',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
         alternatives: ['Goblet squat', 'Leg press'],
       ),
       _WorkoutExercise(
@@ -3870,6 +4647,10 @@ const _workoutSplits = [
       ),
       _WorkoutExercise(
         name: 'Single-leg RDL',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.moderate,
         alternatives: [
           'Seated hamstring curl',
           'Cable pull-through',
@@ -3879,6 +4660,12 @@ const _workoutSplits = [
       _WorkoutExercise(
         name: 'Back extension',
         cue: 'Rounded back, glute focus, control the top squeeze.',
+        repRange: '10-15',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        fatigueProfile: _FatigueProfile.moderate,
+        progressionRule:
+            'Keep this submaximal if lower back complaints are trending.',
         alternatives: [
           'Hip thrust machine',
           'Dead bug press',
@@ -3896,32 +4683,57 @@ const _workoutSplits = [
     exercises: [
       _WorkoutExercise(
         name: 'Bench press',
+        repRange: '5-8',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
         alternatives: ['Dumbbell bench press', 'Push ups'],
       ),
       _WorkoutExercise(
         name: 'Chest flys - 3 heights',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Dumbbell fly', 'Cable fly'],
       ),
       _WorkoutExercise(
         name: 'Iso press / seated chest fly machine',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
         alternatives: ['Dumbbell press', 'Push ups'],
       ),
       _WorkoutExercise(
         name: 'Standing overhead press',
+        repRange: '5-10',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        fatigueProfile: _FatigueProfile.high,
         alternatives: ['Seated dumbbell press', 'Machine shoulder press'],
       ),
       _WorkoutExercise(
         name: 'Lateral raises',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 8,
+        fatigueProfile: _FatigueProfile.low,
         alternatives: ['Cable lateral raise', 'Machine lateral raise'],
       ),
       _WorkoutExercise(
         name: 'Dips',
+        repRange: '6-12',
+        targetRir: 1,
+        weeklySetTarget: 4,
         defaultRepCount: 10,
         tracksLoad: false,
         alternatives: ['Close-grip push ups', 'Triceps pressdown'],
       ),
       _WorkoutExercise(
         name: 'Push ups',
+        repRange: '8-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
         defaultRepCount: 15,
         tracksLoad: false,
         alternatives: ['Incline push ups', 'Machine chest press'],
@@ -3956,6 +4768,16 @@ const _workoutSplits = [
         tracksLoad: false,
       ),
       _WorkoutExercise(
+        name: 'Glute bridge reset',
+        target: '2 sets x 10 slow reps',
+        cue:
+            'Feet planted, ribs down, squeeze glutes at the top. Keep it light '
+            'and use it as a hip reset, not a max effort lift.',
+        defaultSetCount: 2,
+        defaultRepCount: 10,
+        tracksLoad: false,
+      ),
+      _WorkoutExercise(
         name: 'Knee-to-chest stretch',
         target: '2 sets x 20 seconds each side',
         cue:
@@ -3973,6 +4795,26 @@ const _workoutSplits = [
             'gets sharper.',
         defaultSetCount: 2,
         defaultRepCount: 5,
+        tracksLoad: false,
+      ),
+      _WorkoutExercise(
+        name: 'Shoulder blade squeeze',
+        target: '2 sets x 8 slow reps',
+        cue:
+            'Arms relaxed, draw shoulder blades gently back and down. Keep neck '
+            'long and stop before traps take over.',
+        defaultSetCount: 2,
+        defaultRepCount: 8,
+        tracksLoad: false,
+      ),
+      _WorkoutExercise(
+        name: 'Neck side bend reset',
+        target: '2 sets x 15 seconds each side',
+        cue:
+            'Sit tall, gently tip ear toward shoulder, keep the stretch mild, '
+            'and avoid pulling hard on the head.',
+        defaultSetCount: 2,
+        defaultRepCount: 15,
         tracksLoad: false,
       ),
       _WorkoutExercise(
@@ -4118,6 +4960,7 @@ class _GymProgressLog {
     required this.estimatedCalories,
     required this.sets,
     required this.reps,
+    required this.averageRir,
   });
 
   final DateTime date;
@@ -4129,6 +4972,7 @@ class _GymProgressLog {
   final int estimatedCalories;
   final int sets;
   final int reps;
+  final double? averageRir;
 
   double get averageRepsPerSet => sets <= 0 ? 0 : reps / sets;
 
@@ -4160,9 +5004,14 @@ class _GymProgressLog {
       bestWeightKg: manual.bestWeightKg,
       bestEstimatedMaxKg: manual.bestEstimatedMaxKg,
       volumeLoadKg: manual.volumeLoadKg,
-      estimatedCalories: _caloriesForMetric(metric, manual.sets),
+      estimatedCalories: _caloriesForMetric(
+        metric,
+        manual.sets,
+        _exerciseNameFromTitle(entry.title),
+      ),
       sets: manual.sets,
       reps: manual.reps,
+      averageRir: _parseAverageRir(metric),
     );
   }
 }
@@ -4610,6 +5459,92 @@ bool _isBodyweightExerciseName(String exerciseName) {
       normalised.contains('incline push');
 }
 
+bool _isStretchExerciseName(String exerciseName) {
+  final normalised = _normaliseExerciseName(exerciseName);
+
+  return normalised.contains('stretch') ||
+      normalised.contains('mobiliser') ||
+      normalised.contains('salutation') ||
+      normalised.contains('reset') ||
+      normalised.contains('opener') ||
+      normalised.contains('side bend');
+}
+
+String _rirCue(int value, int target) {
+  if (value == 0) {
+    return 'Failure. Use sparingly, mostly on low-fatigue isolation work.';
+  }
+
+  if (value < target) {
+    return 'Harder than target. Keep it only if form and joints stay clean.';
+  }
+
+  if (value == target) {
+    return 'On target. This is the set quality to repeat and progress.';
+  }
+
+  return 'Easier than target. Add reps before adding load.';
+}
+
+String _plainExerciseWhy(_WorkoutExercise exercise) {
+  final name = _normaliseExerciseName(exercise.name);
+
+  if (name.contains('deadlift')) {
+    return 'Heavy hinge practice for strength. It is useful, but high fatigue, so back pain changes the plan.';
+  }
+  if (name.contains('chest supported row') || name.contains('machine row')) {
+    return 'The bench or machine gives stability so your back does more of the work.';
+  }
+  if (name.contains('pulldown') || name.contains('lat prayer')) {
+    return 'Keeps tension on the lats and is easier to progress than guessing with body swing.';
+  }
+  if (name.contains('bench') || name.contains('press')) {
+    return 'A stable press lets chest and shoulders produce force through a repeatable range.';
+  }
+  if (name.contains('fly')) {
+    return 'A lower-fatigue way to load the chest in a stretched position.';
+  }
+  if (name.contains('lateral raise') || name.contains('rear delt')) {
+    return 'Small muscle isolation works well with higher reps and controlled tension.';
+  }
+  if (name.contains('squat') || name.contains('lunge')) {
+    return 'Trains legs through a large range while tracking knee and hip feedback.';
+  }
+  if (name.contains('rdl') || name.contains('back extension')) {
+    return 'Targets glutes and hamstrings, but should stay controlled if back or hip complaints rise.';
+  }
+  if (_isBodyweightExerciseName(exercise.name)) {
+    return 'Progress is measured by reps, RIR, and harder variations instead of body-weight skew.';
+  }
+
+  return 'This is here because it can be logged, repeated, and progressed without guessing.';
+}
+
+String _jeffStyleExerciseCheck(_WorkoutExercise exercise) {
+  final name = _normaliseExerciseName(exercise.name);
+
+  if (_isStretchExerciseName(exercise.name)) {
+    return 'Recovery choice is driven by your complaint trend, not a fixed routine.';
+  }
+  if (name.contains('deadlift')) {
+    return 'Great strength lift, weaker hypertrophy choice if fatigue or back pain dominates.';
+  }
+  if (name.contains('chest supported row')) {
+    return 'Strong pick: stable setup, high back tension, easy progression.';
+  }
+  if (name.contains('machine') || name.contains('cable')) {
+    return 'Stable path and repeatable tension make it easy to judge progression.';
+  }
+  if (exercise.fatigueProfile == _FatigueProfile.low) {
+    return 'Low fatigue means it can go closer to failure without wrecking the session.';
+  }
+  if (exercise.fatigueProfile == _FatigueProfile.high) {
+    return 'High fatigue means stop near target RIR and avoid grinding ugly reps.';
+  }
+
+  return 'Good if it feels stable, loads the target muscle, and can progress over time.';
+}
+
 bool _tracksLoadForExerciseName(String exerciseName, bool fallback) {
   final normalised = _normaliseExerciseName(exerciseName);
 
@@ -4627,6 +5562,27 @@ bool _tracksLoadForExerciseName(String exerciseName, bool fallback) {
 
 int _defaultRepCountForExerciseName(String exerciseName, int fallback) {
   if (_isBodyweightExerciseName(exerciseName)) return 15;
+
+  return fallback;
+}
+
+String _repRangeForExerciseName(String exerciseName, String fallback) {
+  if (_isBodyweightExerciseName(exerciseName)) return '8-20';
+
+  return fallback;
+}
+
+int _targetRirForExerciseName(String exerciseName, int fallback) {
+  if (_isBodyweightExerciseName(exerciseName)) return 1;
+
+  return fallback;
+}
+
+_FatigueProfile _fatigueProfileForExerciseName(
+  String exerciseName,
+  _FatigueProfile fallback,
+) {
+  if (_isBodyweightExerciseName(exerciseName)) return _FatigueProfile.moderate;
 
   return fallback;
 }
@@ -4690,6 +5646,332 @@ class _TrainingIntelligence {
   }
 }
 
+class _WorkoutActionPlan {
+  const _WorkoutActionPlan({
+    required this.weakestExercise,
+    required this.weakestDetail,
+    required this.complaintTrend,
+    required this.complaintDetail,
+    required this.suggestedSubstitution,
+    required this.substitutionDetail,
+    required this.stretchFocus,
+    required this.stretchDetail,
+    required this.bodyweightTrend,
+    required this.bodyweightDetail,
+    required this.scienceTarget,
+    required this.scienceDetail,
+  });
+
+  final String weakestExercise;
+  final String weakestDetail;
+  final String complaintTrend;
+  final String complaintDetail;
+  final String suggestedSubstitution;
+  final String substitutionDetail;
+  final String stretchFocus;
+  final String stretchDetail;
+  final String bodyweightTrend;
+  final String bodyweightDetail;
+  final String scienceTarget;
+  final String scienceDetail;
+
+  factory _WorkoutActionPlan.fromLogs({
+    required List<_GymProgressLog> logs,
+    required List<PersonalLogEntry> entries,
+  }) {
+    final sorted = [...logs]..sort((a, b) => a.date.compareTo(b.date));
+    final baselines = _performanceBaselines(sorted);
+    final latestDate = sorted.last.date;
+    final weekStart = latestDate.subtract(const Duration(days: 6));
+    final weekLogs = sorted.where((log) => !log.date.isBefore(weekStart));
+    final scoreLogs = weekLogs.isEmpty ? sorted : weekLogs.toList();
+    final weakest = _weakestLog(scoreLogs, baselines) ?? sorted.last;
+    final weakestScore = _smartScoreForLog(weakest, baselines);
+    final complaintCounts = _exerciseComplaintCounts(entries);
+    final topComplaint = complaintCounts.isEmpty
+        ? 'No pain trend yet'
+        : complaintCounts.keys.first;
+    final topComplaintCount = complaintCounts[topComplaint] ?? 0;
+    final stretch = _stretchRecommendationsForComplaints(complaintCounts);
+    final stretchFocus = stretch.isEmpty
+        ? 'General reset'
+        : stretch.first.title;
+    final stretchDetail = stretch.isEmpty
+        ? 'Use low lunge hip opener, cat-cow, and dead bug press.'
+        : stretch.first.detail;
+    final substitution = _substitutionForComplaint(topComplaint, weakest);
+    final bodyweight = _bodyweightProgress(sorted, baselines);
+    final weakestExercise = _workoutExerciseForName(weakest.exerciseName);
+    final scienceTarget = weakestExercise == null
+        ? 'Progress the weakest exercise'
+        : '${weakestExercise.scienceRepRange} reps at RIR ${weakestExercise.targetRir}';
+    final scienceDetail =
+        weakestExercise?.scienceProgressionRule ??
+        'Use double progression: add reps first, then load when the target is clean.';
+
+    return _WorkoutActionPlan(
+      weakestExercise: weakest.exerciseName,
+      weakestDetail:
+          '${_formatCompactNumber(weakestScore)}% recent score. Log this next before chasing stronger lifts.',
+      complaintTrend: topComplaint,
+      complaintDetail: complaintCounts.isEmpty
+          ? 'Add pain, tightness, or swap reasons in workout notes.'
+          : '$topComplaintCount recent log${topComplaintCount == 1 ? '' : 's'} mention this area.',
+      suggestedSubstitution: substitution.name,
+      substitutionDetail: substitution.detail,
+      stretchFocus: stretchFocus,
+      stretchDetail: stretchDetail,
+      bodyweightTrend: bodyweight.title,
+      bodyweightDetail: bodyweight.detail,
+      scienceTarget: scienceTarget,
+      scienceDetail: scienceDetail,
+    );
+  }
+}
+
+class _SubstitutionSuggestion {
+  const _SubstitutionSuggestion({required this.name, required this.detail});
+
+  final String name;
+  final String detail;
+}
+
+class _BodyweightProgressSummary {
+  const _BodyweightProgressSummary({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+}
+
+_GymProgressLog? _weakestLog(
+  Iterable<_GymProgressLog> logs,
+  Map<String, double> baselines,
+) {
+  _GymProgressLog? weakest;
+  var weakestScore = double.infinity;
+
+  for (final log in logs) {
+    final score = _smartScoreForLog(log, baselines);
+
+    if (score <= 0) continue;
+    if (score >= weakestScore) continue;
+
+    weakest = log;
+    weakestScore = score;
+  }
+
+  return weakest;
+}
+
+_SubstitutionSuggestion _substitutionForComplaint(
+  String complaint,
+  _GymProgressLog weakest,
+) {
+  switch (complaint) {
+    case 'Lower back pain':
+      return const _SubstitutionSuggestion(
+        name: 'Chest-supported row or machine row',
+        detail: 'Keep back stimulus without loading the hinge hard.',
+      );
+    case 'Wrist / RSI':
+      return const _SubstitutionSuggestion(
+        name: 'Neutral-grip machine or forearm-supported core',
+        detail: 'Avoid painful hand loading and keep wrists neutral.',
+      );
+    case 'Elbow discomfort':
+      return const _SubstitutionSuggestion(
+        name: 'Cable work with neutral grip',
+        detail:
+            'Reduce hard elbow angles and avoid heavy skull-crusher style work.',
+      );
+    case 'Knee discomfort':
+      return const _SubstitutionSuggestion(
+        name: 'Leg press or reverse lunge',
+        detail: 'Use a controlled range and keep knee pain out of the set.',
+      );
+    case 'Shoulder discomfort':
+      return const _SubstitutionSuggestion(
+        name: 'Machine press or cable raise',
+        detail: 'Use a stable path and stop before shoulder pinch.',
+      );
+    case 'Hip tightness':
+      return const _SubstitutionSuggestion(
+        name: 'Hip thrust machine or glute bridge',
+        detail: 'Train hips without forcing a stiff hinge pattern.',
+      );
+    case 'Neck tightness':
+      return const _SubstitutionSuggestion(
+        name: 'Chest-supported dumbbell row',
+        detail: 'Unload traps and keep the neck quiet while pulling.',
+      );
+  }
+
+  final exercise = _workoutExerciseForName(weakest.exerciseName);
+  final alternatives = exercise?.alternatives ?? const <String>[];
+
+  if (alternatives.isEmpty) {
+    return _SubstitutionSuggestion(
+      name: weakest.exerciseName,
+      detail:
+          'No swap trend yet. Use the normal exercise and log any complaint.',
+    );
+  }
+
+  return _SubstitutionSuggestion(
+    name: alternatives.first,
+    detail:
+        'Use this first alternative if the weakest exercise is blocked or sore.',
+  );
+}
+
+_BodyweightProgressSummary _bodyweightProgress(
+  List<_GymProgressLog> logs,
+  Map<String, double> baselines,
+) {
+  final bodyweightLogs = logs
+      .where((log) => _isBodyweightExerciseName(log.exerciseName))
+      .toList();
+
+  if (bodyweightLogs.length < 2) {
+    return const _BodyweightProgressSummary(
+      title: 'Needs more bodyweight logs',
+      detail:
+          'Push ups and dips are scored from reps and sets, not body weight.',
+    );
+  }
+
+  final latest = bodyweightLogs.last;
+  final previous = bodyweightLogs[bodyweightLogs.length - 2];
+  final latestScore = _smartScoreForLog(latest, baselines);
+  final previousScore = _smartScoreForLog(previous, baselines);
+  final change = latestScore - previousScore;
+  final trend = change >= 2
+      ? 'Improving'
+      : change <= -2
+      ? 'Dropping'
+      : 'Holding steady';
+
+  return _BodyweightProgressSummary(
+    title: '$trend: ${latest.exerciseName}',
+    detail:
+        '${latest.reps} reps latest, ${change >= 0 ? '+' : ''}${_formatCompactNumber(change)}% score change without weight skew.',
+  );
+}
+
+_WorkoutExercise? _workoutExerciseForName(String name) {
+  for (final split in _workoutSplits) {
+    for (final exercise in split.exercises) {
+      if (_sameExercise(exercise.name, name)) return exercise;
+    }
+  }
+
+  return null;
+}
+
+_WorkoutSplit _adaptiveSplitForEntries(
+  _WorkoutSplit split,
+  List<PersonalLogEntry> entries,
+) {
+  if (split.name != 'Stretch + Abs') return split;
+
+  final complaintCounts = _exerciseComplaintCounts(entries);
+  final exercises = _adaptiveStretchExercises(split.exercises, complaintCounts);
+
+  return split.copyWith(exercises: exercises);
+}
+
+List<_WorkoutExercise> _adaptiveStretchExercises(
+  List<_WorkoutExercise> exercises,
+  Map<String, int> complaintCounts,
+) {
+  if (complaintCounts.isEmpty) return exercises;
+
+  final byName = {
+    for (final exercise in exercises)
+      _normaliseExerciseName(exercise.name): exercise,
+  };
+  final selected = <_WorkoutExercise>[];
+  final used = <String>{};
+
+  for (final complaint in complaintCounts.keys.take(4)) {
+    for (final name in _stretchExercisePriorityForComplaint(complaint)) {
+      final normalisedName = _normaliseExerciseName(name);
+      final exercise = byName[normalisedName];
+
+      if (exercise == null || !used.add(normalisedName)) continue;
+
+      selected.add(exercise.withAdaptiveReason(complaint));
+    }
+  }
+
+  if (selected.isEmpty) return exercises;
+
+  return [
+    ...selected,
+    for (final exercise in exercises)
+      if (!used.contains(_normaliseExerciseName(exercise.name))) exercise,
+  ];
+}
+
+List<String> _stretchExercisePriorityForComplaint(String complaint) {
+  switch (complaint) {
+    case 'Lower back pain':
+      return const [
+        'Knee-to-chest stretch',
+        'Cat-cow back mobiliser',
+        'Dead bug press',
+        'Low lunge hip opener',
+      ];
+    case 'Hip tightness':
+      return const [
+        'Low lunge hip opener',
+        'Glute bridge reset',
+        'Dead bug press',
+        'Cat-cow back mobiliser',
+      ];
+    case 'Wrist / RSI':
+      return const [
+        'RSI wrist flexor stretch',
+        'RSI wrist extensor stretch',
+        'Wrist-safe sun salutation',
+        'Forearm side plank from knees',
+      ];
+    case 'Elbow discomfort':
+      return const [
+        'RSI wrist flexor stretch',
+        'RSI wrist extensor stretch',
+        'Forearm side plank from knees',
+      ];
+    case 'Shoulder discomfort':
+      return const [
+        'Shoulder blade squeeze',
+        'Wrist-safe sun salutation',
+        'Forearm side plank from knees',
+      ];
+    case 'Neck tightness':
+      return const [
+        'Neck side bend reset',
+        'Shoulder blade squeeze',
+        'Wrist-safe sun salutation',
+      ];
+    case 'Knee discomfort':
+      return const [
+        'Low lunge hip opener',
+        'Glute bridge reset',
+        'Cat-cow back mobiliser',
+      ];
+    case 'Form feels off':
+    case 'Too fatigued':
+      return const [
+        'Cat-cow back mobiliser',
+        'Dead bug press',
+        'Wrist-safe sun salutation',
+      ];
+  }
+
+  return const [];
+}
+
 double _splitBalanceScore(Map<String, int> splitCounts) {
   if (splitCounts.isEmpty) return 0;
 
@@ -4738,13 +6020,13 @@ double _firstDouble(RegExp pattern, String value) {
   return double.tryParse(match?.group(1) ?? '') ?? 0;
 }
 
-int _firstInt(RegExp pattern, String value) {
+int _firstInt(RegExp pattern, String value, {int fallback = 0}) {
   if (RegExp(r'\d+\s*-\s*\d+\s*reps?', caseSensitive: false).hasMatch(value)) {
-    return 0;
+    return fallback;
   }
 
   final match = pattern.firstMatch(value);
-  return int.tryParse(match?.group(1) ?? '') ?? 0;
+  return int.tryParse(match?.group(1) ?? '') ?? fallback;
 }
 
 int _parseEstimatedCalories(String value) {
@@ -4756,15 +6038,40 @@ int _parseEstimatedCalories(String value) {
   return int.tryParse(match?.group(1) ?? '') ?? 0;
 }
 
-int _caloriesForMetric(String metric, int setCount) {
+double? _parseAverageRir(String value) {
+  final matches = RegExp(
+    r'\brir\s*(\d+)',
+    caseSensitive: false,
+  ).allMatches(value).toList();
+
+  if (matches.isEmpty) return null;
+
+  final values = [
+    for (final match in matches) int.tryParse(match.group(1) ?? ''),
+  ].whereType<int>();
+
+  if (values.isEmpty) return null;
+
+  return values.fold<int>(0, (total, value) => total + value) / values.length;
+}
+
+int _caloriesForMetric(String metric, int setCount, String exerciseName) {
   final bodyWeightKg = _parseLoggedBodyWeightKg(metric);
 
   if (bodyWeightKg <= 0) return _parseEstimatedCalories(metric);
 
+  final sets = _loggedSetsFromMetric(metric, exerciseName);
+  if (sets.isNotEmpty) {
+    return _estimatedWorkoutCalories(
+      bodyWeightKg: bodyWeightKg,
+      sets: sets,
+    ).calories;
+  }
+
   return _estimatedWorkoutCalories(
     bodyWeightKg: bodyWeightKg,
-    setCount: setCount,
-  );
+    sets: _fallbackCalorieSets(exerciseName: exerciseName, setCount: setCount),
+  ).calories;
 }
 
 double _parseLoggedBodyWeightKg(String value) {
@@ -4777,22 +6084,187 @@ double _parseLoggedBodyWeightKg(String value) {
   );
 }
 
-int _estimatedWorkoutCalories({
+class _WorkoutCalorieEstimate {
+  const _WorkoutCalorieEstimate({
+    required this.calories,
+    required this.activeMinutes,
+    required this.restMinutes,
+    required this.averageMet,
+  });
+
+  final int calories;
+  final double activeMinutes;
+  final double restMinutes;
+  final double averageMet;
+
+  String get detail {
+    return 'Calorie model: active ${_formatCompactNumber(activeMinutes)} min | '
+        'rest ${_formatCompactNumber(restMinutes)} min | '
+        'avg MET ${_formatCompactNumber(averageMet)}';
+  }
+}
+
+_WorkoutCalorieEstimate _estimatedWorkoutCalories({
   required double bodyWeightKg,
+  required List<_LoggedWorkoutSet> sets,
+}) {
+  if (bodyWeightKg <= 0 || sets.isEmpty) {
+    return const _WorkoutCalorieEstimate(
+      calories: 0,
+      activeMinutes: 0,
+      restMinutes: 0,
+      averageMet: 0,
+    );
+  }
+
+  var activeCalories = 0.0;
+  var restCalories = 0.0;
+  var activeMinutes = 0.0;
+  var restMinutes = 0.0;
+  var weightedMetTotal = 0.0;
+
+  for (final set in sets) {
+    final exercise = _workoutExerciseForName(set.exerciseName);
+    final active = _activeMinutesForSet(set);
+    final rest = _restMinutesForSet(set, exercise);
+    final activeMet = _activeMetForSet(set, exercise, bodyWeightKg);
+    const restMet = 1.5;
+
+    activeCalories += _metCalories(
+      met: activeMet,
+      bodyWeightKg: bodyWeightKg,
+      minutes: active,
+    );
+    restCalories += _metCalories(
+      met: restMet,
+      bodyWeightKg: bodyWeightKg,
+      minutes: rest,
+    );
+    activeMinutes += active;
+    restMinutes += rest;
+    weightedMetTotal += activeMet * active;
+  }
+
+  final averageMet = activeMinutes <= 0
+      ? 0.0
+      : weightedMetTotal / activeMinutes;
+
+  return _WorkoutCalorieEstimate(
+    calories: (activeCalories + restCalories).round(),
+    activeMinutes: activeMinutes,
+    restMinutes: restMinutes,
+    averageMet: averageMet,
+  );
+}
+
+double _metCalories({
+  required double met,
+  required double bodyWeightKg,
+  required double minutes,
+}) {
+  return met * 3.5 * bodyWeightKg / 200 * minutes;
+}
+
+List<_LoggedWorkoutSet> _loggedSetsFromMetric(
+  String metric,
+  String exerciseName,
+) {
+  final lines = metric
+      .split(RegExp(r'[\n\r]+'))
+      .where(
+        (line) => RegExp(r'\bset\s+\d+\b', caseSensitive: false).hasMatch(line),
+      )
+      .toList();
+
+  return [
+    for (final line in lines)
+      _LoggedWorkoutSet(
+        exerciseName: exerciseName,
+        weightKg: _firstDouble(
+          RegExp(r'(\d+(?:\.\d+)?)\s*kg', caseSensitive: false),
+          line,
+        ),
+        reps: _firstInt(RegExp(r'(\d+)\s*reps?', caseSensitive: false), line),
+        rir: _firstInt(
+          RegExp(r'\brir\s*(\d+)', caseSensitive: false),
+          line,
+          fallback: 2,
+        ),
+      ),
+  ];
+}
+
+List<_LoggedWorkoutSet> _fallbackCalorieSets({
+  required String exerciseName,
   required int setCount,
 }) {
-  if (bodyWeightKg <= 0 || setCount <= 0) return 0;
+  if (setCount <= 0) return const [];
 
-  const activeMet = 5.0;
-  const restMet = 1.5;
-  const activeMinutesPerSet = 0.75;
-  const restMinutesPerSet = 1.25;
-  final activeCalories =
-      activeMet * 3.5 * bodyWeightKg / 200 * activeMinutesPerSet * setCount;
-  final restCalories =
-      restMet * 3.5 * bodyWeightKg / 200 * restMinutesPerSet * setCount;
+  final exercise = _workoutExerciseForName(exerciseName);
+  final reps = int.tryParse(exercise?.defaultReps ?? '') ?? 10;
+  final rir = exercise?.targetRir ?? 2;
 
-  return (activeCalories + restCalories).round();
+  return [
+    for (var index = 0; index < setCount; index++)
+      _LoggedWorkoutSet(
+        exerciseName: exerciseName,
+        weightKg: 0,
+        reps: reps,
+        rir: rir,
+      ),
+  ];
+}
+
+double _activeMinutesForSet(_LoggedWorkoutSet set) {
+  if (_isStretchExerciseName(set.exerciseName)) {
+    return (set.reps / 60).clamp(0.25, 2.5).toDouble();
+  }
+
+  final secondsPerRep = _isBodyweightExerciseName(set.exerciseName) ? 2.5 : 3.5;
+  return (set.reps * secondsPerRep / 60).clamp(0.35, 2.0).toDouble();
+}
+
+double _restMinutesForSet(_LoggedWorkoutSet set, _WorkoutExercise? exercise) {
+  if (_isStretchExerciseName(set.exerciseName)) return 0.25;
+
+  final base = switch (exercise?.fatigueProfile ?? _FatigueProfile.moderate) {
+    _FatigueProfile.low => 0.9,
+    _FatigueProfile.moderate => 1.4,
+    _FatigueProfile.high => 2.25,
+  };
+  final effortAdjustment = (2 - set.rir).clamp(-1, 2) * 0.15;
+
+  return (base + effortAdjustment).clamp(0.5, 3.0).toDouble();
+}
+
+double _activeMetForSet(
+  _LoggedWorkoutSet set,
+  _WorkoutExercise? exercise,
+  double bodyWeightKg,
+) {
+  final baseMet = _baseMetForExercise(set.exerciseName, exercise);
+  final rirAdjustment = switch (set.rir) {
+    <= 0 => 1.18,
+    1 => 1.1,
+    2 => 1.0,
+    3 => 0.92,
+    _ => 0.84,
+  };
+  final loadRatio = bodyWeightKg <= 0 ? 0 : set.weightKg / bodyWeightKg;
+  final loadAdjustment = 1 + (loadRatio * 0.12).clamp(0.0, 0.25);
+
+  return (baseMet * rirAdjustment * loadAdjustment).clamp(1.8, 8.0).toDouble();
+}
+
+double _baseMetForExercise(String exerciseName, _WorkoutExercise? exercise) {
+  if (_isStretchExerciseName(exerciseName)) return 2.3;
+  if (_isBodyweightExerciseName(exerciseName)) return 4.0;
+
+  return switch (exercise?.fatigueProfile ?? _FatigueProfile.moderate) {
+    _FatigueProfile.low => 3.8,
+    _FatigueProfile.moderate => 5.0,
+    _FatigueProfile.high => 6.0,
+  };
 }
 
 Map<String, int> _exerciseComplaintCounts(List<PersonalLogEntry> entries) {
@@ -5113,7 +6585,13 @@ String _displayMetric(PersonalLogEntry entry) {
     (match) => '${match.group(1)} sets | target ${match.group(2)} reps',
   );
   final parsed = _parseGuidedMetric(metric) ?? _parseManualMetric(metric);
-  final calories = parsed == null ? 0 : _caloriesForMetric(metric, parsed.sets);
+  final calories = parsed == null
+      ? 0
+      : _caloriesForMetric(
+          metric,
+          parsed.sets,
+          _exerciseNameFromTitle(entry.title),
+        );
 
   if (calories > 0) {
     displayMetric = displayMetric.replaceAll(

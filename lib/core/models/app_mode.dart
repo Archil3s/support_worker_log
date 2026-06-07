@@ -1,4 +1,4 @@
-enum AppMode { work, personal }
+enum AppMode { work, personal, paye }
 
 extension AppModeLabel on AppMode {
   String get label {
@@ -7,6 +7,8 @@ extension AppModeLabel on AppMode {
         return 'Work';
       case AppMode.personal:
         return 'Personal';
+      case AppMode.paye:
+        return 'PAYE job';
     }
   }
 }

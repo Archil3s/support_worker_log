@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
+import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -346,10 +347,98 @@ void main() {
       expect(documentText, isNot(contains('Safety concerns')));
     },
   );
+
+  test('syncPersonalLivingSheet uploads a live Excel dashboard', () {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    return service
+        .syncPersonalLivingSheet(
+          accessToken: 'token',
+          parentFolderId: 'personal-root',
+          entries: [
+            PersonalLogEntry(
+              id: 'personal-1',
+              category: PersonalLogCategory.gym,
+              date: DateTime(2026, 6, 4),
+              title: 'Push: Bench Press',
+              metric: '80 kg | 3 x 5 reps',
+              notes: 'Solid.',
+            ),
+          ],
+        )
+        .then((_) {
+          final upload = api.uploads.singleWhere(
+            (item) => item.name == 'Personal Log - Live Dashboard.xlsx',
+          );
+
+          expect(upload.parentId, 'personal-root');
+          expect(upload.mimeType, _xlsxMimeType);
+          expect(upload.contentMimeType, _xlsxMimeType);
+          expect(
+            Excel.decodeBytes(upload.bytes).sheets.keys,
+            containsAll([
+              'Dashboard',
+              'Gym Summary',
+              'Workout Trend',
+              'Body Weight',
+              'Personal Logs',
+            ]),
+          );
+        });
+  });
+
+  test(
+    'savePayeNote stores blank docx under person and year folders',
+    () async {
+      final api = _FakeGoogleDriveApi(children: const []);
+      final service = GoogleDriveService(api: api);
+
+      await service.savePayeNote(
+        accessToken: 'token',
+        notesFolderId: 'paye-notes',
+        entry: WorkEntry(
+          id: 'paye-1',
+          client: 'Jane Smith',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 7),
+          startTime: const TimeOfDay(hour: 10, minute: 30),
+          minutes: 30,
+          notes: const ['Roster question answered'],
+          odometerStart: 10,
+          odometerEnd: 14.5,
+          supportNoteBreakdown:
+              'Main topic(s)\nRoster question answered\n\n'
+              'Outcome(s)\nShift confirmed\n\n'
+              'Next action(s)\nSend policy link\n\n'
+              'Overall impression\nSettled\n\n'
+              'Local referral tracking\nNone\n\n'
+              'Safety concerns\nNone noted',
+        ),
+      );
+
+      final upload = api.uploads.singleWhere(
+        (item) => item.name == '2026-06-07_Jane_Smith.docx',
+      );
+      final documentText = _docxText(upload.bytes);
+
+      expect(upload.parentId, 'paye-notes/Jane Smith/2026');
+      expect(upload.mimeType, _docxMimeType);
+      expect(documentText, contains('PAYE Support Note'));
+      expect(documentText, contains('Jane Smith'));
+      expect(documentText, contains('Kilometres: 4.5'));
+      expect(documentText, contains('Roster question answered'));
+      expect(documentText, contains('Shift confirmed'));
+      expect(documentText, contains('Send policy link'));
+      expect(documentText, isNot(contains('Invoice')));
+    },
+  );
 }
 
 const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const _xlsxMimeType =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({required this.children});

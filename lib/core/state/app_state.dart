@@ -7,6 +7,7 @@ import '../models/app_mode.dart';
 import '../models/app_settings.dart';
 import '../models/general_action.dart';
 import '../models/google_export_account_scope.dart';
+import '../models/google_drive_file.dart';
 import '../models/invoice_status.dart';
 import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
@@ -42,6 +43,7 @@ class AppState extends ChangeNotifier {
 
   final List<String> _clients = [];
   final List<WorkEntry> _entries = [];
+  final List<WorkEntry> _payeEntries = [];
   final List<GeneralActionItem> _generalActions = [];
   final List<PersonalLogEntry> _personalLogEntries = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
@@ -62,7 +64,11 @@ class AppState extends ChangeNotifier {
   AppMode get appMode => _appMode;
   ActiveVisit? get activeVisit => _activeVisit;
   List<String> get clients => List.unmodifiable(_clients);
-  List<WorkEntry> get entries => List.unmodifiable(_entries);
+  bool get isPayeMode => _appMode == AppMode.paye;
+  List<WorkEntry> get workEntries => List.unmodifiable(_entries);
+  List<WorkEntry> get entries =>
+      List.unmodifiable(isPayeMode ? _payeEntries : _entries);
+  List<WorkEntry> get payeEntries => List.unmodifiable(_payeEntries);
   List<GeneralActionItem> get generalActions =>
       List.unmodifiable(_generalActions);
   List<PersonalLogEntry> get personalLogEntries =>
@@ -86,11 +92,16 @@ class AppState extends ChangeNotifier {
   String? get personalGoogleAccountEmail =>
       _googleExportAccountService.emailFor(GoogleExportAccountScope.personal) ??
       _settings.googlePersonalAccountEmail;
+  String? get payeGoogleAccountEmail =>
+      _googleExportAccountService.emailFor(GoogleExportAccountScope.paye) ??
+      _settings.googlePayeAccountEmail;
   bool get workGoogleServicesConnected =>
       _workGoogleCalendarAccessToken != null &&
       _workGoogleDriveAccessToken != null;
   bool get personalGoogleServicesConnected => _googleExportAccountService
       .isConnected(GoogleExportAccountScope.personal);
+  bool get payeGoogleServicesConnected =>
+      _googleExportAccountService.isConnected(GoogleExportAccountScope.paye);
   bool get googleServicesConnected => workGoogleServicesConnected;
 
   String? get _workGoogleCalendarAccessToken {
@@ -281,7 +292,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     if (scope == GoogleExportAccountScope.work) {
       _scheduleDriveInvoiceSync();
-    } else {
+    } else if (scope == GoogleExportAccountScope.personal) {
       _scheduleDrivePersonalSync();
     }
     return connection.accessToken;
@@ -299,6 +310,61 @@ class AppState extends ChangeNotifier {
       scope: GoogleExportAccountScope.personal,
       forceRefresh: forceRefresh,
     );
+  }
+
+  Future<String> connectPayeGoogle({bool forceRefresh = false}) {
+    return connectGoogleDrive(
+      scope: GoogleExportAccountScope.paye,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<GoogleDriveFile> syncWorkLivingSheetToDrive() async {
+    var accessToken = _workGoogleDriveAccessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      accessToken = await connectWorkGoogle();
+    }
+
+    final rootFolderId = await _ensureWorkDriveRootFolder(accessToken);
+    final file = await _googleDriveService.syncWorkLivingSheet(
+      accessToken: accessToken,
+      rootFolderId: rootFolderId,
+      entries: _entries,
+      settings: _settings,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+    return file;
+  }
+
+  Future<GoogleDriveFile> syncPersonalLivingSheetToDrive() async {
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.personal,
+    )) {
+      await connectPersonalGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.personal,
+    );
+    await _ensurePersonalNotesDriveFolder(accessToken);
+    final personalRootFolderId = _settings.personalGoogleDriveRootFolderId;
+    final parentFolderId =
+        personalRootFolderId == null || personalRootFolderId.isEmpty
+        ? _settings.personalGoogleDrivePersonalNotesFolderId!
+        : personalRootFolderId;
+    final file = await _googleDriveService.syncPersonalLivingSheet(
+      accessToken: accessToken,
+      parentFolderId: parentFolderId,
+      entries: _personalLogEntries,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+    return file;
   }
 
   Future<void> syncPersonalLogsToDrive() async {
@@ -325,6 +391,29 @@ class AppState extends ChangeNotifier {
     );
     final folderId = await _ensurePersonalNotesDriveFolder(accessToken);
     return folderId;
+  }
+
+  Future<GoogleDriveFile> savePayeNoteToDrive(WorkEntry entry) async {
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.paye,
+    )) {
+      await connectPayeGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    final notesFolderId = await _ensurePayeNotesDriveFolder(accessToken);
+    final file = await _googleDriveService.savePayeNote(
+      accessToken: accessToken,
+      notesFolderId: notesFolderId,
+      entry: entry,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+    return file;
   }
 
   Future<String> ensurePersonalCategoryDriveFolderId(
@@ -424,6 +513,7 @@ class AppState extends ChangeNotifier {
       ..addAll(['Client A', 'Client B', 'Client C']);
 
     _entries.clear();
+    _payeEntries.clear();
     _generalActions.clear();
     _personalLogEntries.clear();
     _invoiceStatuses.clear();
@@ -466,16 +556,29 @@ class AppState extends ChangeNotifier {
   }
 
   void completeActiveVisit(WorkEntry entry) {
-    _entries.insert(0, entry);
+    if (isPayeMode) {
+      _payeEntries.insert(0, entry);
+    } else {
+      _entries.insert(0, entry);
+    }
     _activeVisit = null;
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
 
   void addEntry(WorkEntry entry) {
-    _entries.insert(0, entry);
+    if (isPayeMode) {
+      _payeEntries.insert(0, entry);
+    } else {
+      _entries.insert(0, entry);
+    }
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
+  }
+
+  void addPayeEntry(WorkEntry entry) {
+    _payeEntries.insert(0, entry);
+    _persistAndNotify();
   }
 
   void addGeneralAction(GeneralActionItem action) {
@@ -532,48 +635,86 @@ class AppState extends ChangeNotifier {
   void addEntries(List<WorkEntry> entries) {
     if (entries.isEmpty) return;
 
-    _entries.insertAll(0, entries);
+    if (isPayeMode) {
+      _payeEntries.insertAll(0, entries);
+    } else {
+      _entries.insertAll(0, entries);
+    }
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
 
   void updateEntry(WorkEntry updatedEntry) {
-    final index = _entries.indexWhere((entry) => entry.id == updatedEntry.id);
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    final index = activeEntries.indexWhere(
+      (entry) => entry.id == updatedEntry.id,
+    );
     if (index == -1) return;
 
-    final currentEntry = _entries[index];
+    final currentEntry = activeEntries[index];
     final shouldResetCalendar =
         currentEntry.googleCalendarEntered &&
         updatedEntry.googleCalendarEntered &&
         !currentEntry.hasSameCalendarEventDetails(updatedEntry);
 
-    _entries[index] = shouldResetCalendar
+    activeEntries[index] = shouldResetCalendar
         ? updatedEntry.copyWith(googleCalendarEntered: false)
         : updatedEntry;
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
+  }
+
+  void updatePayeEntry(WorkEntry updatedEntry) {
+    final index = _payeEntries.indexWhere(
+      (entry) => entry.id == updatedEntry.id,
+    );
+    if (index == -1) return;
+
+    _payeEntries[index] = updatedEntry;
+    _persistAndNotify();
   }
 
   RemovedEntry? deleteEntry(WorkEntry entry) {
-    final index = _entries.indexWhere((item) => item.id == entry.id);
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    final index = activeEntries.indexWhere((item) => item.id == entry.id);
     if (index == -1) return null;
 
-    final removed = _entries.removeAt(index);
+    final removed = activeEntries.removeAt(index);
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
 
     return RemovedEntry(entry: removed, index: index);
   }
 
-  void restoreEntry(RemovedEntry removedEntry) {
-    final index = _boundedIndex(removedEntry.index);
-    _entries.insert(index, removedEntry.entry);
+  RemovedEntry? deletePayeEntry(WorkEntry entry) {
+    final index = _payeEntries.indexWhere((item) => item.id == entry.id);
+    if (index == -1) return null;
+
+    final removed = _payeEntries.removeAt(index);
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+
+    return RemovedEntry(entry: removed, index: index);
+  }
+
+  void restorePayeEntry(RemovedEntry removedEntry) {
+    final index = _boundedPayeIndex(removedEntry.index);
+    _payeEntries.insert(index, removedEntry.entry);
+    _persistAndNotify();
+  }
+
+  void restoreEntry(RemovedEntry removedEntry) {
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    final index = isPayeMode
+        ? _boundedPayeIndex(removedEntry.index)
+        : _boundedIndex(removedEntry.index);
+    activeEntries.insert(index, removedEntry.entry);
+    _persistAndNotify();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
 
   void duplicateEntry(WorkEntry entry) {
-    _entries.insert(
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    activeEntries.insert(
       0,
       entry.copyWith(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -583,7 +724,7 @@ class AppState extends ChangeNotifier {
       ),
     );
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
 
   bool addClient(String client) {
@@ -599,7 +740,10 @@ class AppState extends ChangeNotifier {
   }
 
   int clientUsageCount(String client) {
-    return _entries.where((entry) => entry.client == client).length;
+    return [
+      ..._entries,
+      ..._payeEntries,
+    ].where((entry) => entry.client == client).length;
   }
 
   bool isClientUsed(String client) {
@@ -638,6 +782,14 @@ class AppState extends ChangeNotifier {
 
       if (entry.client == oldName) {
         _entries[index] = entry.copyWith(client: trimmed);
+      }
+    }
+
+    for (var index = 0; index < _payeEntries.length; index++) {
+      final entry = _payeEntries[index];
+
+      if (entry.client == oldName) {
+        _payeEntries[index] = entry.copyWith(client: trimmed);
       }
     }
 
@@ -826,10 +978,13 @@ class AppState extends ChangeNotifier {
 
     final accessToken = await requireGoogleDriveAccessToken();
     var syncSettings = _settings;
+    var rootFolderId = syncSettings.googleDriveRootFolderId;
     var clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
     var invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
 
-    if (clientNotesFolderId == null ||
+    if (rootFolderId == null ||
+        rootFolderId.isEmpty ||
+        clientNotesFolderId == null ||
         clientNotesFolderId.isEmpty ||
         invoicesFolderId == null ||
         invoicesFolderId.isEmpty) {
@@ -839,6 +994,7 @@ class AppState extends ChangeNotifier {
 
       _settings = folderSetup.applyTo(_settings);
       syncSettings = _settings;
+      rootFolderId = syncSettings.googleDriveRootFolderId;
       clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
       invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
 
@@ -848,7 +1004,9 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     }
 
-    if (clientNotesFolderId == null ||
+    if (rootFolderId == null ||
+        rootFolderId.isEmpty ||
+        clientNotesFolderId == null ||
         clientNotesFolderId.isEmpty ||
         invoicesFolderId == null ||
         invoicesFolderId.isEmpty) {
@@ -857,6 +1015,7 @@ class AppState extends ChangeNotifier {
 
     await _driveInvoiceSyncService.syncInvoiceCycles(
       accessToken: accessToken,
+      rootFolderId: rootFolderId,
       clientNotesFolderId: clientNotesFolderId,
       invoicesFolderId: invoicesFolderId,
       entries: _entries,
@@ -902,16 +1061,40 @@ class AppState extends ChangeNotifier {
     final personalNotesFolderId = await _ensurePersonalNotesDriveFolder(
       accessToken,
     );
+    final personalRootFolderId = _settings.personalGoogleDriveRootFolderId;
+    final personalDashboardFolderId =
+        personalRootFolderId == null || personalRootFolderId.isEmpty
+        ? personalNotesFolderId
+        : personalRootFolderId;
 
-    await _googleDriveService.syncPersonalLogEntries(
+    await _googleDriveService.syncPersonalLivingSheet(
       accessToken: accessToken,
-      personalNotesFolderId: personalNotesFolderId,
+      parentFolderId: personalDashboardFolderId,
       entries: _personalLogEntries,
     );
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
     notifyListeners();
+  }
+
+  Future<String> _ensureWorkDriveRootFolder(String accessToken) async {
+    final existing = _settings.googleDriveRootFolderId;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final folderSetup = await _googleDriveService.createFolderSetup(
+      accessToken: accessToken,
+    );
+    _settings = folderSetup.applyTo(_settings);
+
+    final data = _currentStoredData();
+    await _storageService.save(data);
+    if (_cloudStorageService.isSignedIn) {
+      await _cloudStorageService.save(data);
+    }
+    notifyListeners();
+
+    return _settings.googleDriveRootFolderId!;
   }
 
   Future<String> _ensurePersonalNotesDriveFolder(String accessToken) async {
@@ -945,6 +1128,37 @@ class AppState extends ChangeNotifier {
     return _settings.personalGoogleDrivePersonalNotesFolderId!;
   }
 
+  Future<String> _ensurePayeNotesDriveFolder(String accessToken) async {
+    final existing = _settings.payeGoogleDriveNotesFolderId;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final rootFolderId = _settings.payeGoogleDriveRootFolderId;
+    if (rootFolderId == null || rootFolderId.isEmpty) {
+      final folderSetup = await _googleDriveService.createPayeFolderSetup(
+        accessToken: accessToken,
+      );
+      _settings = folderSetup.applyTo(_settings);
+    } else {
+      final notesFolder = await _googleDriveService.findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: rootFolderId,
+        name: 'PAYE Notes',
+      );
+      _settings = _settings.copyWith(
+        payeGoogleDriveNotesFolderId: notesFolder.id,
+      );
+    }
+
+    final data = _currentStoredData();
+    await _storageService.save(data);
+    if (_cloudStorageService.isSignedIn) {
+      await _cloudStorageService.save(data);
+    }
+    notifyListeners();
+
+    return _settings.payeGoogleDriveNotesFolderId!;
+  }
+
   void _saveGoogleExportEmail(GoogleExportConnection connection) {
     final email = connection.email?.trim();
     if (email == null || email.isEmpty) return;
@@ -970,6 +1184,17 @@ class AppState extends ChangeNotifier {
         _settings = _settings.copyWith(
           googlePersonalAccountEmail: email,
           clearPersonalGoogleDriveFolders: accountChanged,
+        );
+        break;
+      case GoogleExportAccountScope.paye:
+        final previous = _settings.googlePayeAccountEmail?.trim();
+        final accountChanged =
+            previous == null ||
+            previous.isEmpty ||
+            previous.toLowerCase() != email.toLowerCase();
+        _settings = _settings.copyWith(
+          googlePayeAccountEmail: email,
+          clearPayeGoogleDriveFolders: accountChanged,
         );
         break;
     }
@@ -1007,6 +1232,9 @@ class AppState extends ChangeNotifier {
     _entries
       ..clear()
       ..addAll(cleanedEntries);
+    _payeEntries
+      ..clear()
+      ..addAll(_dedupeEntries(data.payeEntries));
 
     _invoiceStatuses
       ..clear()
@@ -1040,6 +1268,10 @@ class AppState extends ChangeNotifier {
       ...cloudData.generalActions,
       ...localData.generalActions,
     ]);
+    final mergedPayeEntries = _dedupeEntries([
+      ...cloudData.payeEntries,
+      ...localData.payeEntries,
+    ]);
     final mergedPersonalLogs = _dedupePersonalLogEntries([
       ...cloudData.personalLogEntries,
       ...localData.personalLogEntries,
@@ -1049,6 +1281,7 @@ class AppState extends ChangeNotifier {
       settings: cloudData.settings,
       clients: mergedClients.isEmpty ? ['Client A'] : mergedClients,
       entries: mergedEntries,
+      payeEntries: mergedPayeEntries,
       activeVisit: cloudData.activeVisit ?? localData.activeVisit,
       generalActions: mergedGeneralActions,
       invoiceStatuses: {
@@ -1069,6 +1302,7 @@ class AppState extends ChangeNotifier {
       settings: _settings,
       clients: _clients,
       entries: _entries,
+      payeEntries: _payeEntries,
       activeVisit: _activeVisit,
       generalActions: _generalActions,
       invoiceStatuses: _invoiceStatuses,
@@ -1166,6 +1400,12 @@ class AppState extends ChangeNotifier {
   int _boundedIndex(int index) {
     if (index < 0) return 0;
     if (index > _entries.length) return _entries.length;
+    return index;
+  }
+
+  int _boundedPayeIndex(int index) {
+    if (index < 0) return 0;
+    if (index > _payeEntries.length) return _payeEntries.length;
     return index;
   }
 

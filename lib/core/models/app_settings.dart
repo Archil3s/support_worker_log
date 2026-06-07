@@ -19,6 +19,9 @@ class AppSettings {
     this.googleDrivePersonalNotesFolderId,
     this.googleWorkAccountEmail,
     this.googlePersonalAccountEmail,
+    this.googlePayeAccountEmail,
+    this.payeGoogleDriveRootFolderId,
+    this.payeGoogleDriveNotesFolderId,
     this.personalGoogleDriveRootFolderId,
     this.personalGoogleDrivePersonalNotesFolderId,
   });
@@ -66,6 +69,9 @@ class AppSettings {
   final String? googleDrivePersonalNotesFolderId;
   final String? googleWorkAccountEmail;
   final String? googlePersonalAccountEmail;
+  final String? googlePayeAccountEmail;
+  final String? payeGoogleDriveRootFolderId;
+  final String? payeGoogleDriveNotesFolderId;
   final String? personalGoogleDriveRootFolderId;
   final String? personalGoogleDrivePersonalNotesFolderId;
 
@@ -90,10 +96,14 @@ class AppSettings {
     String? googleDrivePersonalNotesFolderId,
     String? googleWorkAccountEmail,
     String? googlePersonalAccountEmail,
+    String? googlePayeAccountEmail,
+    String? payeGoogleDriveRootFolderId,
+    String? payeGoogleDriveNotesFolderId,
     String? personalGoogleDriveRootFolderId,
     String? personalGoogleDrivePersonalNotesFolderId,
     bool clearGoogleDriveFolders = false,
     bool clearPersonalGoogleDriveFolders = false,
+    bool clearPayeGoogleDriveFolders = false,
   }) {
     return AppSettings(
       hourlyRate: hourlyRate ?? this.hourlyRate,
@@ -136,6 +146,14 @@ class AppSettings {
           googleWorkAccountEmail ?? this.googleWorkAccountEmail,
       googlePersonalAccountEmail:
           googlePersonalAccountEmail ?? this.googlePersonalAccountEmail,
+      googlePayeAccountEmail:
+          googlePayeAccountEmail ?? this.googlePayeAccountEmail,
+      payeGoogleDriveRootFolderId: clearPayeGoogleDriveFolders
+          ? null
+          : payeGoogleDriveRootFolderId ?? this.payeGoogleDriveRootFolderId,
+      payeGoogleDriveNotesFolderId: clearPayeGoogleDriveFolders
+          ? null
+          : payeGoogleDriveNotesFolderId ?? this.payeGoogleDriveNotesFolderId,
       personalGoogleDriveRootFolderId: clearPersonalGoogleDriveFolders
           ? null
           : personalGoogleDriveRootFolderId ??
@@ -168,6 +186,9 @@ class AppSettings {
       'googleDrivePersonalNotesFolderId': googleDrivePersonalNotesFolderId,
       'googleWorkAccountEmail': googleWorkAccountEmail,
       'googlePersonalAccountEmail': googlePersonalAccountEmail,
+      'googlePayeAccountEmail': googlePayeAccountEmail,
+      'payeGoogleDriveRootFolderId': payeGoogleDriveRootFolderId,
+      'payeGoogleDriveNotesFolderId': payeGoogleDriveNotesFolderId,
       'personalGoogleDriveRootFolderId': personalGoogleDriveRootFolderId,
       'personalGoogleDrivePersonalNotesFolderId':
           personalGoogleDrivePersonalNotesFolderId,
@@ -239,6 +260,9 @@ class AppSettings {
       ),
       googleWorkAccountEmail: readString('googleWorkAccountEmail'),
       googlePersonalAccountEmail: readString('googlePersonalAccountEmail'),
+      googlePayeAccountEmail: readString('googlePayeAccountEmail'),
+      payeGoogleDriveRootFolderId: readString('payeGoogleDriveRootFolderId'),
+      payeGoogleDriveNotesFolderId: readString('payeGoogleDriveNotesFolderId'),
       personalGoogleDriveRootFolderId: readString(
         'personalGoogleDriveRootFolderId',
       ),

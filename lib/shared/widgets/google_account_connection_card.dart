@@ -54,12 +54,17 @@ class _GoogleAccountConnectionCardState
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final connected = widget.scope == GoogleExportAccountScope.work
-        ? appState.workGoogleServicesConnected
-        : appState.personalGoogleServicesConnected;
-    final email = widget.scope == GoogleExportAccountScope.work
-        ? appState.workGoogleAccountEmail
-        : appState.personalGoogleAccountEmail;
+    final connected = switch (widget.scope) {
+      GoogleExportAccountScope.work => appState.workGoogleServicesConnected,
+      GoogleExportAccountScope.personal =>
+        appState.personalGoogleServicesConnected,
+      GoogleExportAccountScope.paye => appState.payeGoogleServicesConnected,
+    };
+    final email = switch (widget.scope) {
+      GoogleExportAccountScope.work => appState.workGoogleAccountEmail,
+      GoogleExportAccountScope.personal => appState.personalGoogleAccountEmail,
+      GoogleExportAccountScope.paye => appState.payeGoogleAccountEmail,
+    };
     final statusColor = connected
         ? const Color(0xFF31E981)
         : const Color(0xFFFFC857);
@@ -146,6 +151,8 @@ class _GoogleAccountConnectionCardState
         return 'Used for Google Calendar, Google Drive notes, invoices, and Docs files.';
       case GoogleExportAccountScope.personal:
         return 'Used for personal Google Drive notes and progress files.';
+      case GoogleExportAccountScope.paye:
+        return 'Used for PAYE job files and this separate work account.';
     }
   }
 }
