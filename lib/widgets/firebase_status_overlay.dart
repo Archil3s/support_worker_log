@@ -17,16 +17,29 @@ class FirebaseStatusOverlay extends StatefulWidget {
 
 class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
   Timer? _autoSyncTimer;
+  Timer? _sessionCountdownTimer;
 
   bool _expanded = false;
   bool _syncing = false;
+  bool _sessionExpiryRunning = false;
   String? _lastAutoSyncUid;
   String? _manualMessage;
   DateTime? _lastChecked;
 
   @override
+  void initState() {
+    super.initState();
+    _sessionCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+      _signOutIfSessionExpired();
+    });
+  }
+
+  @override
   void dispose() {
     _autoSyncTimer?.cancel();
+    _sessionCountdownTimer?.cancel();
     super.dispose();
   }
 
@@ -126,6 +139,22 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     }
   }
 
+  Future<void> _signOutIfSessionExpired() async {
+    if (_sessionExpiryRunning || !mounted) return;
+
+    final appState = context.read<AppState>();
+    if (!appState.isSignedIn || appState.sessionExpiresAt == null) return;
+    if (appState.sessionExpiresAt!.isAfter(DateTime.now())) return;
+
+    _sessionExpiryRunning = true;
+
+    try {
+      await appState.signOutIfSessionExpired();
+    } finally {
+      _sessionExpiryRunning = false;
+    }
+  }
+
   String _userLabel(User user) {
     return user.email ?? user.displayName ?? user.phoneNumber ?? user.uid;
   }
@@ -151,6 +180,24 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
       return 'Sync warning: ${appState.cloudSyncError}';
     }
     return 'Signed in. Waiting for first Firebase sync...';
+  }
+
+  String? _sessionCountdownText(AppState appState) {
+    final expiresAt = appState.sessionExpiresAt;
+    if (expiresAt == null || !appState.isSignedIn) return null;
+
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) return 'Auto logout now';
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes.remainder(60);
+    final seconds = remaining.inSeconds.remainder(60);
+
+    if (hours > 0) {
+      return 'Auto logout in ${hours}h ${minutes.toString().padLeft(2, '0')}m';
+    }
+
+    return 'Auto logout in ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
   Widget _actionButton({
@@ -184,6 +231,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
   Widget _collapsed({required User user, required AppState appState}) {
     final live = _isLive(appState);
+    final sessionText = _sessionCountdownText(appState);
 
     return GestureDetector(
       onTap: () {
@@ -192,7 +240,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         });
       },
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 172),
+        constraints: const BoxConstraints(maxWidth: 230),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFF151B29),
@@ -216,19 +264,66 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
             ),
             const SizedBox(width: 7),
             Flexible(
-              child: Text(
-                _firebaseLabel(appState),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  decoration: TextDecoration.none,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _firebaseLabel(appState),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  if (sessionText != null)
+                    Text(
+                      sessionText,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8396C7),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _sessionCountdownRow(AppState appState) {
+    final sessionText = _sessionCountdownText(appState);
+    if (sessionText == null) return const SizedBox.shrink();
+
+    final expiresAt = appState.sessionExpiresAt;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.timer_outlined, color: Color(0xFFFFC857), size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              expiresAt == null
+                  ? sessionText
+                  : '$sessionText\nLogout at $expiresAt',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -364,6 +459,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                     ),
                   ],
                 ),
+                _sessionCountdownRow(appState),
                 if (_lastChecked != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -403,6 +499,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, _) {
+        if (!appState.appUnlocked) return widget.child;
+
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {

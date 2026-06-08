@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
 
@@ -15,8 +16,12 @@ class CloudStorageService {
   final FirebaseFirestore _firestore;
   String? _googleCalendarAccessToken;
   String? _googleDriveAccessToken;
+  DateTime? _sessionExpiresAt;
 
   static const _googleSignInTimeout = Duration(seconds: 75);
+  static const _sessionStartedAtKey =
+      'support_worker_log_session_started_at_v1';
+  static const _sessionMaxAge = Duration(hours: 24);
 
   User? get currentUser => _auth.currentUser;
 
@@ -28,6 +33,8 @@ class CloudStorageService {
 
   String? get googleDriveAccessToken => _googleDriveAccessToken;
 
+  DateTime? get sessionExpiresAt => _sessionExpiresAt;
+
   bool get isGoogleBackedUser {
     final user = currentUser;
     if (user == null) return false;
@@ -38,6 +45,26 @@ class CloudStorageService {
   bool get isSignedIn {
     final user = currentUser;
     return user != null && !user.isAnonymous;
+  }
+
+  Future<bool> signOutIfSessionExpired() async {
+    if (!isSignedIn) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    final startedAtMs = prefs.getInt(_sessionStartedAtKey);
+
+    if (startedAtMs == null) {
+      await _recordSessionStart();
+      return false;
+    }
+
+    final startedAt = DateTime.fromMillisecondsSinceEpoch(startedAtMs);
+    _sessionExpiresAt = startedAt.add(_sessionMaxAge);
+    final expired = DateTime.now().difference(startedAt) >= _sessionMaxAge;
+    if (!expired) return false;
+
+    await signOut();
+    return true;
   }
 
   Future<void> signOutAnonymousUserIfNeeded() async {
@@ -63,6 +90,8 @@ class CloudStorageService {
       throw StateError('Firebase sign-in returned no user.');
     }
 
+    await _recordSessionStart();
+
     return user;
   }
 
@@ -80,6 +109,8 @@ class CloudStorageService {
     if (user == null) {
       throw StateError('Firebase registration returned no user.');
     }
+
+    await _recordSessionStart();
 
     return user;
   }
@@ -103,6 +134,7 @@ class CloudStorageService {
     }
 
     _storeGoogleServicesToken(credential);
+    await _recordSessionStart();
 
     return user;
   }
@@ -275,8 +307,18 @@ class CloudStorageService {
     }
   }
 
-  Future<void> signOut() {
-    return _auth.signOut();
+  Future<void> signOut() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionStartedAtKey);
+    _sessionExpiresAt = null;
+    await _auth.signOut();
+  }
+
+  Future<void> _recordSessionStart() async {
+    final startedAt = DateTime.now();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sessionStartedAtKey, startedAt.millisecondsSinceEpoch);
+    _sessionExpiresAt = startedAt.add(_sessionMaxAge);
   }
 
   DocumentReference<Map<String, dynamic>> get _appDataDoc {

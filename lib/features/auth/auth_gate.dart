@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/services/app_lock_service.dart';
 import '../../core/state/app_state.dart';
 import '../shell/main_shell.dart';
 
@@ -12,10 +13,184 @@ class AuthGate extends StatelessWidget {
     final appState = context.watch<AppState>();
 
     if (appState.isSignedIn) {
+      if (!appState.appUnlocked) return const AppLockScreen();
+
       return const MainShell();
     }
 
     return const AuthScreen();
+  }
+}
+
+class AppLockScreen extends StatefulWidget {
+  const AppLockScreen({super.key});
+
+  @override
+  State<AppLockScreen> createState() => _AppLockScreenState();
+}
+
+class _AppLockScreenState extends State<AppLockScreen> {
+  final service = AppLockService();
+  final lockPasswordController = TextEditingController();
+
+  bool busy = false;
+  String? errorText;
+
+  @override
+  void dispose() {
+    lockPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final password = lockPasswordController.text.trim();
+    if (password.isEmpty) {
+      setState(() => errorText = 'Enter the app password.');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      errorText = null;
+    });
+
+    if (!service.verifyPassword(password)) {
+      setState(() {
+        busy = false;
+        errorText = 'Wrong password.';
+      });
+      return;
+    }
+
+    context.read<AppState>().unlockApp();
+  }
+
+  Future<void> _signOut() async {
+    setState(() {
+      busy = true;
+      errorText = null;
+    });
+
+    try {
+      await context.read<AppState>().signOut();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        busy = false;
+        errorText = error.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Support Worker Log')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 390),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151B29),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFF34405F)),
+              ),
+              child: AutofillGroup(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(
+                      Icons.lock_outline,
+                      size: 44,
+                      color: Color(0xFF4F8DF7),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Enter app password',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 18),
+                    _AppPasswordField(
+                      controller: lockPasswordController,
+                      enabled: !busy,
+                      onSubmitted: (_) {
+                        if (!busy) _submit();
+                      },
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorText!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFFF6B6B),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: busy ? null : _submit,
+                      icon: busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.lock_open_outlined),
+                      label: const Text('Unlock'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: busy ? null : _signOut,
+                      child: const Text('Use different sign-in'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppPasswordField extends StatelessWidget {
+  const _AppPasswordField({
+    required this.controller,
+    required this.enabled,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final bool enabled;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: true,
+      autocorrect: false,
+      enableSuggestions: false,
+      keyboardType: TextInputType.visiblePassword,
+      textInputAction: TextInputAction.done,
+      autofillHints: const [AutofillHints.password],
+      decoration: InputDecoration(
+        labelText: 'Password',
+        prefixIcon: const Icon(Icons.password_outlined),
+      ),
+      onSubmitted: onSubmitted,
+    );
   }
 }
 

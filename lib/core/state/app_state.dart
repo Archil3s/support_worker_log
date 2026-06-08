@@ -64,6 +64,7 @@ class AppState extends ChangeNotifier {
   bool _drivePayeActionsSyncRunning = false;
   bool _drivePayeActionsSyncQueued = false;
   bool _cloudSyncReady = false;
+  bool _appUnlocked = false;
   String? _cloudSyncError;
 
   AppSettings get settings => _settings;
@@ -85,10 +86,12 @@ class AppState extends ChangeNotifier {
       Map.unmodifiable(_invoiceBaselineTotals);
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
+  bool get appUnlocked => _appUnlocked;
   bool get cloudSyncReady => _cloudSyncReady;
   String? get cloudSyncError => _cloudSyncError;
   String? get cloudUserId => _cloudStorageService.userId;
   String? get cloudEmail => _cloudStorageService.email;
+  DateTime? get sessionExpiresAt => _cloudStorageService.sessionExpiresAt;
   String? get googleCalendarAccessToken => _workGoogleCalendarAccessToken;
   String? get googleDriveAccessToken => _workGoogleDriveAccessToken;
   String? get workGoogleAccountEmail =>
@@ -142,11 +145,18 @@ class AppState extends ChangeNotifier {
 
     try {
       await _cloudStorageService.signOutAnonymousUserIfNeeded();
+      final sessionExpired = await _cloudStorageService
+          .signOutIfSessionExpired();
 
-      if (_cloudStorageService.isSignedIn) {
+      if (sessionExpired) {
+        _cloudSyncReady = false;
+        _appUnlocked = false;
+        _cloudSyncError = null;
+      } else if (_cloudStorageService.isSignedIn) {
         unawaited(_syncLocalAndCloudSafely());
       } else {
         _cloudSyncReady = false;
+        _appUnlocked = false;
         _cloudSyncError = null;
       }
     } catch (error) {
@@ -452,7 +462,34 @@ class AppState extends ChangeNotifier {
     await _stopCloudDataSubscription();
     await _cloudStorageService.signOut();
     _cloudSyncReady = false;
+    _appUnlocked = false;
     _cloudSyncError = null;
+    notifyListeners();
+  }
+
+  Future<bool> signOutIfSessionExpired() async {
+    final expired = await _cloudStorageService.signOutIfSessionExpired();
+    if (!expired) return false;
+
+    await _stopCloudDataSubscription();
+    _cloudSyncReady = false;
+    _appUnlocked = false;
+    _cloudSyncError = null;
+    notifyListeners();
+    return true;
+  }
+
+  void unlockApp() {
+    if (_appUnlocked) return;
+
+    _appUnlocked = true;
+    notifyListeners();
+  }
+
+  void lockApp() {
+    if (!_appUnlocked) return;
+
+    _appUnlocked = false;
     notifyListeners();
   }
 
