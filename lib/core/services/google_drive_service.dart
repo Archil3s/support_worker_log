@@ -403,6 +403,100 @@ class GoogleDriveService {
     );
   }
 
+  Future<EntryDriveSupportNoteMeta?> findSupportNoteInDrive({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required WorkEntry entry,
+    DateTime? payPeriodAnchorDate,
+    String? googleAccountEmail,
+  }) async {
+    final folder = await _findExistingSupportNoteFolder(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entry: entry,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+    if (folder == null) return null;
+
+    final files = await listFolder(
+      accessToken: accessToken,
+      folderId: folder.id,
+    );
+    final datePrefix = '${_dateKey(entry.date)}_';
+    final matches =
+        files
+            .where(
+              (file) =>
+                  file.name.startsWith(datePrefix) &&
+                  file.name.endsWith('.docx') &&
+                  file.mimeType == _docxMimeType,
+            )
+            .toList()
+          ..sort((a, b) => b.name.compareTo(a.name));
+
+    if (matches.isEmpty) return null;
+
+    final file = matches.first;
+    return EntryDriveSupportNoteMeta(
+      entryId: entry.id,
+      initials: _initialsFromSupportNoteFileName(file.name, entry.date),
+      status: _statusFromSupportNoteFileName(file.name),
+      fileId: file.id,
+      fileName: file.name,
+      noteText: '',
+      mimeType: file.mimeType,
+      parentFolderId: folder.id,
+      webViewLink: file.webViewLink,
+      contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+      googleAccountEmail: googleAccountEmail?.trim(),
+    );
+  }
+
+  Future<EntryDriveSupportNoteMeta?> findPayeNoteInDrive({
+    required String accessToken,
+    required String notesFolderId,
+    required WorkEntry entry,
+    String? googleAccountEmail,
+  }) async {
+    final personFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: notesFolderId,
+      name: _folderName(entry.client),
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+    if (personFolder == null) return null;
+
+    final yearFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: personFolder.id,
+      name: entry.date.year.toString(),
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+    if (yearFolder == null) return null;
+
+    final file = await _findChild(
+      accessToken: accessToken,
+      parentId: yearFolder.id,
+      name: _payeNoteFileName(entry),
+      mimeType: _docxMimeType,
+    );
+    if (file == null) return null;
+
+    return EntryDriveSupportNoteMeta(
+      entryId: entry.id,
+      initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
+      status: EntrySupportNoteStatus.finished,
+      fileId: file.id,
+      fileName: file.name,
+      noteText: '',
+      mimeType: file.mimeType,
+      parentFolderId: yearFolder.id,
+      webViewLink: file.webViewLink,
+      contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+      googleAccountEmail: googleAccountEmail?.trim(),
+    );
+  }
+
   Future<GoogleDriveFile> _personalLogFolder({
     required String accessToken,
     required String personalNotesFolderId,
@@ -438,6 +532,38 @@ class GoogleDriveService {
       accessToken: accessToken,
       parentId: categoryFolder.id,
       name: entry.date.year.toString(),
+    );
+  }
+
+  Future<GoogleDriveFile?> _findExistingSupportNoteFolder({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required WorkEntry entry,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(range);
+    final clientFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _folderName(entry.client),
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+    if (clientFolder == null) return null;
+
+    final periodFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: clientFolder.id,
+      name: _cycleFolderName(invoiceNumber: invoiceNumber, range: range),
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+    if (periodFolder == null) return null;
+
+    return _findChild(
+      accessToken: accessToken,
+      parentId: periodFolder.id,
+      name: _supportNoteTypeFolderName(entry.type),
+      mimeType: 'application/vnd.google-apps.folder',
     );
   }
 
@@ -773,6 +899,37 @@ class GoogleDriveService {
   String _payeNoteFileName(WorkEntry entry) {
     final person = _folderName(entry.client).replaceAll(' ', '_');
     return '${_dateKey(entry.date)}_$person.docx';
+  }
+
+  String _initialsFromSupportNoteFileName(String fileName, DateTime date) {
+    final datePrefix = '${_dateKey(date)}_';
+    final withoutDate = fileName.startsWith(datePrefix)
+        ? fileName.substring(datePrefix.length)
+        : fileName;
+    final withoutExtension = withoutDate.replaceFirst(
+      RegExp(r'\.docx$', caseSensitive: false),
+      '',
+    );
+    final withoutStatus = withoutExtension.replaceFirst(
+      RegExp(r'_(incomplete|in-progress|finished|submitted)$'),
+      '',
+    );
+    final initials = withoutStatus.replaceAll('_', '').trim().toUpperCase();
+    return initials.isEmpty ? 'NA' : initials;
+  }
+
+  EntrySupportNoteStatus _statusFromSupportNoteFileName(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.contains('_submitted.docx')) {
+      return EntrySupportNoteStatus.submitted;
+    }
+    if (lower.contains('_finished.docx')) {
+      return EntrySupportNoteStatus.finished;
+    }
+    if (lower.contains('_in-progress.docx')) {
+      return EntrySupportNoteStatus.inProgress;
+    }
+    return EntrySupportNoteStatus.incomplete;
   }
 
   _PersonalGymTitleParts _personalGymTitleParts(String title) {

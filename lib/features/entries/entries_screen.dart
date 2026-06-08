@@ -16,6 +16,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
 import 'edit_entry_sheet.dart';
+import 'local_support_note_button.dart';
 
 class EntriesScreen extends StatefulWidget {
   const EntriesScreen({super.key});
@@ -814,6 +815,22 @@ class _EntryCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                LocalSupportNoteButton(entry: entry),
+                TextButton.icon(
+                  onPressed: () => _deleteEntry(context),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF6B6B),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(

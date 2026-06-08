@@ -13,6 +13,7 @@ import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
+import '../entries/local_support_note_button.dart';
 
 String _cleanHeaderText(String value) {
   return value
@@ -699,6 +700,34 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
   }
 
+  void _deleteSavedEntry(WorkEntry entry) {
+    final appState = context.read<AppState>();
+    final removed = appState.deleteEntry(entry);
+
+    if (removed == null) return;
+
+    setState(() {
+      recentlySavedEntry = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Entry deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            appState.restoreEntry(removed);
+            if (mounted) {
+              setState(() {
+                recentlySavedEntry = removed.entry;
+              });
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   void _snack(String message) {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
 
@@ -731,6 +760,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         onEntryUpdated: (entry) {
           setState(() => recentlySavedEntry = entry);
         },
+        onDelete: () => _deleteSavedEntry(recentlySavedEntry!),
         onNewVisit: () {
           setState(() {
             recentlySavedEntry = null;
@@ -1804,12 +1834,14 @@ class _SavedVisitView extends StatefulWidget {
   const _SavedVisitView({
     required this.entry,
     required this.onEntryUpdated,
+    required this.onDelete,
     required this.onNewVisit,
     this.onCalendar,
   });
 
   final WorkEntry entry;
   final ValueChanged<WorkEntry> onEntryUpdated;
+  final VoidCallback onDelete;
   final VoidCallback onNewVisit;
   final VoidCallback? onCalendar;
 
@@ -1995,6 +2027,17 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
             label: const Text('View in App Calendar'),
           ),
         ],
+        const SizedBox(height: 8),
+        LocalSupportNoteButton(entry: entry),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: widget.onDelete,
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Delete Entry'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFFF6B6B),
+          ),
+        ),
         const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: widget.onNewVisit,

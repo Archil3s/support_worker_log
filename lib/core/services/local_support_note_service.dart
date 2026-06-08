@@ -322,11 +322,7 @@ Safety concerns
         bytes: bytes,
         clientInitials: initials.trim().toUpperCase(),
         dateText: formatDate(entry.date),
-        interactionText:
-            '${formatDate(entry.date)} / ${formatTime(entry.startTime)} / '
-            '${entry.baseMinutes} minutes '
-            '(${entry.hours.toStringAsFixed(2)} hours). '
-            '${entry.type.label}.${_kilometresText(entry)}',
+        interactionText: 'Interaction: ${entry.type.label}',
         fallbackNoteText: defaultNoteTextForEntry(entry: entry, status: status),
         noteText: noteText,
       );
@@ -706,10 +702,7 @@ Safety concerns
           bold: true,
         );
       } else if (text.startsWith('Date/time/length of interaction')) {
-        paragraph = _replaceParagraphText(
-          paragraph,
-          'Date/time/length of interaction: $interactionText',
-        );
+        paragraph = _replaceParagraphText(paragraph, interactionText);
       } else if (text.startsWith('Main topic')) {
         pendingBlankFill = sections.mainTopic;
       } else if (text.startsWith('Outcome')) {
@@ -812,11 +805,6 @@ Safety concerns
     }
 
     return buffer.toString();
-  }
-
-  static String _kilometresText(WorkEntry entry) {
-    if (entry.type != EntryType.homeVisit) return '';
-    return ' Kilometres: ${entry.kilometres.toStringAsFixed(1)}.';
   }
 
   static String _xml(String value) {

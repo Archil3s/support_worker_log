@@ -98,6 +98,12 @@ void main() {
       expect(noteUpload.contentMimeType, isNull);
       expect(noteUpload.parentId, contains('/Home Visits'));
       expect(documentText, contains('Name of client: AB'));
+      expect(documentText, contains('Interaction: Home Visit'));
+      expect(documentText, isNot(contains('Date/time/length')));
+      expect(documentText, isNot(contains('9:00')));
+      expect(documentText, isNot(contains('60 minutes')));
+      expect(documentText, isNot(contains('1.00 hours')));
+      expect(documentText, isNot(contains('Kilometres')));
       expect(documentText, contains('Main topic(s)  (max. 200 words)'));
       expect(documentText, contains('Test note'));
       expect(documentText, contains('Outcome(s)  (Max. 100 words)'));
@@ -128,6 +134,122 @@ void main() {
       );
     },
   );
+
+  test(
+    'findSupportNoteInDrive returns existing docx from current folder',
+    () async {
+      final api = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'client-folder',
+              name: 'AB',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'client-folder': [
+            const GoogleDriveFile(
+              id: 'period-folder',
+              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'period-folder': [
+            const GoogleDriveFile(
+              id: 'type-folder',
+              name: 'Home Visits',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'type-folder': [
+            const GoogleDriveFile(
+              id: 'drive-note',
+              name: '2026-06-02_AB_finished.docx',
+              mimeType: _docxMimeType,
+              webViewLink: 'https://drive.example/note',
+            ),
+          ],
+        },
+      );
+      final service = GoogleDriveService(api: api);
+
+      final meta = await service.findSupportNoteInDrive(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entry: WorkEntry(
+          id: 'entry-1',
+          client: 'AB',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 2),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const [],
+        ),
+        googleAccountEmail: 'work@example.com',
+      );
+
+      expect(meta, isNotNull);
+      expect(meta!.fileId, 'drive-note');
+      expect(meta.fileName, '2026-06-02_AB_finished.docx');
+      expect(meta.status, EntrySupportNoteStatus.finished);
+      expect(meta.parentFolderId, 'type-folder');
+      expect(meta.openLink, 'https://drive.example/note');
+      expect(meta.googleAccountEmail, 'work@example.com');
+    },
+  );
+
+  test('findPayeNoteInDrive returns existing PAYE docx', () async {
+    final api = _FakeGoogleDriveApi(
+      childrenByParent: {
+        'paye-notes': [
+          const GoogleDriveFile(
+            id: 'person-folder',
+            name: 'Jane Smith',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'person-folder': [
+          const GoogleDriveFile(
+            id: 'year-folder',
+            name: '2026',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'year-folder': [
+          const GoogleDriveFile(
+            id: 'paye-note',
+            name: '2026-06-07_Jane_Smith.docx',
+            mimeType: _docxMimeType,
+            webViewLink: 'https://drive.example/paye-note',
+          ),
+        ],
+      },
+    );
+    final service = GoogleDriveService(api: api);
+
+    final meta = await service.findPayeNoteInDrive(
+      accessToken: 'token',
+      notesFolderId: 'paye-notes',
+      entry: WorkEntry(
+        id: 'paye-1',
+        client: 'Jane Smith',
+        type: EntryType.homeVisit,
+        date: DateTime(2026, 6, 7),
+        startTime: const TimeOfDay(hour: 10, minute: 30),
+        minutes: 30,
+        notes: const [],
+      ),
+      googleAccountEmail: 'paye@example.com',
+    );
+
+    expect(meta, isNotNull);
+    expect(meta!.fileId, 'paye-note');
+    expect(meta.fileName, '2026-06-07_Jane_Smith.docx');
+    expect(meta.status, EntrySupportNoteStatus.finished);
+    expect(meta.parentFolderId, 'year-folder');
+    expect(meta.openLink, 'https://drive.example/paye-note');
+    expect(meta.googleAccountEmail, 'paye@example.com');
+  });
 
   test('saveSupportNote files text notes under Texts', () async {
     final api = _FakeGoogleDriveApi(children: const []);
@@ -406,9 +528,13 @@ const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
-  _FakeGoogleDriveApi({required this.children});
+  _FakeGoogleDriveApi({
+    this.children = const [],
+    this.childrenByParent = const {},
+  });
 
   final List<GoogleDriveFile> children;
+  final Map<String, List<GoogleDriveFile>> childrenByParent;
   final uploads = <_Upload>[];
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
@@ -432,7 +558,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     required String accessToken,
     required String parentId,
   }) async {
-    return children;
+    return childrenByParent[parentId] ?? children;
   }
 
   @override

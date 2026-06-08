@@ -353,6 +353,47 @@ class AppState extends ChangeNotifier {
     return file;
   }
 
+  Future<EntryDriveSupportNoteMeta?> findEntryNoteInCurrentDrive(
+    WorkEntry entry,
+  ) async {
+    if (isPayeMode) {
+      if (!_googleExportAccountService.isConnected(
+        GoogleExportAccountScope.paye,
+      )) {
+        return null;
+      }
+
+      final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
+      if (notesFolderId == null || notesFolderId.isEmpty) return null;
+
+      final accessToken = await requireGoogleDriveAccessToken(
+        scope: GoogleExportAccountScope.paye,
+      );
+
+      return _googleDriveService.findPayeNoteInDrive(
+        accessToken: accessToken,
+        notesFolderId: notesFolderId,
+        entry: entry,
+        googleAccountEmail: payeGoogleAccountEmail,
+      );
+    }
+
+    final clientNotesFolderId = _settings.googleDriveClientNotesFolderId;
+    if (_workGoogleDriveAccessToken == null ||
+        clientNotesFolderId == null ||
+        clientNotesFolderId.isEmpty) {
+      return null;
+    }
+
+    return _googleDriveService.findSupportNoteInDrive(
+      accessToken: _workGoogleDriveAccessToken!,
+      clientNotesFolderId: clientNotesFolderId,
+      entry: entry,
+      payPeriodAnchorDate: _settings.payPeriodAnchorDate,
+      googleAccountEmail: workGoogleAccountEmail,
+    );
+  }
+
   Future<String> ensurePersonalCategoryDriveFolderId(
     PersonalLogCategory category,
   ) async {

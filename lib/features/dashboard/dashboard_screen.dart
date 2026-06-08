@@ -178,21 +178,56 @@ class _LastEntryCard extends StatelessWidget {
 
   final WorkEntry entry;
 
+  void _deleteEntry(BuildContext context) {
+    final appState = context.read<AppState>();
+    final removed = appState.deleteEntry(entry);
+
+    if (removed == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Entry deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => appState.restoreEntry(removed),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
     final payeMode = context.watch<AppState>().isPayeMode;
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(child: Icon(entry.type.icon)),
-      title: Text(entry.client),
-      subtitle: Text(
-        '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
-      ),
-      trailing: Text(
-        payeMode ? '${entry.baseMinutes} min' : money(entry.earnings(settings)),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(child: Icon(entry.type.icon)),
+          title: Text(entry.client),
+          subtitle: Text(
+            '${entry.type.label} | ${formatDate(entry.date)} | ${entry.minutes} min',
+          ),
+          trailing: Text(
+            payeMode
+                ? '${entry.baseMinutes} min'
+                : money(entry.earnings(settings)),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => _deleteEntry(context),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Delete'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF6B6B),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

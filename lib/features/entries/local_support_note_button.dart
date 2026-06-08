@@ -102,8 +102,15 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   }
 
   Future<void> _load() async {
+    final appState = context.read<AppState>();
     final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
-    final loadedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
+    final savedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
+    final loadedDrive =
+        _driveMetaForAccount(
+          savedDrive,
+          _currentGoogleAccountEmail(appState),
+        ) ??
+        await appState.findEntryNoteInCurrentDrive(widget.entry);
 
     if (!mounted) return;
 
@@ -117,7 +124,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             : LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
         noteController.text = loadedDrive?.noteText.trim().isNotEmpty == true
             ? loadedDrive!.noteText
-            : LocalSupportNoteService.defaultNoteTextForEntry(
+            : _defaultNoteText(
+                appState: appState,
                 entry: widget.entry,
                 status: loadedDrive?.status ?? status,
               );
@@ -134,9 +142,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     if (!mounted) return;
 
     try {
-      await context.read<AppState>().warmGoogleExportAccount(
-        GoogleExportAccountScope.work,
-      );
+      final appState = context.read<AppState>();
+      await appState.warmGoogleExportAccount(_currentGoogleScope(appState));
     } catch (_) {
       // Save/open buttons show real connection errors when tapped.
     }
@@ -178,12 +185,20 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     });
 
     try {
-      final updated = await LocalSupportNoteService.saveNote(
-        entry: widget.entry,
-        initials: initialsController.text,
-        status: status,
-        noteText: noteController.text,
-      );
+      final appState = context.read<AppState>();
+      final updated = appState.isPayeMode
+          ? await LocalSupportNoteService.savePayeNote(
+              entry: widget.entry,
+              initials: initialsController.text,
+              status: status,
+              noteText: noteController.text,
+            )
+          : await LocalSupportNoteService.saveNote(
+              entry: widget.entry,
+              initials: initialsController.text,
+              status: status,
+              noteText: noteController.text,
+            );
 
       if (!mounted) return;
 
@@ -230,6 +245,49 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
     try {
       final appState = context.read<AppState>();
+      if (appState.isPayeMode) {
+        final updatedEntry = widget.entry.copyWith(
+          supportNoteBreakdown: noteController.text,
+        );
+        final file = await appState.savePayeNoteToDrive(updatedEntry);
+        final discovered = await appState.findEntryNoteInCurrentDrive(
+          updatedEntry,
+        );
+        final updated =
+            discovered?.copyWith(
+              initials: initialsController.text.trim().toUpperCase(),
+              status: status,
+              fileId: file.id,
+              fileName: file.name,
+              noteText: noteController.text,
+              mimeType: file.mimeType,
+              webViewLink: file.webViewLink,
+              googleAccountEmail: appState.payeGoogleAccountEmail,
+            ) ??
+            EntryDriveSupportNoteMeta(
+              entryId: widget.entry.id,
+              initials: initialsController.text.trim().toUpperCase(),
+              status: status,
+              fileId: file.id,
+              fileName: file.name,
+              noteText: noteController.text,
+              mimeType: file.mimeType,
+              parentFolderId: driveMeta?.parentFolderId,
+              webViewLink: file.webViewLink,
+              contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+              googleAccountEmail: appState.payeGoogleAccountEmail,
+            );
+        await driveService.saveSupportNoteMeta(updated);
+
+        if (!mounted) return;
+
+        setState(() {
+          driveMeta = updated;
+          message = 'Saved to Google Drive as ${updated.fileName}';
+        });
+        return;
+      }
+
       final token = await appState.connectGoogleDrive();
       final clientNotesFolderId = await _clientNotesFolderId(appState, token);
       final googleAccountEmail = appState.workGoogleAccountEmail;
@@ -272,7 +330,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     });
 
     if (meta == null) {
-      noteController.text = LocalSupportNoteService.defaultNoteTextForEntry(
+      noteController.text = _defaultNoteText(
+        appState: context.read<AppState>(),
         entry: widget.entry,
         status: next,
       );
@@ -325,7 +384,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final appState = context.read<AppState>();
     final accountMeta = _driveMetaForAccount(
       current,
-      appState.workGoogleAccountEmail,
+      _currentGoogleAccountEmail(appState),
     );
     final link = current?.openLink;
 
@@ -335,7 +394,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         link.isEmpty) {
       setState(() {
         message =
-            'Save the Google Drive note file under the selected Work account first.';
+            'Save the Google Drive note file under the selected account first.';
       });
       return;
     }
@@ -348,15 +407,28 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final appState = context.read<AppState>();
     final accountMeta = _driveMetaForAccount(
       current,
-      appState.workGoogleAccountEmail,
+      _currentGoogleAccountEmail(appState),
     );
     final link = current?.folderOpenLink;
 
     if (current == null || accountMeta == null) {
       setState(() {
         message =
-            'Save the Google Drive note file under the selected Work account first.';
+            'Save the Google Drive note file under the selected account first.';
       });
+      return;
+    }
+
+    if (appState.isPayeMode) {
+      final link = current.folderOpenLink;
+      if (link == null || link.isEmpty) {
+        setState(() {
+          message = 'Open the PAYE Drive folder from the Drive tab.';
+        });
+        return;
+      }
+
+      await _launchDriveLink(Uri.parse(link));
       return;
     }
 
@@ -560,7 +632,11 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           OutlinedButton.icon(
             onPressed: busy ? null : _openGoogleDriveFolder,
             icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Load Client Folder'),
+            label: Text(
+              context.watch<AppState>().isPayeMode
+                  ? 'Open PAYE Note Folder'
+                  : 'Load Client Folder',
+            ),
           ),
           const SizedBox(height: 12),
           const Text(
@@ -586,6 +662,31 @@ EntryDriveSupportNoteMeta? _driveMetaForAccount(
   if (saved == null || saved.isEmpty) return null;
 
   return saved == selected ? meta : null;
+}
+
+GoogleExportAccountScope _currentGoogleScope(AppState appState) {
+  return appState.isPayeMode
+      ? GoogleExportAccountScope.paye
+      : GoogleExportAccountScope.work;
+}
+
+String? _currentGoogleAccountEmail(AppState appState) {
+  return appState.isPayeMode
+      ? appState.payeGoogleAccountEmail
+      : appState.workGoogleAccountEmail;
+}
+
+String _defaultNoteText({
+  required AppState appState,
+  required WorkEntry entry,
+  required EntrySupportNoteStatus status,
+}) {
+  return appState.isPayeMode
+      ? LocalSupportNoteService.defaultPayeNoteTextForEntry(entry)
+      : LocalSupportNoteService.defaultNoteTextForEntry(
+          entry: entry,
+          status: status,
+        );
 }
 
 Color _statusColor(EntrySupportNoteStatus status) {
