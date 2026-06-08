@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,6 +15,8 @@ class CloudStorageService {
   final FirebaseFirestore _firestore;
   String? _googleCalendarAccessToken;
   String? _googleDriveAccessToken;
+
+  static const _googleSignInTimeout = Duration(seconds: 75);
 
   User? get currentUser => _auth.currentUser;
 
@@ -81,9 +85,17 @@ class CloudStorageService {
   }
 
   Future<User> signInWithGoogle() async {
-    final credential = await _signInWithGoogleProvider(
-      _googleServicesProvider(),
-    );
+    late final UserCredential credential;
+
+    try {
+      credential = await _withGooglePopupTimeout(
+        _signInWithGoogleProvider(_googleServicesProvider()),
+        'Google sign-in',
+      );
+    } on FirebaseAuthException catch (error) {
+      throw StateError(_authErrorMessage('Google sign-in', error));
+    }
+
     final user = credential.user;
 
     if (user == null) {
@@ -120,9 +132,12 @@ class CloudStorageService {
       final currentUserId = user.uid;
       final provider = _googleServicesProvider(forceConsent: forceRefresh);
 
-      credential = isGoogleBackedUser
-          ? await _refreshGoogleBackedCredential(user, provider)
-          : await _linkWithGoogleProvider(user, provider);
+      credential = await _withGooglePopupTimeout(
+        isGoogleBackedUser
+            ? _refreshGoogleBackedCredential(user, provider)
+            : _linkWithGoogleProvider(user, provider),
+        'Google services sign-in',
+      );
 
       if (credential.user?.uid != currentUserId) {
         throw StateError(
@@ -206,7 +221,14 @@ class CloudStorageService {
   }
 
   String _authErrorMessage(String action, FirebaseAuthException error) {
+    final code = error.code.toLowerCase();
     final message = error.message;
+
+    if (code.contains('popup-closed-by-user') ||
+        code.contains('cancelled-popup-request') ||
+        code.contains('canceled')) {
+      return '$action was cancelled. Close any old Google popup and try again.';
+    }
 
     if (message != null && message.trim().isNotEmpty) {
       return '$action failed: ${message.trim()}';
@@ -238,6 +260,19 @@ class CloudStorageService {
 
     _googleCalendarAccessToken = token;
     _googleDriveAccessToken = token;
+  }
+
+  Future<UserCredential> _withGooglePopupTimeout(
+    Future<UserCredential> signIn,
+    String action,
+  ) async {
+    try {
+      return await signIn.timeout(_googleSignInTimeout);
+    } on TimeoutException {
+      throw StateError(
+        '$action timed out. Close any old Google popup and try again.',
+      );
+    }
   }
 
   Future<void> signOut() {

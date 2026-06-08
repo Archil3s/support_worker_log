@@ -42,10 +42,21 @@ class GoogleExportAccountService {
     return token != null && token.isNotEmpty;
   }
 
+  Future<void> warmUp({required GoogleExportAccountScope scope}) async {
+    await _secondaryAuth(scope);
+  }
+
   Future<GoogleExportConnection> connect({
     required GoogleExportAccountScope scope,
     bool forceRefresh = false,
   }) async {
+    final current = _connections[scope];
+    if (!forceRefresh &&
+        current != null &&
+        current.accessToken.trim().isNotEmpty) {
+      return current;
+    }
+
     final auth = await _secondaryAuth(scope);
     if (forceRefresh) {
       await _resetSecondaryAuth(auth);
@@ -104,10 +115,16 @@ class GoogleExportAccountService {
 
   Future<FirebaseAuth> _secondaryAuth(GoogleExportAccountScope scope) async {
     final override = _authOverride;
-    if (override != null) return override;
+    if (override != null) {
+      await _setLocalPersistence(override);
+      return override;
+    }
 
     final current = _authByScope[scope];
-    if (current != null) return current;
+    if (current != null) {
+      await _setLocalPersistence(current);
+      return current;
+    }
 
     final appName = _secondaryAppNameFor(scope);
     final existing = Firebase.apps.where((app) => app.name == appName);
@@ -119,6 +136,7 @@ class GoogleExportAccountService {
           );
 
     final auth = FirebaseAuth.instanceFor(app: app);
+    await _setLocalPersistence(auth);
     _authByScope[scope] = auth;
     return auth;
   }
@@ -128,14 +146,12 @@ class GoogleExportAccountService {
     bool forceRefresh, {
     required bool hasCurrentUser,
   }) {
-    final prompt = forceRefresh
-        ? 'consent select_account'
-        : hasCurrentUser
-        ? 'consent'
-        : 'select_account';
     final parameters = <String, String>{
       'include_granted_scopes': 'true',
-      'prompt': prompt,
+      if (forceRefresh)
+        'prompt': 'consent select_account'
+      else if (!hasCurrentUser)
+        'prompt': 'select_account',
     };
     final provider = GoogleAuthProvider()
       ..addScope('email')
@@ -157,6 +173,12 @@ class GoogleExportAccountService {
     if (auth.currentUser == null) return;
 
     await auth.signOut();
+  }
+
+  Future<void> _setLocalPersistence(FirebaseAuth auth) async {
+    if (!kIsWeb) return;
+
+    await auth.setPersistence(Persistence.LOCAL);
   }
 
   String _authErrorMessage(
