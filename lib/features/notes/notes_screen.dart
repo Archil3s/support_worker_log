@@ -881,13 +881,18 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
   }
 
-  void _deleteEntry() {
+  Future<void> _deleteEntry() async {
     final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await _confirmDeleteEntry(context, widget.entry);
+
+    if (!confirmed) return;
+
     final removed = appState.deleteEntry(widget.entry);
 
     if (removed == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: const Text('Entry deleted'),
         action: SnackBarAction(
@@ -1703,6 +1708,33 @@ class _StatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Delete this note?'),
+            content: Text(
+              'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+              'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      ) ??
+      false;
 }
 
 EntryDriveSupportNoteMeta? _driveMetaForAccount(

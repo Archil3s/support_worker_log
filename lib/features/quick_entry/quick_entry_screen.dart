@@ -700,8 +700,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
   }
 
-  void _deleteSavedEntry(WorkEntry entry) {
+  Future<void> _deleteSavedEntry(WorkEntry entry) async {
     final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await _confirmDeleteEntry(context, entry);
+
+    if (!confirmed || !mounted) return;
+
     final removed = appState.deleteEntry(entry);
 
     if (removed == null) return;
@@ -710,7 +715,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       recentlySavedEntry = null;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: const Text('Entry deleted'),
         action: SnackBarAction(
@@ -858,6 +863,33 @@ class _SupportNoteBreakdownSheet extends StatefulWidget {
   @override
   State<_SupportNoteBreakdownSheet> createState() =>
       _SupportNoteBreakdownSheetState();
+}
+
+Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Delete this note?'),
+            content: Text(
+              'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+              'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      ) ??
+      false;
 }
 
 class _TextNoteBreakdownSheet extends StatefulWidget {

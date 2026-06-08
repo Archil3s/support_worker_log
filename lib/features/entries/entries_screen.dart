@@ -611,13 +611,18 @@ class _EntryCard extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('Entry duplicated')));
   }
 
-  void _deleteEntry(BuildContext context) {
+  Future<void> _deleteEntry(BuildContext context) async {
     final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await _confirmDeleteEntry(context, entry);
+
+    if (!confirmed) return;
+
     final removed = appState.deleteEntry(entry);
 
     if (removed == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: const Text('Entry deleted'),
         action: SnackBarAction(
@@ -844,6 +849,33 @@ class _EntryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Delete this note?'),
+            content: Text(
+              'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+              'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      ) ??
+      false;
 }
 
 class _EntryActionTile extends StatelessWidget {
