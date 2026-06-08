@@ -152,7 +152,7 @@ class CloudStorageService {
 
     if (!allowPopup) {
       throw StateError(
-        'Google Drive and Calendar need an active Google access token. Sign in with Continue with Google Sync, or use Connect Drive + Calendar once.',
+        'Google Drive needs an active Google access token. Sign in with Continue with Google Sync, or connect Drive once.',
       );
     }
 
@@ -223,7 +223,7 @@ class CloudStorageService {
 
     if (updated == null || updated.isEmpty) {
       throw StateError(
-        'Google Calendar access was not granted. Sign in with Google and allow calendar event access.',
+        'Google Calendar is manual now. Open a calendar draft instead of using Calendar API access.',
       );
     }
 
@@ -280,8 +280,6 @@ class CloudStorageService {
     };
 
     return GoogleAuthProvider()
-      ..addScope('https://www.googleapis.com/auth/calendar.events')
-      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
       ..addScope('https://www.googleapis.com/auth/drive.file')
       ..setCustomParameters(parameters);
   }

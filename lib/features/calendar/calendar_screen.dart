@@ -564,21 +564,17 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Creating calendar event...';
+      calendarMessage = 'Opening calendar draft...';
       calendarError = false;
     });
 
     try {
-      final result = await appState.createPrivateGoogleCalendarEvent(
-        widget.entry,
-      );
+      await appState.createPrivateGoogleCalendarEvent(widget.entry);
 
       appState.updateEntry(widget.entry.copyWith(googleCalendarEntered: true));
       setState(() {
         calendarEntered = true;
-        calendarMessage = result == CalendarEntryExportResult.created
-            ? 'Google Calendar event created.'
-            : 'Google Calendar draft opened. Review and save it.';
+        calendarMessage = 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {

@@ -10,7 +10,6 @@ import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../utils/pay_period_utils.dart';
 import 'google_drive/google_drive_api_platform.dart';
-import 'excel_export_service.dart';
 import 'invoice_pdf_service.dart';
 import 'local_support_note_service.dart';
 
@@ -212,8 +211,6 @@ class GoogleDriveService {
   final GoogleDriveApiPlatform _api;
   static const String _docxMimeType =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  static const String _xlsxMimeType =
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   static String _supportNoteMetaKey(String entryId) {
     return 'entry_google_drive_support_note_$entryId';
   }
@@ -378,67 +375,6 @@ class GoogleDriveService {
         bytes: bytes,
       );
     }
-  }
-
-  Future<GoogleDriveFile> syncWorkLivingSheet({
-    required String accessToken,
-    required String rootFolderId,
-    required List<WorkEntry> entries,
-    required AppSettings settings,
-  }) {
-    final workbook = const ExcelExportService().buildLiveWorkDriveWorkbook(
-      entries: entries,
-      settings: settings,
-    );
-
-    return uploadOrUpdateFile(
-      accessToken: accessToken,
-      parentId: rootFolderId,
-      name: workbook.fileName,
-      mimeType: _xlsxMimeType,
-      contentMimeType: _xlsxMimeType,
-      bytes: workbook.bytes,
-    );
-  }
-
-  Future<GoogleDriveFile> syncPayeNextActionsSheet({
-    required String accessToken,
-    required String parentFolderId,
-    required List<WorkEntry> entries,
-  }) {
-    final workbook = const ExcelExportService().buildNextActionsWorkbook(
-      entries: entries,
-      fileName: 'PAYE Next Actions - Live.xlsx',
-      title: 'PAYE Next Actions',
-    );
-
-    return uploadOrUpdateFile(
-      accessToken: accessToken,
-      parentId: parentFolderId,
-      name: workbook.fileName,
-      mimeType: _xlsxMimeType,
-      contentMimeType: _xlsxMimeType,
-      bytes: workbook.bytes,
-    );
-  }
-
-  Future<GoogleDriveFile> syncPersonalLivingSheet({
-    required String accessToken,
-    required String parentFolderId,
-    required List<PersonalLogEntry> entries,
-  }) {
-    final workbook = const ExcelExportService().buildLivePersonalDriveWorkbook(
-      entries: entries,
-    );
-
-    return uploadOrUpdateFile(
-      accessToken: accessToken,
-      parentId: parentFolderId,
-      name: workbook.fileName,
-      mimeType: _xlsxMimeType,
-      contentMimeType: _xlsxMimeType,
-      bytes: workbook.bytes,
-    );
   }
 
   Future<GoogleDriveFile> savePayeNote({

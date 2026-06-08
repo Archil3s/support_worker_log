@@ -31,15 +31,32 @@ class _DriveScreenState extends State<DriveScreen> {
   bool creatingPersonalFolders = false;
   bool creatingPayeFolders = false;
   bool uploadingTemplates = false;
-  bool syncingWorkSheet = false;
-  bool syncingPersonalSheet = false;
   bool loadingFiles = false;
   String? message;
   bool messageIsError = false;
   List<GoogleDriveFile> rootFiles = const [];
   List<GoogleDriveFile> templateFiles = const [];
-  GoogleDriveFile? workLiveSheetFile;
-  GoogleDriveFile? personalLiveSheetFile;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmGoogleAccounts();
+    });
+  }
+
+  Future<void> _warmGoogleAccounts() async {
+    if (!mounted) return;
+    final appState = context.read<AppState>();
+
+    try {
+      for (final scope in GoogleExportAccountScope.values) {
+        await appState.warmGoogleExportAccount(scope);
+      }
+    } catch (_) {
+      // Connect handles real sign-in errors when the user taps the button.
+    }
+  }
 
   Future<String> _connectDrive(GoogleExportAccountScope scope) async {
     final token = await context.read<AppState>().connectGoogleDrive(
@@ -143,44 +160,6 @@ class _DriveScreenState extends State<DriveScreen> {
         await _loadFilesWithToken(token, appState.settings);
       },
     );
-  }
-
-  Future<void> _syncWorkLiveSheet() async {
-    GoogleDriveFile? file;
-
-    await _run(
-      busy: () => syncingWorkSheet = true,
-      idle: () => syncingWorkSheet = false,
-      successMessage: 'Work live Excel sheet created or refreshed.',
-      action: () async {
-        file = await context.read<AppState>().syncWorkLivingSheetToDrive();
-      },
-    );
-
-    if (!mounted || file == null) return;
-
-    setState(() {
-      workLiveSheetFile = file;
-    });
-  }
-
-  Future<void> _syncPersonalLiveSheet() async {
-    GoogleDriveFile? file;
-
-    await _run(
-      busy: () => syncingPersonalSheet = true,
-      idle: () => syncingPersonalSheet = false,
-      successMessage: 'Personal live Excel sheet created or refreshed.',
-      action: () async {
-        file = await context.read<AppState>().syncPersonalLivingSheetToDrive();
-      },
-    );
-
-    if (!mounted || file == null) return;
-
-    setState(() {
-      personalLiveSheetFile = file;
-    });
   }
 
   Future<void> _loadFiles() async {
@@ -304,12 +283,7 @@ class _DriveScreenState extends State<DriveScreen> {
         creatingPersonalFolders ||
         creatingPayeFolders ||
         uploadingTemplates ||
-        syncingWorkSheet ||
-        syncingPersonalSheet ||
         loadingFiles;
-    final workLiveSheet =
-        workLiveSheetFile ??
-        _fileNamed(rootFiles, 'Support Worker Log - Live Dashboard.xlsx');
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -388,31 +362,6 @@ class _DriveScreenState extends State<DriveScreen> {
                       : 'Upload Templates',
                 ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: syncingWorkSheet || anyBusy
-                    ? null
-                    : _syncWorkLiveSheet,
-                icon: syncingWorkSheet
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.table_chart_outlined),
-                label: Text(
-                  syncingWorkSheet
-                      ? 'Refreshing Work Excel'
-                      : 'Create / Refresh Work Excel Sheet',
-                ),
-              ),
-              if (workLiveSheet?.webViewLink != null) ...[
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => _openDriveFile(workLiveSheet!),
-                  icon: const Icon(Icons.open_in_new_outlined),
-                  label: const Text('Open Work Excel Sheet'),
-                ),
-              ],
               if (settings.googleDriveRootFolderId != null) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -495,31 +444,6 @@ class _DriveScreenState extends State<DriveScreen> {
                       : 'Create Personal Folder',
                 ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: syncingPersonalSheet || anyBusy
-                    ? null
-                    : _syncPersonalLiveSheet,
-                icon: syncingPersonalSheet
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.table_view_outlined),
-                label: Text(
-                  syncingPersonalSheet
-                      ? 'Refreshing Personal Excel'
-                      : 'Create / Refresh Personal Excel Sheet',
-                ),
-              ),
-              if (personalLiveSheetFile?.webViewLink != null) ...[
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => _openDriveFile(personalLiveSheetFile!),
-                  icon: const Icon(Icons.open_in_new_outlined),
-                  label: const Text('Open Personal Excel Sheet'),
-                ),
-              ],
               if (settings.personalGoogleDriveRootFolderId != null) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
@@ -642,14 +566,6 @@ class _DriveScreenState extends State<DriveScreen> {
       ],
     );
   }
-}
-
-GoogleDriveFile? _fileNamed(List<GoogleDriveFile> files, String name) {
-  for (final file in files) {
-    if (file.name == name) return file;
-  }
-
-  return null;
 }
 
 class _FolderList extends StatelessWidget {

@@ -9,7 +9,6 @@ import '../../core/models/work_entry.dart';
 import '../../core/services/calendar_export_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/utils/invoice_import_parser.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../core/utils/totals.dart';
 import '../../shared/widgets/empty_state.dart';
@@ -42,57 +41,6 @@ class _EntriesScreenState extends State<EntriesScreen> {
     return searchQuery.trim().isNotEmpty ||
         typeFilter != _EntryTypeFilter.all ||
         dateFilter != _EntryDateFilter.all;
-  }
-
-  Future<void> _showImportSheet() async {
-    final appState = context.read<AppState>();
-
-    final rows = await showModalBottomSheet<List<ParsedInvoiceRow>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => const _InvoiceImportSheet(),
-    );
-
-    if (rows == null || rows.isEmpty) return;
-
-    for (final row in rows) {
-      if (!appState.clients.contains(row.client)) {
-        appState.addClient(row.client);
-      }
-    }
-
-    final entries = rows.map((row) {
-      final notes = [
-        'Imported invoice row',
-        ...row.notes,
-        if (row.warnings.isNotEmpty) 'Review imported time',
-      ].toSet().toList()..sort();
-
-      return WorkEntry(
-        id:
-            DateTime.now().microsecondsSinceEpoch.toString() +
-            rows.indexOf(row).toString(),
-        client: row.client,
-        type: row.kilometres > 0
-            ? EntryType.homeVisit
-            : EntryType.professionalContact,
-        date: row.date!,
-        startTime: row.startTime,
-        minutes: row.minutes,
-        notes: notes,
-        odometerStart: row.kilometres > 0 ? 0 : null,
-        odometerEnd: row.kilometres > 0 ? row.kilometres : null,
-      );
-    }).toList();
-
-    appState.addEntries(entries);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Imported ${entries.length} invoice rows')),
-    );
   }
 
   Future<void> _openEditSheet({
@@ -201,28 +149,6 @@ class _EntriesScreenState extends State<EntriesScreen> {
     final currentPeriodEntries = entriesInRange(entries, currentRange);
 
     final headerWidgets = <Widget>[
-      if (!payeMode) ...[
-        SectionCard(
-          title: 'Import Entries',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FilledButton.icon(
-                onPressed: _showImportSheet,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Import ChatGPT / CSV Rows'),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Paste rows using: client,date,type,duration,km,note. Preview first, then import. Phone Call imports as phone, not home visit.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
       _ClientAnalyticsSection(
         entries: currentPeriodEntries,
         showKilometres: !payeMode,
@@ -514,141 +440,6 @@ class _ClientSummary {
   }
 }
 
-class _InvoiceImportSheet extends StatefulWidget {
-  const _InvoiceImportSheet();
-
-  @override
-  State<_InvoiceImportSheet> createState() => _InvoiceImportSheetState();
-}
-
-class _InvoiceImportSheetState extends State<_InvoiceImportSheet> {
-  final controller = TextEditingController();
-
-  List<ParsedInvoiceRow> rows = const [];
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  List<ParsedInvoiceRow> get validRows {
-    return rows.where((row) => row.isValid).toList();
-  }
-
-  int get warningCount {
-    return rows.fold<int>(0, (sum, row) => sum + row.warnings.length);
-  }
-
-  void parse() {
-    setState(() {
-      rows = parseInvoiceRows(controller.text);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totalMinutes = validRows.fold<int>(
-      0,
-      (sum, row) => sum + row.minutes,
-    );
-    final totalKm = validRows.fold<double>(
-      0,
-      (sum, row) => sum + row.kilometres,
-    );
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.92,
-      minChildSize: 0.55,
-      maxChildSize: 0.96,
-      builder: (context, scrollController) {
-        return ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              'Import ChatGPT / CSV Rows',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Paste rows with this header: client,date,type,duration,km,note. This is copy/paste import, not a file picker.',
-              style: TextStyle(color: Color(0xFF8396C7)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              minLines: 8,
-              maxLines: 12,
-              decoration: const InputDecoration(
-                labelText: 'Paste ChatGPT CSV here',
-                hintText: '''client,date,type,duration,km,note
-PR,09/01/2026,Phone Call,1 min,0,PR phone/contact log
-BD,20/12/2025,Home Visit,1.5h,5,Home visit''',
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: parse,
-              icon: const Icon(Icons.auto_fix_high_outlined),
-              label: const Text('Step 1 - Preview Import'),
-            ),
-            if (rows.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              StatGrid(
-                cards: [
-                  StatCard(title: 'Rows', value: '${rows.length}'),
-                  StatCard(title: 'Valid', value: '${validRows.length}'),
-                  StatCard(
-                    title: 'Hours',
-                    value: (totalMinutes / 60).toStringAsFixed(2),
-                  ),
-                  StatCard(title: 'KM', value: totalKm.toStringAsFixed(1)),
-                ],
-              ),
-              if (warningCount > 0) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '$warningCount warning(s). Rows with defaulted time are marked for review.',
-                  style: const TextStyle(color: Color(0xFFF59E0B)),
-                ),
-              ],
-              const SizedBox(height: 12),
-              for (final row in rows.take(10))
-                Card(
-                  child: ListTile(
-                    title: Text(
-                      row.client.isEmpty ? 'Unknown client' : row.client,
-                    ),
-                    subtitle: Text(
-                      '${row.date == null ? 'No date' : formatDate(row.date!)} | ${row.minutes} min | ${row.kilometres.toStringAsFixed(1)} km',
-                    ),
-                    trailing: Icon(
-                      row.isValid
-                          ? Icons.check_circle_outline
-                          : Icons.error_outline,
-                      color: row.isValid ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: validRows.isEmpty
-                    ? null
-                    : () => Navigator.of(context).pop(validRows),
-                icon: const Icon(Icons.save_alt_outlined),
-                label: Text('Import ${validRows.length} Rows'),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _FilterSection extends StatelessWidget {
   const _FilterSection({
     required this.searchController,
@@ -775,16 +566,14 @@ class _EntryCard extends StatelessWidget {
     final appState = context.read<AppState>();
 
     try {
-      final result = await appState.createPrivateGoogleCalendarEvent(entry);
+      await appState.createPrivateGoogleCalendarEvent(entry);
 
       appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
 
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            result == CalendarEntryExportResult.created
-                ? 'Google Calendar event created and marked entered.'
-                : 'Google Calendar draft opened and marked entered.',
+          content: const Text(
+            'Google Calendar draft opened and marked entered.',
           ),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
@@ -800,7 +589,7 @@ class _EntryCard extends StatelessWidget {
     } catch (error) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Google Calendar export failed: $error'),
+          content: Text('Google Calendar draft failed: $error'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -898,8 +687,8 @@ class _EntryCard extends StatelessWidget {
                       ? Icons.event_available_outlined
                       : Icons.calendar_month_outlined,
                   label: entry.googleCalendarEntered
-                      ? 'Calendar event entered'
-                      : 'Create Calendar event',
+                      ? 'Calendar entered'
+                      : 'Open Calendar draft',
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     _openGoogleCalendar(context);

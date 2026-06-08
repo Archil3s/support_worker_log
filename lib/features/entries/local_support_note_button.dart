@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
@@ -88,6 +89,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   void initState() {
     super.initState();
     unawaited(_load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmGoogleAccount();
+    });
   }
 
   @override
@@ -124,6 +128,18 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         status = loaded.status;
       }
     });
+  }
+
+  Future<void> _warmGoogleAccount() async {
+    if (!mounted) return;
+
+    try {
+      await context.read<AppState>().warmGoogleExportAccount(
+        GoogleExportAccountScope.work,
+      );
+    } catch (_) {
+      // Save/open buttons show real connection errors when tapped.
+    }
   }
 
   Future<void> _chooseFolder() async {

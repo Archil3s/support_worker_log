@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -348,46 +347,6 @@ void main() {
     },
   );
 
-  test('syncPersonalLivingSheet uploads a live Excel dashboard', () {
-    final api = _FakeGoogleDriveApi(children: const []);
-    final service = GoogleDriveService(api: api);
-
-    return service
-        .syncPersonalLivingSheet(
-          accessToken: 'token',
-          parentFolderId: 'personal-root',
-          entries: [
-            PersonalLogEntry(
-              id: 'personal-1',
-              category: PersonalLogCategory.gym,
-              date: DateTime(2026, 6, 4),
-              title: 'Push: Bench Press',
-              metric: '80 kg | 3 x 5 reps',
-              notes: 'Solid.',
-            ),
-          ],
-        )
-        .then((_) {
-          final upload = api.uploads.singleWhere(
-            (item) => item.name == 'Personal Log - Live Dashboard.xlsx',
-          );
-
-          expect(upload.parentId, 'personal-root');
-          expect(upload.mimeType, _xlsxMimeType);
-          expect(upload.contentMimeType, _xlsxMimeType);
-          expect(
-            Excel.decodeBytes(upload.bytes).sheets.keys,
-            containsAll([
-              'Dashboard',
-              'Gym Summary',
-              'Workout Trend',
-              'Body Weight',
-              'Personal Logs',
-            ]),
-          );
-        });
-  });
-
   test(
     'savePayeNote stores blank docx under person and year folders',
     () async {
@@ -404,7 +363,10 @@ void main() {
           date: DateTime(2026, 6, 7),
           startTime: const TimeOfDay(hour: 10, minute: 30),
           minutes: 30,
-          notes: const ['Roster question answered'],
+          notes: const [
+            'Attendance: Client, Support worker, Social worker',
+            'Roster question answered',
+          ],
           odometerStart: 10,
           odometerEnd: 14.5,
           supportNoteBreakdown:
@@ -424,8 +386,13 @@ void main() {
 
       expect(upload.parentId, 'paye-notes/Jane Smith/2026');
       expect(upload.mimeType, _docxMimeType);
-      expect(documentText, contains('PAYE Support Note'));
-      expect(documentText, contains('Jane Smith'));
+      expect(documentText, startsWith('Attendance'));
+      expect(documentText, contains('Client'));
+      expect(documentText, contains('Support worker'));
+      expect(documentText, contains('Social worker'));
+      expect(documentText, isNot(contains('PAYE Support Note')));
+      expect(documentText, isNot(contains('Date:')));
+      expect(documentText, isNot(contains('Jane Smith')));
       expect(documentText, contains('Roster question answered'));
       expect(documentText, contains('Shift confirmed'));
       expect(documentText, contains('Send policy link'));
@@ -437,8 +404,6 @@ void main() {
 
 const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const _xlsxMimeType =
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({required this.children});

@@ -78,33 +78,85 @@ List<NextActionItem> _nextActionsFromBreakdown(String value) {
 const _mainTopicMaxWords = 200;
 const _outcomeMaxWords = 100;
 const _impressionMaxWords = 150;
+const _supportTagPrefix = 'Tag: ';
+const _attendancePrefix = 'Attendance: ';
+const _attendanceOptions = [
+  'Client',
+  'Support worker',
+  'Social worker',
+  'Social support worker',
+  'Whanau / family',
+  'Agency worker',
+  'Peer support',
+  'Supervisor / manager',
+  'Other professional',
+];
+const _supportTagOptions = [
+  'Attendance support worker',
+  '2-up visit',
+  'Worked on goals',
+  'Worked on housing diary',
+  'Visited house viewings',
+  'Potential pet',
+  'Rubbish piling up',
+  'Home messy',
+];
 const _blenheimAgencyOptions = [
   'Agency: Police / emergency services',
   'Agency: Fire and Emergency NZ',
   'Agency: Hato Hone St John',
-  'Agency: Wairau Hospital',
+  'Agency: Wairau Hospital / Emergency Department',
+  'Agency: Marlborough Urgent Care',
   'Agency: Te Whatu Ora / Nelson Marlborough',
-  'Agency: Crisis team',
+  'Agency: Marlborough PHO / Kimi Hauora Wairau',
   'Agency: Community Mental Health',
+  'Agency: Mental Health Crisis Team',
+  'Agency: Witherlea House / Adult Mental Health',
+  'Agency: CAMHS',
+  'Agency: Supporting Families Marlborough',
+  'Agency: CARE Marlborough',
   'Agency: GP / medical centre',
-  'Agency: Sexual harm services',
+  'Agency: Marlborough Sexual Violence Support Centre',
+  'Agency: SASH Blenheim',
   "Agency: Marlborough Women's Refuge",
   'Agency: Victim Support',
   'Agency: Oranga Tamariki',
+  'Agency: Barnardos Marlborough',
+  'Agency: Birthright Marlborough',
+  'Agency: Open Home Foundation Marlborough',
+  'Agency: Wairau Youth and Family Trust',
+  'Agency: Marlborough Youth Trust',
+  'Agency: Youthline',
   'Agency: WINZ / MSD Blenheim',
   'Agency: Kainga Ora',
+  'Agency: Housing First Blenheim',
+  'Agency: Housing provider',
   'Agency: Marlborough District Council',
   'Agency: Te Piki Oranga',
-  'Agency: Maataa Waka',
+  'Agency: Maataa Waka ki Te Tau Ihu Trust',
+  'Agency: Marlborough Pacific Trust',
+  'Agency: Marlborough Multicultural Centre',
+  'Agency: MFR Voice',
+  'Agency: Rainbow Marlborough / rainbow community support',
   'Agency: Salvation Army',
-  'Agency: Citizens Advice Bureau',
-  'Agency: Community Law',
-  'Agency: Housing provider',
+  "Agency: Crossroads / John's Kitchen",
+  'Agency: Citizens Advice Bureau Marlborough',
+  'Agency: Community Law Marlborough',
+  'Agency: Presbyterian Support Marlborough / Family Works',
+  'Agency: Access Community Health',
+  'Agency: Age Concern Marlborough',
+  'Agency: Tautoko Community Trust',
+  'Agency: Maternal Wellbeing Marlborough',
+  'Agency: ACC sensitive claims counselling',
   'Agency: Counselling service',
   'Agency: School / education',
   'Agency: Probation / Corrections',
-  'Agency: Other local agency',
+  'Agency: Other local agency or service',
 ];
+
+String _agencyDisplayLabel(String value) {
+  return value.replaceFirst('Agency: ', '');
+}
 
 String _buildSupportNoteBreakdown({
   required String mainTopic,
@@ -172,10 +224,42 @@ String _joinLoggingLines(Iterable<String> values) {
       .join('\n');
 }
 
+String _initialMainTopicText(Iterable<String> values) {
+  final output = <String>[];
+
+  for (final rawValue in values) {
+    final value = rawValue.trim();
+    if (value.isEmpty) continue;
+
+    if (value.startsWith(_attendancePrefix)) continue;
+
+    if (value.startsWith('Tags: ')) {
+      final tags = value
+          .replaceFirst('Tags: ', '')
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty);
+
+      for (final tag in tags) {
+        output.add('- $tag');
+      }
+
+      continue;
+    }
+
+    output.add(value);
+  }
+
+  final text = output.toSet().join('\n');
+  return text.isEmpty ? '' : '$text\n\n';
+}
+
 List<String> _buildVisitNotes({
   required Iterable<String> selectedNotes,
   String typedNote = '',
 }) {
+  final tags = <String>[];
+  final attendance = <String>[];
   final agencies = <String>[];
   final topics = <String>[];
 
@@ -183,7 +267,11 @@ List<String> _buildVisitNotes({
     final note = rawNote.trim();
     if (note.isEmpty) continue;
 
-    if (note.startsWith('Agency: ')) {
+    if (note.startsWith(_supportTagPrefix)) {
+      tags.add(note.replaceFirst(_supportTagPrefix, '').trim());
+    } else if (note.startsWith(_attendancePrefix)) {
+      attendance.add(note.replaceFirst(_attendancePrefix, '').trim());
+    } else if (note.startsWith('Agency: ')) {
       agencies.add(note);
     } else {
       topics.add(note);
@@ -191,12 +279,55 @@ List<String> _buildVisitNotes({
   }
 
   final notes = <String>[
+    if (attendance.isNotEmpty)
+      'Attendance: ${_orderedAttendance(attendance).join(', ')}',
+    if (tags.isNotEmpty) 'Tags: ${_orderedTags(tags).join(', ')}',
     if (topics.isNotEmpty) 'Topics covered: ${topics.toSet().join(', ')}',
     ...agencies.toSet(),
     if (typedNote.trim().isNotEmpty) typedNote.trim(),
-  ]..sort();
+  ];
 
   return notes;
+}
+
+List<String> _orderedAttendance(Iterable<String> values) {
+  final selected = values
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+  final ordered = <String>[
+    for (final role in _attendanceOptions)
+      if (selected.remove(role)) role,
+    ...selected,
+  ];
+
+  return ordered;
+}
+
+List<String> _orderedTags(Iterable<String> values) {
+  final selected = values
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+  final ordered = <String>[
+    for (final tag in _supportTagOptions)
+      if (selected.remove(tag)) tag,
+    ...selected,
+  ];
+
+  return ordered;
+}
+
+List<String> _rawVisitNotes({
+  required Iterable<String> selectedNotes,
+  String typedNote = '',
+}) {
+  final values = [
+    ...selectedNotes.map((note) => note.trim()),
+    if (typedNote.trim().isNotEmpty) typedNote.trim(),
+  ].where((note) => note.isNotEmpty).toSet().toList();
+
+  return values;
 }
 
 int _wordCount(String value) {
@@ -226,23 +357,12 @@ class _TextNoteCloseOut {
   final bool textReplyNeeded;
 }
 
-enum _ReferralType {
-  policeEmergency,
-  gp,
-  crisisTeam,
-  sexualHarmService,
-  winz,
-  housing,
-  legal,
-  counselling,
-}
-
-enum _ReferralStatus { made, discussed, declined, pending }
+enum _ReferralStatus { discussed, referred, engaged, declined, pending }
 
 class _ReferralSelection {
-  const _ReferralSelection({required this.type, required this.status});
+  const _ReferralSelection({required this.service, required this.status});
 
-  final _ReferralType type;
+  final String service;
   final _ReferralStatus status;
 }
 
@@ -349,7 +469,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return;
     }
 
-    final notes = _buildVisitNotes(selectedNotes: selectedNotes);
+    final notes = _rawVisitNotes(selectedNotes: selectedNotes);
     final startedAt = _startDateTimeForSelectedDate();
     final trackKilometres =
         !appState.isPayeMode && selectedType == EntryType.homeVisit;
@@ -392,8 +512,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   void _saveDraftNotes(AppState appState, ActiveVisit activeVisit) {
     final typedNote = noteController.text.trim();
 
-    final notes = _buildVisitNotes(
-      selectedNotes: selectedNotes,
+    final notes = _rawVisitNotes(
+      selectedNotes: [...activeVisit.notes, ...selectedNotes],
       typedNote: typedNote,
     );
 
@@ -655,6 +775,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       visitDate: selectedVisitDate,
       startOdometerController: startOdometerController,
       showKilometres: showKilometres,
+      showAttendance: appState.isPayeMode,
       onClientSelected: (client) {
         setState(() => selectedClient = client);
       },
@@ -964,7 +1085,10 @@ class _SupportNoteBreakdownSheetState
   @override
   void initState() {
     super.initState();
-    mainTopicController.text = _joinLoggingLines(widget.notes);
+    mainTopicController.text = _initialMainTopicText(widget.notes);
+    mainTopicController.selection = TextSelection.collapsed(
+      offset: mainTopicController.text.length,
+    );
   }
 
   @override
@@ -1074,7 +1198,10 @@ class _SupportNoteBreakdownSheetState
     if (noReferrals) return 'No referrals discussed or made this visit.';
 
     final lines = referrals
-        .map((item) => '${item.type.label}: ${item.status.label}')
+        .map(
+          (item) =>
+              '${_agencyDisplayLabel(item.service)}: ${item.status.label}',
+        )
         .toList();
     final notes = _cleanSupportNoteSection(referralNotesController.text);
 
@@ -1085,14 +1212,14 @@ class _SupportNoteBreakdownSheetState
     return lines.join('\n');
   }
 
-  void _toggleReferral(_ReferralType type, _ReferralStatus status) {
+  void _toggleReferral(String service, _ReferralStatus status) {
     setState(() {
       final index = referrals.indexWhere(
-        (item) => item.type == type && item.status == status,
+        (item) => item.service == service && item.status == status,
       );
 
       if (index == -1) {
-        referrals.add(_ReferralSelection(type: type, status: status));
+        referrals.add(_ReferralSelection(service: service, status: status));
       } else {
         referrals.removeAt(index);
       }
@@ -1295,16 +1422,17 @@ class _SupportNoteBreakdownSheetState
           ),
           if (!noReferrals) ...[
             const SizedBox(height: 8),
-            for (final type in _ReferralType.values) ...[
-              _ReferralTypePicker(
-                type: type,
+            for (final service in _blenheimAgencyOptions) ...[
+              _ReferralServicePicker(
+                service: service,
                 selectedStatuses: referrals
-                    .where((item) => item.type == type)
+                    .where((item) => item.service == service)
                     .map((item) => item.status)
                     .toSet(),
-                onToggle: (status) => _toggleReferral(type, status),
+                onToggle: (status) => _toggleReferral(service, status),
               ),
-              if (type != _ReferralType.values.last) const SizedBox(height: 10),
+              if (service != _blenheimAgencyOptions.last)
+                const SizedBox(height: 10),
             ],
             const SizedBox(height: 12),
             _SupportNoteField(
@@ -1598,14 +1726,14 @@ class _SupportNoteField extends StatelessWidget {
   }
 }
 
-class _ReferralTypePicker extends StatelessWidget {
-  const _ReferralTypePicker({
-    required this.type,
+class _ReferralServicePicker extends StatelessWidget {
+  const _ReferralServicePicker({
+    required this.service,
     required this.selectedStatuses,
     required this.onToggle,
   });
 
-  final _ReferralType type;
+  final String service;
   final Set<_ReferralStatus> selectedStatuses;
   final ValueChanged<_ReferralStatus> onToggle;
 
@@ -1623,11 +1751,11 @@ class _ReferralTypePicker extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(type.icon, color: const Color(0xFF4F8DF7)),
+              const Icon(Icons.business_outlined, color: Color(0xFF4F8DF7)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  type.label,
+                  _agencyDisplayLabel(service),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -1655,57 +1783,15 @@ class _ReferralTypePicker extends StatelessWidget {
   }
 }
 
-extension _ReferralTypeLabel on _ReferralType {
-  String get label {
-    switch (this) {
-      case _ReferralType.policeEmergency:
-        return 'Police / emergency services';
-      case _ReferralType.gp:
-        return 'GP';
-      case _ReferralType.crisisTeam:
-        return 'Crisis team';
-      case _ReferralType.sexualHarmService:
-        return 'Sexual harm services';
-      case _ReferralType.winz:
-        return 'WINZ';
-      case _ReferralType.housing:
-        return 'Housing';
-      case _ReferralType.legal:
-        return 'Legal';
-      case _ReferralType.counselling:
-        return 'Counselling';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case _ReferralType.policeEmergency:
-        return Icons.local_police_outlined;
-      case _ReferralType.gp:
-        return Icons.medical_services_outlined;
-      case _ReferralType.crisisTeam:
-        return Icons.health_and_safety_outlined;
-      case _ReferralType.sexualHarmService:
-        return Icons.support_agent_outlined;
-      case _ReferralType.winz:
-        return Icons.account_balance_outlined;
-      case _ReferralType.housing:
-        return Icons.home_work_outlined;
-      case _ReferralType.legal:
-        return Icons.gavel_outlined;
-      case _ReferralType.counselling:
-        return Icons.psychology_outlined;
-    }
-  }
-}
-
 extension _ReferralStatusLabel on _ReferralStatus {
   String get label {
     switch (this) {
-      case _ReferralStatus.made:
-        return 'Made';
       case _ReferralStatus.discussed:
         return 'Discussed';
+      case _ReferralStatus.referred:
+        return 'Referred';
+      case _ReferralStatus.engaged:
+        return 'Engaged';
       case _ReferralStatus.declined:
         return 'Declined';
       case _ReferralStatus.pending:
@@ -1758,14 +1844,12 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
     setState(() {
       calendarBusy = true;
-      calendarMessage = 'Creating calendar event...';
+      calendarMessage = 'Opening calendar draft...';
       calendarError = false;
     });
 
     try {
-      final result = await appState.createPrivateGoogleCalendarEvent(
-        widget.entry,
-      );
+      await appState.createPrivateGoogleCalendarEvent(widget.entry);
 
       final updatedEntry = widget.entry.copyWith(googleCalendarEntered: true);
       appState.updateEntry(updatedEntry);
@@ -1773,9 +1857,7 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
 
       setState(() {
         calendarEntered = true;
-        calendarMessage = result == CalendarEntryExportResult.created
-            ? 'Google Calendar event created.'
-            : 'Google Calendar draft opened. Review and save it.';
+        calendarMessage = 'Google Calendar draft opened. Review and save it.';
       });
     } catch (error) {
       setState(() {
@@ -1878,10 +1960,10 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
           ),
           label: Text(
             calendarEntered
-                ? 'Calendar event entered'
+                ? 'Calendar entered'
                 : calendarBusy
-                ? 'Creating event'
-                : 'Create Calendar event',
+                ? 'Opening draft'
+                : 'Open Calendar draft',
           ),
         ),
         if (calendarBusy || calendarMessage != null) ...[
@@ -1979,6 +2061,7 @@ class _StartVisitView extends StatelessWidget {
     required this.visitDate,
     required this.startOdometerController,
     required this.showKilometres,
+    required this.showAttendance,
     required this.onClientSelected,
     required this.onTypeSelected,
     required this.onNoteToggle,
@@ -1995,6 +2078,7 @@ class _StartVisitView extends StatelessWidget {
   final DateTime visitDate;
   final TextEditingController startOdometerController;
   final bool showKilometres;
+  final bool showAttendance;
   final ValueChanged<String> onClientSelected;
   final ValueChanged<EntryType> onTypeSelected;
   final void Function(String note, bool selected) onNoteToggle;
@@ -2142,6 +2226,7 @@ class _StartVisitView extends StatelessWidget {
         _VisitContextTabs(
           noteOptions: noteOptions,
           selectedNotes: selectedNotes,
+          showAttendance: showAttendance,
           showAgencies: selectedType == EntryType.professionalContact,
           onChanged: onNoteToggle,
         ),
@@ -2271,6 +2356,7 @@ class _ActiveVisitView extends StatelessWidget {
         _VisitContextTabs(
           noteOptions: noteOptions,
           selectedNotes: selectedNotes,
+          showAttendance: context.watch<AppState>().isPayeMode,
           showAgencies: activeVisit.type == EntryType.professionalContact,
           onChanged: onNoteToggle,
           footer: Column(
@@ -2577,6 +2663,7 @@ class _VisitContextTabs extends StatelessWidget {
     required this.noteOptions,
     required this.selectedNotes,
     required this.showAgencies,
+    required this.showAttendance,
     required this.onChanged,
     this.footer,
   });
@@ -2584,6 +2671,7 @@ class _VisitContextTabs extends StatelessWidget {
   final List<String> noteOptions;
   final Set<String> selectedNotes;
   final bool showAgencies;
+  final bool showAttendance;
   final void Function(String note, bool selected) onChanged;
   final Widget? footer;
 
@@ -2598,6 +2686,18 @@ class _VisitContextTabs extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (showAttendance) ...[
+              _AttendanceChips(
+                selectedNotes: selectedNotes,
+                onChanged: onChanged,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _SupportTagChips(
+              selectedNotes: selectedNotes,
+              onChanged: onChanged,
+            ),
+            const SizedBox(height: 12),
             TabBar(
               tabs: [
                 const Tab(
@@ -2641,6 +2741,86 @@ class _VisitContextTabs extends StatelessWidget {
   }
 }
 
+class _AttendanceChips extends StatelessWidget {
+  const _AttendanceChips({
+    required this.selectedNotes,
+    required this.onChanged,
+  });
+
+  final Set<String> selectedNotes;
+  final void Function(String note, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Attendance',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final role in _attendanceOptions)
+              FilterChip(
+                avatar: const Icon(Icons.group_outlined, size: 18),
+                label: Text(role),
+                selected: selectedNotes.contains('$_attendancePrefix$role'),
+                showCheckmark: false,
+                onSelected: (selected) {
+                  onChanged('$_attendancePrefix$role', selected);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SupportTagChips extends StatelessWidget {
+  const _SupportTagChips({
+    required this.selectedNotes,
+    required this.onChanged,
+  });
+
+  final Set<String> selectedNotes;
+  final void Function(String note, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Support tags',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final tag in _supportTagOptions)
+              FilterChip(
+                avatar: const Icon(Icons.sell_outlined, size: 18),
+                label: Text(tag),
+                selected: selectedNotes.contains('$_supportTagPrefix$tag'),
+                showCheckmark: false,
+                onSelected: (selected) {
+                  onChanged('$_supportTagPrefix$tag', selected);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _AgencyChips extends StatelessWidget {
   const _AgencyChips({required this.selectedNotes, required this.onChanged});
 
@@ -2663,10 +2843,6 @@ class _AgencyChips extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  String _agencyDisplayLabel(String value) {
-    return value.replaceFirst('Agency: ', '');
   }
 }
 

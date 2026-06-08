@@ -61,44 +61,6 @@ class ExportService {
     return buffer.toString().trim();
   }
 
-  String buildEntriesCsv({
-    required List<WorkEntry> entries,
-    required AppSettings settings,
-  }) {
-    final sortedEntries = [...entries]
-      ..sort((a, b) => b.date.compareTo(a.date));
-
-    final rows = <List<String>>[
-      [
-        'Date',
-        'Start Time',
-        'Client',
-        'Entry Type',
-        'Minutes',
-        'Hours',
-        'Earnings',
-        'Kilometres',
-        'Fuel Reimbursement',
-        'Notes',
-      ],
-      for (final entry in sortedEntries)
-        [
-          formatDate(entry.date),
-          formatTime(entry.startTime),
-          entry.client,
-          entry.type.label,
-          entry.minutes.toString(),
-          entry.hours.toStringAsFixed(2),
-          entry.earnings(settings).toStringAsFixed(2),
-          entry.kilometres.toStringAsFixed(1),
-          entry.fuelReimbursement(settings).toStringAsFixed(2),
-          entry.notes.join('; '),
-        ],
-    ];
-
-    return rows.map(_csvRow).join('\n');
-  }
-
   String buildJsonBackup({
     required List<WorkEntry> entries,
     required List<String> clients,
@@ -133,23 +95,5 @@ class ExportService {
     }
 
     return StoredAppData.fromJson(decoded);
-  }
-
-  String _csvRow(List<String> values) {
-    return values.map(_csvCell).join(',');
-  }
-
-  String _csvCell(String value) {
-    final escaped = value.replaceAll('"', '""');
-    final needsQuotes =
-        escaped.contains(',') ||
-        escaped.contains('"') ||
-        escaped.contains('\n');
-
-    if (needsQuotes) {
-      return '"$escaped"';
-    }
-
-    return escaped;
   }
 }

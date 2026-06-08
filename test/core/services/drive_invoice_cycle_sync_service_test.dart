@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,25 +61,8 @@ void main() {
       final livingLogUploads = driveService.uploads.where(
         (upload) => upload.name == 'Living_Text_Notes_Log.docx',
       );
-      final dashboardUpload = driveService.uploads.singleWhere(
-        (upload) => upload.name == 'Support Worker Log - Live Dashboard.xlsx',
-      );
 
       expect(livingLogUploads, hasLength(2));
-      expect(dashboardUpload.parentId, 'root');
-      expect(dashboardUpload.mimeType, _xlsxMimeType);
-      expect(dashboardUpload.contentMimeType, _xlsxMimeType);
-      expect(
-        Excel.decodeBytes(dashboardUpload.bytes).sheets.keys,
-        containsAll([
-          'Dashboard',
-          'Weekly Analytics',
-          'Work Entries',
-          'Client Summary',
-          'Visit Mix',
-          'Next Actions',
-        ]),
-      );
 
       final abLogUpload = livingLogUploads.singleWhere(
         (upload) => upload.parentId == 'client-notes/AB',
@@ -191,6 +173,3 @@ class _DriveUpload {
   final String? contentMimeType;
   final List<int> bytes;
 }
-
-const _xlsxMimeType =
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

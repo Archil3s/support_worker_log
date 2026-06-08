@@ -21,6 +21,24 @@ class _GoogleAccountConnectionCardState
   String? message;
   bool messageIsError = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmGoogleAccount();
+    });
+  }
+
+  Future<void> _warmGoogleAccount() async {
+    if (!mounted) return;
+
+    try {
+      await context.read<AppState>().warmGoogleExportAccount(widget.scope);
+    } catch (_) {
+      // Connect reports real sign-in errors when the button is tapped.
+    }
+  }
+
   Future<void> _connect() async {
     setState(() {
       connecting = true;
@@ -60,14 +78,25 @@ class _GoogleAccountConnectionCardState
         appState.personalGoogleServicesConnected,
       GoogleExportAccountScope.paye => appState.payeGoogleServicesConnected,
     };
+    final signedIn = switch (widget.scope) {
+      GoogleExportAccountScope.work => appState.workGoogleAccountSignedIn,
+      GoogleExportAccountScope.personal =>
+        appState.personalGoogleAccountSignedIn,
+      GoogleExportAccountScope.paye => appState.payeGoogleAccountSignedIn,
+    };
     final email = switch (widget.scope) {
       GoogleExportAccountScope.work => appState.workGoogleAccountEmail,
       GoogleExportAccountScope.personal => appState.personalGoogleAccountEmail,
       GoogleExportAccountScope.paye => appState.payeGoogleAccountEmail,
     };
-    final statusColor = connected
+    final statusColor = connected || signedIn
         ? const Color(0xFF31E981)
         : const Color(0xFFFFC857);
+    final statusText = connected
+        ? email ?? 'Connected'
+        : signedIn
+        ? email ?? 'Signed in'
+        : 'Not connected';
 
     return SectionCard(
       title: '${widget.scope.label} Google Account',
@@ -87,7 +116,7 @@ class _GoogleAccountConnectionCardState
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    connected ? email ?? 'Connected' : 'Not connected',
+                    statusText,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: statusColor,

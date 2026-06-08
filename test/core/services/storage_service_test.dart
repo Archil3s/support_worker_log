@@ -132,4 +132,17 @@ void main() {
     expect(restored.payeEntries.single.minutes, 0);
     expect(restored.appMode, AppMode.paye);
   });
+
+  test('persists massage app mode', () {
+    const data = StoredAppData(
+      settings: AppSettings(),
+      clients: ['AB'],
+      entries: [],
+      appMode: AppMode.massage,
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.appMode, AppMode.massage);
+  });
 }

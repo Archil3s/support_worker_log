@@ -19,46 +19,9 @@ class PersonalScreen extends StatefulWidget {
 }
 
 class _PersonalScreenState extends State<PersonalScreen> {
-  bool syncingDrive = false;
   bool openingDrive = false;
   String? message;
   bool messageIsError = false;
-
-  Future<void> _syncDrive() async {
-    setState(() {
-      syncingDrive = true;
-      message = null;
-      messageIsError = false;
-    });
-
-    try {
-      final file = await context
-          .read<AppState>()
-          .syncPersonalLivingSheetToDrive();
-      final link = file.webViewLink;
-      if (link != null && link.isNotEmpty) {
-        await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        message = 'Personal Excel sheet refreshed.';
-        messageIsError = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        message = 'Could not refresh personal Excel sheet: $error';
-        messageIsError = true;
-      });
-    } finally {
-      if (mounted) {
-        setState(() => syncingDrive = false);
-      }
-    }
-  }
 
   Future<void> _openDriveFolder({
     required Future<String> Function(AppState appState) folderId,
@@ -146,22 +109,6 @@ class _PersonalScreenState extends State<PersonalScreen> {
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add Personal Log'),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: entries.isEmpty || syncingDrive ? null : _syncDrive,
-                icon: syncingDrive
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_to_drive_outlined),
-                label: Text(
-                  syncingDrive
-                      ? 'Refreshing Personal Excel'
-                      : 'Refresh Personal Excel Sheet',
-                ),
-              ),
-              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(

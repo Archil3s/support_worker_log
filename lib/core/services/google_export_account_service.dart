@@ -28,13 +28,14 @@ class GoogleExportAccountService {
   final FirebaseAuth? _authOverride;
   final Map<GoogleExportAccountScope, FirebaseAuth> _authByScope = {};
   final Map<GoogleExportAccountScope, GoogleExportConnection> _connections = {};
+  final Map<GoogleExportAccountScope, String> _signedInEmails = {};
 
   String? accessTokenFor(GoogleExportAccountScope scope) {
     return _connections[scope]?.accessToken;
   }
 
   String? emailFor(GoogleExportAccountScope scope) {
-    return _connections[scope]?.email;
+    return _connections[scope]?.email ?? _signedInEmails[scope];
   }
 
   bool isConnected(GoogleExportAccountScope scope) {
@@ -42,8 +43,13 @@ class GoogleExportAccountService {
     return token != null && token.isNotEmpty;
   }
 
+  bool hasSignedInAccount(GoogleExportAccountScope scope) {
+    return emailFor(scope) != null;
+  }
+
   Future<void> warmUp({required GoogleExportAccountScope scope}) async {
-    await _secondaryAuth(scope);
+    final auth = await _secondaryAuth(scope);
+    _rememberSignedInUser(scope, auth.currentUser);
   }
 
   Future<GoogleExportConnection> connect({
@@ -70,15 +76,12 @@ class GoogleExportAccountService {
         hasCurrentUser: auth.currentUser != null,
       ).timeout(_googleSignInTimeout);
     } on TimeoutException {
-      await _resetSecondaryAuth(auth);
       throw StateError(
         '${scope.label} Google sign-in timed out. Close any old Google popup and try again.',
       );
     } on FirebaseAuthException catch (error) {
-      await _resetSecondaryAuth(auth);
       throw StateError(_authErrorMessage(scope, error));
     } catch (_) {
-      await _resetSecondaryAuth(auth);
       rethrow;
     }
 
@@ -98,6 +101,7 @@ class GoogleExportAccountService {
       email: credential.user?.email,
     );
     _connections[scope] = connection;
+    _rememberSignedInUser(scope, credential.user);
 
     return connection;
   }
@@ -113,6 +117,15 @@ class GoogleExportAccountService {
     );
   }
 
+  Future<void> signOutAll() async {
+    for (final auth in _authByScope.values) {
+      await _resetSecondaryAuth(auth);
+    }
+
+    _connections.clear();
+    _signedInEmails.clear();
+  }
+
   Future<FirebaseAuth> _secondaryAuth(GoogleExportAccountScope scope) async {
     final override = _authOverride;
     if (override != null) {
@@ -121,10 +134,7 @@ class GoogleExportAccountService {
     }
 
     final current = _authByScope[scope];
-    if (current != null) {
-      await _setLocalPersistence(current);
-      return current;
-    }
+    if (current != null) return current;
 
     final appName = _secondaryAppNameFor(scope);
     final existing = Firebase.apps.where((app) => app.name == appName);
@@ -156,8 +166,6 @@ class GoogleExportAccountService {
     final provider = GoogleAuthProvider()
       ..addScope('email')
       ..addScope('profile')
-      ..addScope('https://www.googleapis.com/auth/calendar.events')
-      ..addScope('https://www.googleapis.com/auth/calendar.readonly')
       ..addScope('https://www.googleapis.com/auth/drive.file')
       ..setCustomParameters(parameters);
 
@@ -173,6 +181,13 @@ class GoogleExportAccountService {
     if (auth.currentUser == null) return;
 
     await auth.signOut();
+  }
+
+  void _rememberSignedInUser(GoogleExportAccountScope scope, User? user) {
+    final email = user?.email?.trim();
+    if (email == null || email.isEmpty) return;
+
+    _signedInEmails[scope] = email;
   }
 
   Future<void> _setLocalPersistence(FirebaseAuth auth) async {
@@ -192,6 +207,11 @@ class GoogleExportAccountService {
         code.contains('cancelled-popup-request') ||
         code.contains('canceled')) {
       return '${scope.label} Google sign-in was cancelled. Try Choose ${scope.label} Google Account again.';
+    }
+
+    if (code.contains('popup-blocked') ||
+        (message != null && message.toLowerCase().contains('popup'))) {
+      return '${scope.label} Google sign-in popup was blocked. On phone, open the app in Safari/Chrome and tap Choose ${scope.label} Google Account again.';
     }
 
     if (code.contains('access-denied') ||

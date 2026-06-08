@@ -269,6 +269,8 @@ class LocalSupportNoteService {
     if (savedBreakdown.isNotEmpty) return savedBreakdown;
 
     return '''
+Attendance
+
 Main topic(s)
 
 Outcome(s)
@@ -448,15 +450,6 @@ Safety concerns
   static String _payeDocumentXml(WorkEntry entry) {
     final sections = _PayeSupportSections.fromEntry(entry);
     final paragraphs = <String>[
-      _personalParagraph('PAYE Support Note', style: 'Title'),
-      _personalParagraph(entry.client.trim(), style: 'Subtitle'),
-      _personalParagraph('Date: ${formatDate(entry.date)}', bold: true),
-      _personalParagraph(
-        'Time: ${formatTime(entry.startTime)} / ${entry.baseMinutes} minutes',
-        bold: true,
-      ),
-      _personalParagraph('Type: ${entry.type.label}'),
-      _personalSpacer,
       for (final section in sections) ...[
         _personalParagraph(section.title, style: 'Heading1'),
         _personalParagraph(_blankIfEmpty(section.body)),
@@ -580,15 +573,13 @@ Safety concerns
   }
 
   static String _payeCorePropertiesXml(WorkEntry entry) {
-    final title = entry.client.trim().isEmpty
-        ? 'PAYE Support Note'
-        : entry.client;
+    final title = entry.client.trim().isEmpty ? 'Attendance' : entry.client;
 
     return '''
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <dc:title>${_xml(title)}</dc:title>
-  <dc:subject>PAYE support note</dc:subject>
+  <dc:subject>Attendance log</dc:subject>
   <dc:creator>Support Worker Log</dc:creator>
   <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
 </cp:coreProperties>
@@ -875,6 +866,7 @@ class _PersonalLogSection {
 
 class _PayeSupportSections {
   const _PayeSupportSections({
+    required this.attendance,
     required this.mainTopic,
     required this.outcomes,
     required this.nextActions,
@@ -883,6 +875,7 @@ class _PayeSupportSections {
     required this.safety,
   });
 
+  final String attendance;
   final String mainTopic;
   final String outcomes;
   final String nextActions;
@@ -892,6 +885,7 @@ class _PayeSupportSections {
 
   List<_PersonalLogSection> get sections {
     return [
+      _PersonalLogSection('Attendance', attendance),
       _PersonalLogSection('Main topic(s)', mainTopic),
       _PersonalLogSection('Outcome(s)', outcomes),
       _PersonalLogSection('Next action(s)', nextActions),
@@ -902,14 +896,17 @@ class _PayeSupportSections {
   }
 
   static List<_PersonalLogSection> fromEntry(WorkEntry entry) {
+    final attendance = _attendanceFromEntry(entry);
     final breakdown = entry.supportNoteBreakdown.trim();
     if (breakdown.isEmpty) {
       final notes = entry.notes
           .map((note) => note.trim())
+          .where((note) => !note.startsWith('Attendance: '))
           .where((note) => note.isNotEmpty)
           .join('\n');
 
       return [
+        _PersonalLogSection('Attendance', attendance),
         _PersonalLogSection('Main topic(s)', notes),
         const _PersonalLogSection('Outcome(s)', '-'),
         const _PersonalLogSection('Next action(s)', '-'),
@@ -919,7 +916,11 @@ class _PayeSupportSections {
       ];
     }
 
+    final breakdownAttendance = _section(breakdown, 'Attendance');
     return _PayeSupportSections(
+      attendance: breakdownAttendance.trim().isEmpty
+          ? attendance
+          : breakdownAttendance,
       mainTopic: _section(breakdown, 'Main topic'),
       outcomes: _section(breakdown, 'Outcome'),
       nextActions: _section(breakdown, 'Next action'),
@@ -938,6 +939,7 @@ class _PayeSupportSections {
       final trimmed = line.trim();
       final lower = trimmed.toLowerCase();
       final isHeading = [
+        'attendance',
         'main topic',
         'outcome',
         'next action',
@@ -956,6 +958,28 @@ class _PayeSupportSections {
     }
 
     return buffer.join('\n');
+  }
+
+  static String _attendanceFromEntry(WorkEntry entry) {
+    final roles = <String>[];
+
+    for (final note in entry.notes) {
+      final trimmed = note.trim();
+      if (!trimmed.startsWith('Attendance: ')) continue;
+
+      final value = trimmed.replaceFirst('Attendance: ', '').trim();
+      if (value.isEmpty) continue;
+
+      roles.addAll(
+        value
+            .split(',')
+            .map((role) => role.trim())
+            .where((role) => role.isNotEmpty),
+      );
+    }
+
+    final unique = roles.toSet().toList();
+    return unique.isEmpty ? '-' : unique.join('\n');
   }
 }
 

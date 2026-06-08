@@ -185,15 +185,11 @@ class AdminReviewScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
 
     try {
-      final result = await appState.createPrivateGoogleCalendarEvent(entry);
+      await appState.createPrivateGoogleCalendarEvent(entry);
       appState.updateEntry(entry.copyWith(googleCalendarEntered: true));
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result == CalendarEntryExportResult.created
-                ? 'Calendar event created.'
-                : 'Calendar draft opened. Review and save it.',
-          ),
+        const SnackBar(
+          content: Text('Calendar draft opened. Review and save it.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
