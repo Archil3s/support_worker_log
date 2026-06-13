@@ -16,12 +16,68 @@ class _MassageRoutineStep {
     required this.instruction,
     required this.seconds,
     required this.style,
+    required this.visualTitle,
+    required this.visualCue,
+    required this.points,
+    required this.strokes,
   });
 
   final String title;
   final String instruction;
   final int seconds;
   final String style;
+  final String visualTitle;
+  final String visualCue;
+  final List<_MassageVisualPoint> points;
+  final List<_MassageVisualStroke> strokes;
+}
+
+class _MassageVisualPoint {
+  const _MassageVisualPoint({
+    required this.dx,
+    required this.dy,
+    required this.label,
+    required this.pressure,
+  });
+
+  final double dx;
+  final double dy;
+  final String label;
+  final _MassagePressure pressure;
+}
+
+class _MassageVisualStroke {
+  const _MassageVisualStroke({
+    required this.startDx,
+    required this.startDy,
+    required this.endDx,
+    required this.endDy,
+  });
+
+  final double startDx;
+  final double startDy;
+  final double endDx;
+  final double endDy;
+}
+
+enum _MassagePressure { light, medium, broad }
+
+extension on _MassagePressure {
+  Color get color {
+    return switch (this) {
+      _MassagePressure.light => const Color(0xFFF59E0B),
+      _MassagePressure.medium => const Color(0xFFF97316),
+      _MassagePressure.broad => const Color(0xFF31E981),
+    };
+  }
+
+  String get label {
+    return switch (this) {
+      _MassagePressure.light => 'light',
+      _MassagePressure.medium => 'medium',
+      _MassagePressure.broad => 'broad',
+    };
+  }
 }
 
 const _guidedMassageSteps = [
@@ -32,6 +88,25 @@ const _guidedMassageSteps = [
         'knees with pillows, and start with feather-light contact.',
     seconds: 60,
     style: 'Setup',
+    visualTitle: 'Set up the body position',
+    visualCue:
+        'Start at the shoulders with open hands. Confirm pressure before any '
+        'hold.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.69,
+        dy: 0.23,
+        label: 'check',
+        pressure: _MassagePressure.light,
+      ),
+      _MassageVisualPoint(
+        dx: 0.82,
+        dy: 0.23,
+        label: 'check',
+        pressure: _MassagePressure.light,
+      ),
+    ],
+    strokes: [],
   ),
   _MassageRoutineStep(
     title: 'Warm hands and broad shoulder glides',
@@ -40,6 +115,38 @@ const _guidedMassageSteps = [
         'pressure broad, and avoid pressing directly on the spine.',
     seconds: 90,
     style: 'Gentle massage',
+    visualTitle: 'Broad shoulder glides',
+    visualCue:
+        'Use the green arrows as slow palm paths across the upper back and '
+        'shoulders.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.69,
+        dy: 0.27,
+        label: 'palm',
+        pressure: _MassagePressure.broad,
+      ),
+      _MassageVisualPoint(
+        dx: 0.82,
+        dy: 0.27,
+        label: 'palm',
+        pressure: _MassagePressure.broad,
+      ),
+    ],
+    strokes: [
+      _MassageVisualStroke(
+        startDx: 0.68,
+        startDy: 0.24,
+        endDx: 0.61,
+        endDy: 0.32,
+      ),
+      _MassageVisualStroke(
+        startDx: 0.82,
+        startDy: 0.24,
+        endDx: 0.89,
+        endDy: 0.32,
+      ),
+    ],
   ),
   _MassageRoutineStep(
     title: 'Upper trap pressure hold - left',
@@ -48,6 +155,19 @@ const _guidedMassageSteps = [
         'pressure, ask for comfort, then release slowly.',
     seconds: 45,
     style: 'Pressure hold',
+    visualTitle: 'Left upper trap hold',
+    visualCue:
+        'Hold the soft muscle between neck and shoulder. Stay off the spine '
+        'and throat.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.69,
+        dy: 0.22,
+        label: 'hold',
+        pressure: _MassagePressure.medium,
+      ),
+    ],
+    strokes: [],
   ),
   _MassageRoutineStep(
     title: 'Upper trap pressure hold - right',
@@ -56,6 +176,19 @@ const _guidedMassageSteps = [
         'if it sends tingles or pain down the arm.',
     seconds: 45,
     style: 'Pressure hold',
+    visualTitle: 'Right upper trap hold',
+    visualCue:
+        'Match the same light to medium hold on the other shoulder and release '
+        'slowly.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.82,
+        dy: 0.22,
+        label: 'hold',
+        pressure: _MassagePressure.medium,
+      ),
+    ],
+    strokes: [],
   ),
   _MassageRoutineStep(
     title: 'Neck base circles',
@@ -64,6 +197,25 @@ const _guidedMassageSteps = [
         'spine. Make tiny slow circles and keep pressure gentle.',
     seconds: 60,
     style: 'Pressure point',
+    visualTitle: 'Neck base circles',
+    visualCue:
+        'Use two fingertips beside the spine at the skull base. Tiny circles, '
+        'not deep pressure.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.73,
+        dy: 0.17,
+        label: 'circle',
+        pressure: _MassagePressure.light,
+      ),
+      _MassageVisualPoint(
+        dx: 0.77,
+        dy: 0.17,
+        label: 'circle',
+        pressure: _MassagePressure.light,
+      ),
+    ],
+    strokes: [],
   ),
   _MassageRoutineStep(
     title: 'Shoulder blade edge glide',
@@ -72,6 +224,38 @@ const _guidedMassageSteps = [
         'outward, then soften back to broad palm contact.',
     seconds: 90,
     style: 'Gentle massage',
+    visualTitle: 'Shoulder blade edge glide',
+    visualCue:
+        'Trace beside the shoulder blade edge. Keep the glide beside the bone, '
+        'not across the spine.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.66,
+        dy: 0.31,
+        label: 'edge',
+        pressure: _MassagePressure.medium,
+      ),
+      _MassageVisualPoint(
+        dx: 0.84,
+        dy: 0.31,
+        label: 'edge',
+        pressure: _MassagePressure.medium,
+      ),
+    ],
+    strokes: [
+      _MassageVisualStroke(
+        startDx: 0.68,
+        startDy: 0.27,
+        endDx: 0.64,
+        endDy: 0.38,
+      ),
+      _MassageVisualStroke(
+        startDx: 0.82,
+        startDy: 0.27,
+        endDx: 0.86,
+        endDy: 0.38,
+      ),
+    ],
   ),
   _MassageRoutineStep(
     title: 'Forearm and hand release',
@@ -80,6 +264,38 @@ const _guidedMassageSteps = [
         'toward the wrist. Keep pressure lighter near the wrist.',
     seconds: 90,
     style: 'Gentle massage',
+    visualTitle: 'Forearm and hand release',
+    visualCue:
+        'Use slow thumb lines toward the wrist, then soften pressure through '
+        'the palm.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.13,
+        dy: 0.52,
+        label: 'forearm',
+        pressure: _MassagePressure.light,
+      ),
+      _MassageVisualPoint(
+        dx: 0.37,
+        dy: 0.52,
+        label: 'forearm',
+        pressure: _MassagePressure.light,
+      ),
+    ],
+    strokes: [
+      _MassageVisualStroke(
+        startDx: 0.15,
+        startDy: 0.43,
+        endDx: 0.12,
+        endDy: 0.56,
+      ),
+      _MassageVisualStroke(
+        startDx: 0.35,
+        startDy: 0.43,
+        endDx: 0.38,
+        endDy: 0.56,
+      ),
+    ],
   ),
   _MassageRoutineStep(
     title: 'Palm pressure hold',
@@ -88,6 +304,25 @@ const _guidedMassageSteps = [
         'then repeat. Avoid sharp pressure around joints.',
     seconds: 45,
     style: 'Pressure hold',
+    visualTitle: 'Palm pressure hold',
+    visualCue:
+        'Hold the fleshy centre of the palm. Keep it gentle and avoid the '
+        'finger joints.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.11,
+        dy: 0.57,
+        label: 'palm',
+        pressure: _MassagePressure.light,
+      ),
+      _MassageVisualPoint(
+        dx: 0.39,
+        dy: 0.57,
+        label: 'palm',
+        pressure: _MassagePressure.light,
+      ),
+    ],
+    strokes: [],
   ),
   _MassageRoutineStep(
     title: 'Calf sweep and hold',
@@ -96,6 +331,38 @@ const _guidedMassageSteps = [
         'Skip this if there is swelling, heat, or unexplained calf pain.',
     seconds: 90,
     style: 'Gentle massage',
+    visualTitle: 'Calf sweep and hold',
+    visualCue:
+        'Sweep upward through the calf muscle, then hold one comfortable tight '
+        'spot only.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.68,
+        dy: 0.76,
+        label: 'hold',
+        pressure: _MassagePressure.light,
+      ),
+      _MassageVisualPoint(
+        dx: 0.83,
+        dy: 0.76,
+        label: 'hold',
+        pressure: _MassagePressure.light,
+      ),
+    ],
+    strokes: [
+      _MassageVisualStroke(
+        startDx: 0.68,
+        startDy: 0.88,
+        endDx: 0.68,
+        endDy: 0.72,
+      ),
+      _MassageVisualStroke(
+        startDx: 0.83,
+        startDy: 0.88,
+        endDx: 0.83,
+        endDy: 0.72,
+      ),
+    ],
   ),
   _MassageRoutineStep(
     title: 'Cool-down and feedback',
@@ -104,6 +371,32 @@ const _guidedMassageSteps = [
         'and whether any area feels worse.',
     seconds: 60,
     style: 'Check-in',
+    visualTitle: 'Light cool-down strokes',
+    visualCue:
+        'Finish with broad, easy strokes over the areas that felt good. No new '
+        'deep holds.',
+    points: [
+      _MassageVisualPoint(
+        dx: 0.75,
+        dy: 0.30,
+        label: 'soft',
+        pressure: _MassagePressure.broad,
+      ),
+    ],
+    strokes: [
+      _MassageVisualStroke(
+        startDx: 0.67,
+        startDy: 0.23,
+        endDx: 0.63,
+        endDy: 0.36,
+      ),
+      _MassageVisualStroke(
+        startDx: 0.83,
+        startDy: 0.23,
+        endDx: 0.87,
+        endDy: 0.36,
+      ),
+    ],
   ),
 ];
 
@@ -486,6 +779,8 @@ class _GuidedMassageTimer extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
+              _MassageStepVisual(step: step, completed: completed),
+              const SizedBox(height: 14),
               Center(
                 child: Text(
                   completed ? 'Done' : _formatDuration(remainingSeconds),
@@ -566,6 +861,255 @@ class _GuidedMassageTimer extends StatelessWidget {
         _RoutineStepList(activeIndex: stepIndex),
       ],
     );
+  }
+}
+
+class _MassageStepVisual extends StatelessWidget {
+  const _MassageStepVisual({required this.step, required this.completed});
+
+  final _MassageRoutineStep step;
+  final bool completed;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = completed ? 'Cool-down complete' : step.visualTitle;
+    final cue = completed
+        ? 'Check comfort, offer water, and note what to repeat or skip next '
+              'time.'
+        : step.visualCue;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const _SectionAccent(),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      cue,
+                      style: const TextStyle(
+                        color: Color(0xFFCDD7F0),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(color: Colors.white),
+              child: AspectRatio(
+                aspectRatio: 1122 / 1362,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset(
+                      'assets/massage/body_reference.png',
+                      fit: BoxFit.cover,
+                    ),
+                    CustomPaint(
+                      painter: _MassageBodyMapPainter(
+                        points: completed ? const [] : step.points,
+                        strokes: completed ? const [] : step.strokes,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MassageLegendChip(
+                color: Color(0xFF31E981),
+                label: 'green arrows = glide path',
+              ),
+              _MassageLegendChip(
+                color: Color(0xFFF59E0B),
+                label: 'gold = light hold',
+              ),
+              _MassageLegendChip(
+                color: Color(0xFFF97316),
+                label: 'orange = medium hold',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MassageLegendChip extends StatelessWidget {
+  const _MassageLegendChip({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFCDD7F0),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MassageBodyMapPainter extends CustomPainter {
+  const _MassageBodyMapPainter({required this.points, required this.strokes});
+
+  final List<_MassageVisualPoint> points;
+  final List<_MassageVisualStroke> strokes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokePaint = Paint()
+      ..color = const Color(0xFF31E981)
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    for (final stroke in strokes) {
+      final start = Offset(
+        stroke.startDx * size.width,
+        stroke.startDy * size.height,
+      );
+      final end = Offset(stroke.endDx * size.width, stroke.endDy * size.height);
+      canvas.drawLine(start, end, strokePaint);
+      _drawEndArrow(canvas, start, end, const Color(0xFF31E981));
+      canvas.drawCircle(start, 8, Paint()..color = const Color(0xFF4F8DF7));
+      canvas.drawCircle(end, 8, Paint()..color = const Color(0xFFFFC857));
+    }
+
+    for (final point in points) {
+      final centre = Offset(point.dx * size.width, point.dy * size.height);
+      final color = point.pressure.color;
+      final ringPaint = Paint()
+        ..color = color.withAlpha(75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6;
+      final fillPaint = Paint()..color = color;
+      final labelPaint = Paint()
+        ..color = const Color(0xFF101827)
+        ..style = PaintingStyle.fill;
+
+      canvas
+        ..drawCircle(centre, 34, ringPaint)
+        ..drawCircle(centre, 23, Paint()..color = color.withAlpha(45))
+        ..drawCircle(centre, 10, fillPaint);
+
+      final label = '${point.label} ${point.pressure.label}';
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final labelOffset = _labelOffset(centre, textPainter.size, size);
+      final labelRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          labelOffset.dx - 8,
+          labelOffset.dy - 5,
+          textPainter.width + 16,
+          textPainter.height + 10,
+        ),
+        const Radius.circular(999),
+      );
+      canvas.drawRRect(labelRect, labelPaint);
+      textPainter.paint(canvas, labelOffset);
+    }
+  }
+
+  Offset _labelOffset(Offset centre, Size labelSize, Size canvasSize) {
+    final rawDx = centre.dx - (labelSize.width / 2);
+    final rawDy = centre.dy - 58;
+    final dx = rawDx.clamp(8.0, canvasSize.width - labelSize.width - 8);
+    final dy = rawDy < 8 ? centre.dy + 30 : rawDy;
+
+    return Offset(dx, dy);
+  }
+
+  void _drawEndArrow(Canvas canvas, Offset start, Offset end, Color color) {
+    final direction = end - start;
+    if (direction.distance == 0) return;
+
+    final unit = direction / direction.distance;
+    final perpendicular = Offset(-unit.dy, unit.dx);
+    final arrowBase = end - (unit * 22);
+    final path = Path()
+      ..moveTo(end.dx, end.dy)
+      ..lineTo(
+        arrowBase.dx + (perpendicular.dx * 12),
+        arrowBase.dy + (perpendicular.dy * 12),
+      )
+      ..lineTo(
+        arrowBase.dx - (perpendicular.dx * 12),
+        arrowBase.dy - (perpendicular.dy * 12),
+      )
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MassageBodyMapPainter oldDelegate) {
+    return oldDelegate.points != points || oldDelegate.strokes != strokes;
   }
 }
 
