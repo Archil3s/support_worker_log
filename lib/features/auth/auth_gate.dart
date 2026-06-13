@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -35,14 +37,46 @@ class _AppLockScreenState extends State<AppLockScreen> {
 
   bool busy = false;
   String? errorText;
+  DateTime? lockedUntil;
+  Timer? lockoutTimer;
+
+  bool get lockedOut {
+    final until = lockedUntil;
+    return until != null && until.isAfter(DateTime.now());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLockout();
+  }
 
   @override
   void dispose() {
+    lockoutTimer?.cancel();
     lockPasswordController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadLockout() async {
+    final until = await service.lockedUntil();
+    if (!mounted) return;
+
+    setState(() => lockedUntil = until);
+    _startLockoutTimer();
+  }
+
   Future<void> _submit() async {
+    final activeLockout = await service.lockedUntil();
+    if (activeLockout != null) {
+      setState(() {
+        lockedUntil = activeLockout;
+        errorText = null;
+      });
+      _startLockoutTimer();
+      return;
+    }
+
     final password = lockPasswordController.text.trim();
     if (password.isEmpty) {
       setState(() => errorText = 'Enter the app password.');
@@ -55,14 +89,24 @@ class _AppLockScreenState extends State<AppLockScreen> {
     });
 
     if (!service.verifyPassword(password)) {
+      final until = await service.recordFailedAttempt();
+      if (!mounted) return;
+
       setState(() {
         busy = false;
-        errorText = 'Wrong password.';
+        lockedUntil = until;
+        errorText = until == null
+            ? 'Wrong password.'
+            : 'Too many wrong passwords. Try again in ${_lockoutRemaining()}.';
       });
+      _startLockoutTimer();
       return;
     }
 
-    context.read<AppState>().unlockApp();
+    await service.clearLockout();
+    if (!mounted) return;
+
+    await context.read<AppState>().unlockApp();
   }
 
   Future<void> _signOut() async {
@@ -83,8 +127,46 @@ class _AppLockScreenState extends State<AppLockScreen> {
     }
   }
 
+  void _startLockoutTimer() {
+    lockoutTimer?.cancel();
+    if (!lockedOut) return;
+
+    lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted) return;
+
+      if (!lockedOut) {
+        lockoutTimer?.cancel();
+        await service.clearLockout();
+        if (!mounted) return;
+
+        setState(() {
+          lockedUntil = null;
+          errorText = null;
+        });
+        return;
+      }
+
+      setState(() {});
+    });
+  }
+
+  String _lockoutRemaining() {
+    final until = lockedUntil;
+    if (until == null) return '0:00';
+
+    final remaining = until.difference(DateTime.now());
+    final seconds = remaining.inSeconds < 0 ? 0 : remaining.inSeconds + 1;
+    final minutesPart = seconds ~/ 60;
+    final secondsPart = seconds % 60;
+    return '$minutesPart:${secondsPart.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final lockoutMessage = lockedOut
+        ? 'Too many wrong passwords. Try again in ${_lockoutRemaining()}.'
+        : null;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Support Worker Log')),
       body: Center(
@@ -119,15 +201,15 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     const SizedBox(height: 18),
                     _AppPasswordField(
                       controller: lockPasswordController,
-                      enabled: !busy,
+                      enabled: !busy && !lockedOut,
                       onSubmitted: (_) {
-                        if (!busy) _submit();
+                        if (!busy && !lockedOut) _submit();
                       },
                     ),
-                    if (errorText != null) ...[
+                    if (lockoutMessage != null || errorText != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        errorText!,
+                        lockoutMessage ?? errorText!,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Color(0xFFFF6B6B),
@@ -137,7 +219,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     ],
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: busy ? null : _submit,
+                      onPressed: busy || lockedOut ? null : _submit,
                       icon: busy
                           ? const SizedBox(
                               width: 18,

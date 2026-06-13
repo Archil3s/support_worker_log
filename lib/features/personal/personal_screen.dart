@@ -9,6 +9,7 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
+import '../../shared/widgets/home_screen_shortcut_button.dart';
 import '../../shared/widgets/section_card.dart';
 
 class PersonalScreen extends StatefulWidget {
@@ -110,6 +111,13 @@ class _PersonalScreenState extends State<PersonalScreen> {
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add Personal Log'),
               ),
+              const SizedBox(height: 10),
+              const HomeScreenShortcutButton(
+                title: 'Gym',
+                mode: 'gym',
+                icon: Icons.add_to_home_screen_rounded,
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(

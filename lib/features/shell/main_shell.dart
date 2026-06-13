@@ -11,6 +11,7 @@ import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
 import '../massage/massage_screen.dart';
+import '../mood/presentation/pages/mood_tracker_screen.dart';
 import '../notes/actions_screen.dart';
 import '../notes/notes_screen.dart';
 import '../pay_period/pay_period_screen.dart';
@@ -103,6 +104,7 @@ class _MainShellState extends State<MainShell> {
   String _title(AppMode mode) {
     if (mode == AppMode.personal) return 'Personal Mode';
     if (mode == AppMode.massage) return 'Massage';
+    if (mode == AppMode.mood) return 'Mood Tracker';
     if (mode == AppMode.casework) return 'Casework';
     if (mode == AppMode.paye) return 'PAYE job - $title';
 
@@ -115,6 +117,8 @@ class _MainShellState extends State<MainShell> {
         return Icons.person_outline_rounded;
       case AppMode.massage:
         return Icons.spa_outlined;
+      case AppMode.mood:
+        return Icons.monitor_heart_outlined;
       case AppMode.casework:
         return Icons.home_work_outlined;
       case AppMode.paye:
@@ -241,8 +245,10 @@ class _MainShellState extends State<MainShell> {
         final maxContentWidth = wide ? 980.0 : 430.0;
         final personalMode = appMode == AppMode.personal;
         final massageMode = appMode == AppMode.massage;
+        final moodMode = appMode == AppMode.mood;
         final caseworkMode = appMode == AppMode.casework;
-        final standaloneMode = personalMode || massageMode || caseworkMode;
+        final standaloneMode =
+            personalMode || massageMode || moodMode || caseworkMode;
         final contentWidth = caseworkMode && wide ? 1680.0 : maxContentWidth;
 
         return Scaffold(
@@ -283,6 +289,13 @@ class _MainShellState extends State<MainShell> {
                       child: ListTile(
                         leading: Icon(Icons.spa_outlined),
                         title: Text('Massage'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: AppMode.mood,
+                      child: ListTile(
+                        leading: Icon(Icons.monitor_heart_outlined),
+                        title: Text('Mood Tracker'),
                       ),
                     ),
                     PopupMenuItem(
@@ -351,6 +364,8 @@ class _MainShellState extends State<MainShell> {
                             ? const PersonalScreen()
                             : massageMode
                             ? const MassageScreen()
+                            : moodMode
+                            ? const MoodTrackerScreen()
                             : caseworkMode
                             ? const CaseworkScreen()
                             : _screen(),

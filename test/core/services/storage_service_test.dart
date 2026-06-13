@@ -145,4 +145,17 @@ void main() {
 
     expect(restored.appMode, AppMode.massage);
   });
+
+  test('persists mood and testosterone app mode', () {
+    const data = StoredAppData(
+      settings: AppSettings(),
+      clients: ['AB'],
+      entries: [],
+      appMode: AppMode.mood,
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.appMode, AppMode.mood);
+  });
 }

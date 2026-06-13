@@ -12,6 +12,7 @@ import '../models/invoice_status.dart';
 import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../services/calendar_export_service.dart';
+import '../services/app_lock_service.dart';
 import '../services/cloud_storage_service.dart';
 import '../services/drive_invoice_cycle_sync_service.dart';
 import '../services/google_export_account_service.dart';
@@ -30,6 +31,7 @@ enum CalendarEntryExportResult { created, draftOpened }
 
 class AppState extends ChangeNotifier {
   final StorageService _storageService = StorageService();
+  final AppLockService _appLockService = AppLockService();
   final CloudStorageService _cloudStorageService = CloudStorageService();
   final GoogleExportAccountService _googleExportAccountService =
       GoogleExportAccountService();
@@ -140,6 +142,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final localData = await _storageService.load();
     _replaceInMemory(localData);
+    _applyLaunchAppModeOverride();
 
     try {
       await _cloudStorageService.signOutAnonymousUserIfNeeded();
@@ -150,12 +153,15 @@ class AppState extends ChangeNotifier {
         _cloudSyncReady = false;
         _appUnlocked = false;
         _cloudSyncError = null;
+        await _appLockService.clearRememberedUnlock();
       } else if (_cloudStorageService.isSignedIn) {
+        _appUnlocked = await _appLockService.hasRememberedUnlock();
         unawaited(_syncLocalAndCloudSafely());
       } else {
         _cloudSyncReady = false;
         _appUnlocked = false;
         _cloudSyncError = null;
+        await _appLockService.clearRememberedUnlock();
       }
     } catch (error) {
       _cloudSyncReady = false;
@@ -420,6 +426,7 @@ class AppState extends ChangeNotifier {
     await _stopCloudDataSubscription();
     await _googleExportAccountService.signOutAll();
     await _cloudStorageService.signOut();
+    await _appLockService.clearRememberedUnlock();
     _cloudSyncReady = false;
     _appUnlocked = false;
     _cloudSyncError = null;
@@ -432,6 +439,7 @@ class AppState extends ChangeNotifier {
 
     await _stopCloudDataSubscription();
     await _googleExportAccountService.signOutAll();
+    await _appLockService.clearRememberedUnlock();
     _cloudSyncReady = false;
     _appUnlocked = false;
     _cloudSyncError = null;
@@ -439,9 +447,10 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  void unlockApp() {
+  Future<void> unlockApp() async {
     if (_appUnlocked) return;
 
+    await _appLockService.rememberUnlock();
     _appUnlocked = true;
     notifyListeners();
   }
@@ -449,6 +458,7 @@ class AppState extends ChangeNotifier {
   void lockApp() {
     if (!_appUnlocked) return;
 
+    unawaited(_appLockService.clearRememberedUnlock());
     _appUnlocked = false;
     notifyListeners();
   }
@@ -864,9 +874,11 @@ class AppState extends ChangeNotifier {
     );
 
     _replaceInMemory(mergedData);
+    _applyLaunchAppModeOverride();
+    final dataToSave = _currentStoredData();
 
-    await _storageService.save(mergedData);
-    await _cloudStorageService.save(mergedData);
+    await _storageService.save(dataToSave);
+    await _cloudStorageService.save(dataToSave);
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
@@ -923,7 +935,9 @@ class AppState extends ChangeNotifier {
     if (cloudData == null) return;
 
     _replaceInMemory(cloudData);
-    await _storageService.save(cloudData);
+    _applyLaunchAppModeOverride();
+    final dataToSave = _currentStoredData();
+    await _storageService.save(dataToSave);
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
@@ -1233,6 +1247,40 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(data.invoiceBaselineTotals);
     _appMode = data.appMode;
+  }
+
+  void _applyLaunchAppModeOverride() {
+    final mode = _launchAppModeOverride();
+    if (mode == null || _appMode == mode) return;
+
+    _appMode = mode;
+  }
+
+  AppMode? _launchAppModeOverride() {
+    final uri = Uri.base;
+    final modeValue = (uri.queryParameters['mode'] ?? '').trim().toLowerCase();
+    final rawFragment = uri.fragment.trim().toLowerCase();
+    final fragmentUri = Uri.tryParse(uri.fragment);
+    final fragmentModeValue = (fragmentUri?.queryParameters['mode'] ?? '')
+        .trim()
+        .toLowerCase();
+    final value = modeValue.isNotEmpty
+        ? modeValue
+        : fragmentModeValue.isNotEmpty
+        ? fragmentModeValue
+        : rawFragment.startsWith('mode=')
+        ? rawFragment.substring(5)
+        : rawFragment;
+
+    return switch (value) {
+      'mood' || 'mood-tracker' || 'mood_tracker' => AppMode.mood,
+      'gym' || 'personal' || 'workout' || 'workouts' => AppMode.personal,
+      'massage' => AppMode.massage,
+      'casework' => AppMode.casework,
+      'paye' => AppMode.paye,
+      'work' => AppMode.work,
+      _ => null,
+    };
   }
 
   StoredAppData _mergeStoredData({

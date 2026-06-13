@@ -1,11 +1,11 @@
 {
-    "name": "support_worker_log",
-    "short_name": "support_worker_log",
+    "name": "Mood Tracker",
+    "short_name": "Mood Tracker",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#090E17",
+    "theme_color": "#4F8DF7",
+    "description": "Track mood, gym, sleep, stress, and daily patterns.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
