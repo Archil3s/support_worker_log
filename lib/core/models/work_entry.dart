@@ -31,11 +31,11 @@ extension TextContactDirectionLabel on TextContactDirection {
   String get label {
     switch (this) {
       case TextContactDirection.received:
-        return 'Text received';
+        return 'Received';
       case TextContactDirection.sent:
-        return 'Text sent';
+        return 'Sent';
       case TextContactDirection.exchange:
-        return 'Text exchange';
+        return 'Exchange';
     }
   }
 }
@@ -347,11 +347,13 @@ class WorkEntry {
         ..writeln('Google Calendar: entered');
     }
 
-    if (type == EntryType.textNote) {
+    if (type.isWrittenContact) {
       buffer
         ..writeln()
-        ..writeln('Text direction: ${textContactDirection.label}')
-        ..writeln('Text importance: ${importantText ? 'important' : 'normal'}')
+        ..writeln('Contact direction: ${textContactDirection.label}')
+        ..writeln(
+          'Contact importance: ${importantText ? 'important' : 'normal'}',
+        )
         ..writeln('Reply needed: ${textReplyNeeded ? 'yes' : 'no'}');
     }
 

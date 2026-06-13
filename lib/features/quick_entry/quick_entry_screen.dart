@@ -195,10 +195,10 @@ String _buildTextNoteBreakdown({
   required bool replyNeeded,
 }) {
   return [
-    'Text direction',
+    'Contact direction',
     direction.label,
     '',
-    'Text contact summary',
+    'Contact summary',
     _cleanSupportNoteSection(summary),
     '',
     'Reply needed',
@@ -463,10 +463,15 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
   }
 
   void _startVisit(AppState appState) {
-    final client = selectedClient;
+    final client = selectedType.requiresClientSelection
+        ? selectedClient
+        : selectedType.allowsOptionalClientTag
+        ? selectedClient ?? selectedType.fallbackClientName
+        : selectedType.fallbackClientName;
 
-    if (client == null || client.trim().isEmpty) {
-      _snack('Tap a client first.');
+    if (selectedType.requiresClientSelection &&
+        (client == null || client.trim().isEmpty)) {
+      _snack('Select a client first.');
       return;
     }
 
@@ -478,7 +483,9 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     appState.startActiveVisit(
       ActiveVisit(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
-        client: client,
+        client: client?.trim().isEmpty == true
+            ? selectedType.fallbackClientName
+            : client ?? selectedType.fallbackClientName,
         type: selectedType,
         startedAt: startedAt,
         odometerStart: trackKilometres
@@ -575,10 +582,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         ? math.max(0.0, finishOdometer - activeVisit.odometerStart!)
         : 0.0;
 
-    final textCloseOut = activeVisit.type == EntryType.textNote
+    final textCloseOut = activeVisit.type.isWrittenContact
         ? await _promptTextNoteBreakdown(activeVisit: activeVisit, notes: notes)
         : null;
-    final supportNoteBreakdown = activeVisit.type == EntryType.textNote
+    final supportNoteBreakdown = activeVisit.type.isWrittenContact
         ? textCloseOut?.breakdown
         : await _promptSupportNoteBreakdown(
             activeVisit: activeVisit,
@@ -754,7 +761,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final activeVisit = appState.activeVisit;
     final showKilometres = !appState.isPayeMode;
 
-    if (selectedClient == null && clients.isNotEmpty) {
+    if (appState.isPayeMode && selectedType.workOnly) {
+      selectedType = EntryType.homeVisit;
+    }
+
+    if (selectedType.requiresClientSelection &&
+        selectedClient == null &&
+        clients.isNotEmpty) {
       selectedClient = clients.first;
     }
 
@@ -817,6 +830,11 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       onTypeSelected: (type) {
         setState(() {
           selectedType = type;
+          if (!type.requiresClientSelection) {
+            selectedClient = null;
+          } else if (selectedClient == null && clients.isNotEmpty) {
+            selectedClient = clients.first;
+          }
           if (type != EntryType.homeVisit) {
             startOdometerController.clear();
           }
@@ -944,7 +962,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
         ..clearSnackBars()
         ..showSnackBar(
           SnackBar(
-            content: const Text('Add the text contact summary before saving.'),
+            content: const Text('Add the contact summary before saving.'),
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
             shape: RoundedRectangleBorder(
@@ -988,13 +1006,13 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
     switch (stepIndex) {
       case 0:
         return _PromptStep(
-          title: 'Text Details',
+          title: 'Contact Details',
           subtitle: 'Set direction and flags before writing the summary.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Panel(
-                title: 'Text facts',
+                title: 'Contact facts',
                 child: Column(
                   children: [
                     _InfoRow(label: 'Client', value: widget.activeVisit.client),
@@ -1035,11 +1053,11 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
                 value: importantText,
                 onChanged: (value) => setState(() => importantText = value),
                 title: const Text(
-                  'Important text',
+                  'Important contact',
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
                 subtitle: const Text(
-                  'Important texts are marked in invoice text summaries.',
+                  'Important written contacts are marked in invoice summaries.',
                   style: TextStyle(color: Color(0xFF8396C7)),
                 ),
               ),
@@ -1061,7 +1079,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
           subtitle: 'Write the short record that will appear in the log.',
           child: _SupportNoteField(
             controller: summaryController,
-            label: 'What was texted',
+            label: 'What was discussed',
             hint: 'Short factual summary only.',
             helper: 'Keep this useful for a living communication log.',
             wordCount: _wordCount(summaryController.text),
@@ -1075,7 +1093,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
           title: 'Reply / Follow-up',
           subtitle: replyNeeded
               ? 'Add the action that should stay open.'
-              : 'No reply is needed for this text.',
+              : 'No reply is needed for this contact.',
           child: replyNeeded
               ? _SupportNoteField(
                   controller: nextActionsController,
@@ -2154,7 +2172,7 @@ class _StartVisitView extends StatelessWidget {
   final TextEditingController startOdometerController;
   final bool showKilometres;
   final bool showAttendance;
-  final ValueChanged<String> onClientSelected;
+  final ValueChanged<String?> onClientSelected;
   final ValueChanged<EntryType> onTypeSelected;
   final void Function(String note, bool selected) onNoteToggle;
   final VoidCallback onUseToday;
@@ -2166,6 +2184,9 @@ class _StartVisitView extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final noteOptions = appState.settings.noteOptions;
+    final availableTypes = entryTypesForMode(payeMode: appState.isPayeMode);
+    final showClientSelector = selectedType.requiresClientSelection;
+    final showOptionalClientTag = selectedType.allowsOptionalClientTag;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -2215,36 +2236,53 @@ class _StartVisitView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _Panel(
-          title: '1. Client',
-          child: clients.isEmpty
-              ? const Text('Add clients in Settings first.')
-              : Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final client in clients)
-                      _ChoiceCard(
-                        icon: Icons.person_rounded,
-                        label: client,
-                        selected: selectedClient == client,
-                        onTap: () => onClientSelected(client),
-                      ),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 12),
+        if (showClientSelector || showOptionalClientTag) ...[
+          _Panel(
+            title: showOptionalClientTag ? '1. Client Tag' : '1. Client',
+            child: clients.isEmpty
+                ? const Text('Add clients in Settings first.')
+                : DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: showOptionalClientTag
+                        ? selectedClient
+                        : selectedClient ?? clients.first,
+                    decoration: InputDecoration(
+                      labelText: showOptionalClientTag
+                          ? 'Related client'
+                          : 'Client',
+                      helperText: showOptionalClientTag
+                          ? 'Optional. Tag the client this admin, education, or resource work is for.'
+                          : 'Select the client this contact is for.',
+                      prefixIcon: const Icon(Icons.person_outline),
+                    ),
+                    items: [
+                      if (showOptionalClientTag)
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('No specific client'),
+                        ),
+                      for (final client in clients)
+                        DropdownMenuItem<String?>(
+                          value: client,
+                          child: Text(client, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: onClientSelected,
+                  ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _Panel(
           title: '2. Support Type',
           child: Column(
             children: [
-              for (final type in EntryType.values) ...[
+              for (final type in availableTypes) ...[
                 _TypeTile(
                   type: type,
                   selected: selectedType == type,
                   onTap: () => onTypeSelected(type),
                 ),
-                if (type != EntryType.values.last) const SizedBox(height: 8),
+                if (type != availableTypes.last) const SizedBox(height: 8),
               ],
             ],
           ),
@@ -2575,66 +2613,6 @@ class _Panel extends StatelessWidget {
             const SizedBox(height: 12),
             child,
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ChoiceCard extends StatelessWidget {
-  const _ChoiceCard({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? const Color(0xFF13294D) : const Color(0xFF20283B),
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Container(
-          width: 150,
-          height: 104,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected
-                  ? const Color(0xFF4F8DF7)
-                  : const Color(0xFF34405F),
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: selected ? const Color(0xFF4F8DF7) : Colors.white,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

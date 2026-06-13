@@ -4,6 +4,25 @@ import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
 
 void main() {
+  test('entry type mode and client selection rules are explicit', () {
+    expect(EntryType.emailClient.isWrittenContact, isTrue);
+    expect(EntryType.emailClient.requiresClientSelection, isTrue);
+    expect(EntryType.emailProfessional.requiresClientSelection, isFalse);
+    expect(EntryType.adminEducationResources.allowsOptionalClientTag, isTrue);
+    expect(
+      entryTypesForMode(payeMode: true),
+      isNot(contains(EntryType.emailClient)),
+    );
+    expect(
+      entryTypesForMode(payeMode: false),
+      containsAll([
+        EntryType.emailClient,
+        EntryType.emailProfessional,
+        EntryType.adminEducationResources,
+      ]),
+    );
+  });
+
   test('persists text direction and reply-needed status', () {
     final entry = WorkEntry(
       id: 'entry-1',

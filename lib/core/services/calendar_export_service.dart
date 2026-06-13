@@ -178,21 +178,26 @@ class CalendarExportService {
   }
 
   static String _calendarTitle(WorkEntry entry) {
-    if (entry.type == EntryType.textNote && entry.importantText) {
-      return 'IMPORTANT TEXT ${entry.client}';
+    if (entry.type.isWrittenContact && entry.importantText) {
+      return 'IMPORTANT ${_calendarContactLabel(entry.type)} ${entry.client}';
     }
 
     return '${entry.client} ${entry.type.label}';
   }
 
+  static String _calendarContactLabel(EntryType type) {
+    if (type == EntryType.textNote) return 'TEXT';
+    return type.label.toUpperCase();
+  }
+
   static String? _googleCalendarColorId(WorkEntry entry) {
-    if (entry.type != EntryType.textNote) return null;
+    if (!entry.type.isWrittenContact) return null;
 
     return entry.importantText ? '11' : '7';
   }
 
   static String _icsCalendarColor(WorkEntry entry) {
-    if (entry.type != EntryType.textNote) return _defaultCalendarColor;
+    if (!entry.type.isWrittenContact) return _defaultCalendarColor;
 
     return entry.importantText
         ? _importantTextCalendarColor

@@ -159,7 +159,7 @@ class DriveInvoiceCycleSyncService {
     final perClient = <String, List<WorkEntry>>{};
 
     for (final entry in entries) {
-      if (entry.type != EntryType.textNote) continue;
+      if (!entry.type.isWrittenContact) continue;
 
       perClient.putIfAbsent(_clientName(entry), () => <WorkEntry>[]).add(entry);
     }
@@ -269,7 +269,7 @@ class DriveInvoiceCycleSyncService {
     final clients = entries.map((entry) => entry.client.trim()).toSet()
       ..removeWhere((client) => client.isEmpty);
     final totalTexts = entries
-        .where((entry) => entry.type == EntryType.textNote)
+        .where((entry) => entry.type.isWrittenContact)
         .length;
     final totalEmails = entries.where(_isEmailContact).length;
     final typeCounts = <EntryType, int>{};
@@ -288,7 +288,7 @@ class DriveInvoiceCycleSyncService {
       ..writeln('Total hours: ${totalHours(entries).toStringAsFixed(2)}')
       ..writeln('Total kms: ${totalKilometres(entries).toStringAsFixed(1)}')
       ..writeln('Total earnings: ${money(totalEarnings(entries, settings))}')
-      ..writeln('Total texts: $totalTexts')
+      ..writeln('Total written contacts: $totalTexts')
       ..writeln('Total emails: $totalEmails');
 
     for (final type in EntryType.values) {
@@ -357,10 +357,10 @@ class DriveInvoiceCycleSyncService {
 
   String _textsPerClient(List<WorkEntry> entries) {
     final textEntries = entries
-        .where((entry) => entry.type == EntryType.textNote)
+        .where((entry) => entry.type.isWrittenContact)
         .toList();
 
-    if (textEntries.isEmpty) return '- No text contacts recorded.';
+    if (textEntries.isEmpty) return '- No written contacts recorded.';
 
     _sortEntries(textEntries);
 
@@ -438,7 +438,7 @@ class DriveInvoiceCycleSyncService {
         )
         ..writeln('- Date: ${formatDate(entry.date)}')
         ..writeln('- Time: ${formatTime(entry.startTime)}')
-        ..writeln('- Direction: ${entry.textContactDirection.label}')
+        ..writeln('- Direction: ${_textDirectionLabel(entry)}')
         ..writeln('- Important: $importance')
         ..writeln('- Reply needed: ${entry.textReplyNeeded ? 'Yes' : 'No'}')
         ..writeln('- Billable minutes: ${entry.baseMinutes}')
@@ -481,6 +481,10 @@ class DriveInvoiceCycleSyncService {
     return buffer.toString().trim();
   }
 
+  String _textDirectionLabel(WorkEntry entry) {
+    return 'Text ${entry.textContactDirection.label.toLowerCase()}';
+  }
+
   String _textSummary(WorkEntry entry) {
     final text = entry.supportNoteBreakdown.trim();
 
@@ -489,7 +493,7 @@ class DriveInvoiceCycleSyncService {
           .map((note) => note.trim())
           .where((note) => note.isNotEmpty);
 
-      return notes.isEmpty ? 'No text summary recorded.' : notes.join('; ');
+      return notes.isEmpty ? 'No written summary recorded.' : notes.join('; ');
     }
 
     final lines = text.split(RegExp(r'\r?\n'));
@@ -500,7 +504,8 @@ class DriveInvoiceCycleSyncService {
       final line = rawLine.trim();
       final normalized = line.toLowerCase();
 
-      if (normalized.startsWith('text contact summary')) {
+      if (normalized.startsWith('text contact summary') ||
+          normalized.startsWith('contact summary')) {
         readingSummary = true;
         continue;
       }

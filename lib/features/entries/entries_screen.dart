@@ -774,7 +774,7 @@ class _EntryCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
-            if (entry.type == EntryType.textNote) ...[
+            if (entry.type.isWrittenContact) ...[
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -795,7 +795,9 @@ class _EntryCard extends StatelessWidget {
                           : const Color(0xFF039BE5),
                     ),
                     label: Text(
-                      entry.importantText ? 'Important text' : 'Normal text',
+                      entry.importantText
+                          ? 'Important contact'
+                          : 'Normal contact',
                     ),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -912,6 +914,10 @@ enum _EntryTypeFilter {
   homeVisit,
   professionalContact,
   phoneCall,
+  videoCall,
+  emailClient,
+  emailProfessional,
+  adminEducationResources,
   textNote,
 }
 
@@ -926,6 +932,14 @@ extension _EntryTypeFilterLabel on _EntryTypeFilter {
         return EntryType.professionalContact.label;
       case _EntryTypeFilter.phoneCall:
         return EntryType.phoneCall.label;
+      case _EntryTypeFilter.videoCall:
+        return EntryType.videoCall.label;
+      case _EntryTypeFilter.emailClient:
+        return EntryType.emailClient.label;
+      case _EntryTypeFilter.emailProfessional:
+        return EntryType.emailProfessional.label;
+      case _EntryTypeFilter.adminEducationResources:
+        return EntryType.adminEducationResources.label;
       case _EntryTypeFilter.textNote:
         return EntryType.textNote.label;
     }
@@ -941,6 +955,14 @@ extension _EntryTypeFilterLabel on _EntryTypeFilter {
         return EntryType.professionalContact;
       case _EntryTypeFilter.phoneCall:
         return EntryType.phoneCall;
+      case _EntryTypeFilter.videoCall:
+        return EntryType.videoCall;
+      case _EntryTypeFilter.emailClient:
+        return EntryType.emailClient;
+      case _EntryTypeFilter.emailProfessional:
+        return EntryType.emailProfessional;
+      case _EntryTypeFilter.adminEducationResources:
+        return EntryType.adminEducationResources;
       case _EntryTypeFilter.textNote:
         return EntryType.textNote;
     }

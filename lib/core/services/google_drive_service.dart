@@ -551,12 +551,18 @@ class GoogleDriveService {
     );
     if (clientFolder == null) return null;
 
-    final periodFolder = await _findChild(
-      accessToken: accessToken,
-      parentId: clientFolder.id,
-      name: _cycleFolderName(invoiceNumber: invoiceNumber, range: range),
-      mimeType: 'application/vnd.google-apps.folder',
-    );
+    final periodFolder =
+        await _findChild(
+          accessToken: accessToken,
+          parentId: clientFolder.id,
+          name: _cycleFolderName(invoiceNumber: invoiceNumber, range: range),
+          mimeType: 'application/vnd.google-apps.folder',
+        ) ??
+        await _findSupportNotePeriodFolderFallback(
+          accessToken: accessToken,
+          clientFolderId: clientFolder.id,
+          entry: entry,
+        );
     if (periodFolder == null) return null;
 
     return _findChild(
@@ -565,6 +571,45 @@ class GoogleDriveService {
       name: _supportNoteTypeFolderName(entry.type),
       mimeType: 'application/vnd.google-apps.folder',
     );
+  }
+
+  Future<GoogleDriveFile?> _findSupportNotePeriodFolderFallback({
+    required String accessToken,
+    required String clientFolderId,
+    required WorkEntry entry,
+  }) async {
+    final periodFolders = await listFolder(
+      accessToken: accessToken,
+      folderId: clientFolderId,
+    );
+    final typeFolderName = _supportNoteTypeFolderName(entry.type);
+
+    for (final folder in periodFolders) {
+      if (folder.mimeType != 'application/vnd.google-apps.folder') continue;
+
+      final typeFolder = await _findChild(
+        accessToken: accessToken,
+        parentId: folder.id,
+        name: typeFolderName,
+        mimeType: 'application/vnd.google-apps.folder',
+      );
+      if (typeFolder == null) continue;
+
+      final files = await listFolder(
+        accessToken: accessToken,
+        folderId: typeFolder.id,
+      );
+      final datePrefix = '${_dateKey(entry.date)}_';
+      final hasMatchingFile = files.any(
+        (file) =>
+            file.name.startsWith(datePrefix) &&
+            file.name.endsWith('.docx') &&
+            file.mimeType == _docxMimeType,
+      );
+      if (hasMatchingFile) return folder;
+    }
+
+    return null;
   }
 
   Future<List<GoogleDriveTemplateUpload>> uploadDefaultTemplates({
@@ -869,6 +914,14 @@ class GoogleDriveService {
         return 'Texts';
       case EntryType.phoneCall:
         return 'Phone Calls';
+      case EntryType.videoCall:
+        return 'Video Calls';
+      case EntryType.emailClient:
+        return 'Client Emails';
+      case EntryType.emailProfessional:
+        return 'Professional Emails';
+      case EntryType.adminEducationResources:
+        return 'Admin Education Resources';
       case EntryType.homeVisit:
         return 'Home Visits';
       case EntryType.professionalContact:

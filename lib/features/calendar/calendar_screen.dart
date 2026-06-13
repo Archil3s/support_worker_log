@@ -668,25 +668,25 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
                     label: entry.noteAllowanceText,
                     color: const Color(0xFF4F8DF7),
                   ),
-                if (entry.type == EntryType.textNote)
+                if (entry.type.isWrittenContact)
                   _StatusChip(
                     icon: Icons.sms_outlined,
                     label: entry.textContactDirection.label,
                     color: const Color(0xFF8B5CF6),
                   ),
-                if (entry.type == EntryType.textNote)
+                if (entry.type.isWrittenContact)
                   _StatusChip(
                     icon: entry.importantText
                         ? Icons.priority_high_rounded
                         : Icons.label_outline,
                     label: entry.importantText
-                        ? 'Important text'
-                        : 'Normal text',
+                        ? 'Important contact'
+                        : 'Normal contact',
                     color: entry.importantText
                         ? const Color(0xFFD50000)
                         : const Color(0xFF039BE5),
                   ),
-                if (entry.type == EntryType.textNote)
+                if (entry.type.isWrittenContact)
                   _StatusChip(
                     icon: entry.textReplyNeeded
                         ? Icons.reply_outlined

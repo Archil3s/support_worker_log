@@ -75,7 +75,7 @@ class AdminReviewScreen extends StatelessWidget {
         const SizedBox(height: 12),
         _ReviewSection(
           title: 'Texts Needing Reply',
-          emptyMessage: 'No text replies waiting.',
+          emptyMessage: 'No written-contact replies waiting.',
           entries: review.replyNeeded,
           actionsBuilder: (entry) => [
             _EntryAction(
@@ -142,7 +142,7 @@ class AdminReviewScreen extends StatelessWidget {
         const SizedBox(height: 12),
         _ReviewSection(
           title: 'Important Texts',
-          emptyMessage: 'No important texts in the last 7 days.',
+          emptyMessage: 'No important written contacts in the last 7 days.',
           entries: review.recentImportantTexts,
           actionsBuilder: (entry) => [
             _EntryAction(
@@ -223,7 +223,7 @@ class AdminReviewScreen extends StatelessWidget {
     context.read<AppState>().updateEntry(
       entry.copyWith(
         nextActions: updatedActions,
-        textReplyNeeded: entry.type == EntryType.textNote
+        textReplyNeeded: entry.type.isWrittenContact
             ? false
             : entry.textReplyNeeded,
       ),
@@ -252,7 +252,7 @@ class AdminReviewSnapshot {
 
     return AdminReviewSnapshot(
       replyNeeded: sorted
-          .where((entry) => entry.type == EntryType.textNote)
+          .where((entry) => entry.type.isWrittenContact)
           .where((entry) => entry.textReplyNeeded)
           .toList(),
       calendarGaps: sorted
@@ -267,7 +267,7 @@ class AdminReviewSnapshot {
           )
           .toList(),
       recentImportantTexts: sorted
-          .where((entry) => entry.type == EntryType.textNote)
+          .where((entry) => entry.type.isWrittenContact)
           .where((entry) => entry.importantText)
           .where((entry) => !entry.date.isBefore(_dateOnly(recentStart)))
           .toList(),
@@ -372,7 +372,7 @@ class _AdminEntryTile extends StatelessWidget {
                     '${entry.type.label} | ${formatDate(entry.date)} | ${formatTime(entry.startTime)}',
                     style: const TextStyle(color: Color(0xFF8396C7)),
                   ),
-                  if (entry.type == EntryType.textNote) ...[
+                  if (entry.type.isWrittenContact) ...[
                     const SizedBox(height: 4),
                     Text(
                       '${entry.textContactDirection.label} | '

@@ -5,6 +5,7 @@ import '../../core/models/app_mode.dart';
 import '../../core/state/app_state.dart';
 import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
+import '../casework/casework_screen.dart';
 import '../charts/charts_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
@@ -102,9 +103,25 @@ class _MainShellState extends State<MainShell> {
   String _title(AppMode mode) {
     if (mode == AppMode.personal) return 'Personal Mode';
     if (mode == AppMode.massage) return 'Massage';
+    if (mode == AppMode.casework) return 'Casework';
     if (mode == AppMode.paye) return 'PAYE job - $title';
 
     return title;
+  }
+
+  IconData _modeIcon(AppMode mode) {
+    switch (mode) {
+      case AppMode.personal:
+        return Icons.person_outline_rounded;
+      case AppMode.massage:
+        return Icons.spa_outlined;
+      case AppMode.casework:
+        return Icons.home_work_outlined;
+      case AppMode.paye:
+        return Icons.business_center_outlined;
+      case AppMode.work:
+        return Icons.work_outline_rounded;
+    }
   }
 
   void _go(_Section next) {
@@ -224,8 +241,9 @@ class _MainShellState extends State<MainShell> {
         final maxContentWidth = wide ? 980.0 : 430.0;
         final personalMode = appMode == AppMode.personal;
         final massageMode = appMode == AppMode.massage;
-        final payeMode = appMode == AppMode.paye;
-        final standaloneMode = personalMode || massageMode;
+        final caseworkMode = appMode == AppMode.casework;
+        final standaloneMode = personalMode || massageMode || caseworkMode;
+        final contentWidth = caseworkMode && wide ? 1680.0 : maxContentWidth;
 
         return Scaffold(
           appBar: AppBar(
@@ -268,6 +286,13 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     PopupMenuItem(
+                      value: AppMode.casework,
+                      child: ListTile(
+                        leading: Icon(Icons.home_work_outlined),
+                        title: Text('Casework'),
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: AppMode.paye,
                       child: ListTile(
                         leading: Icon(Icons.business_center_outlined),
@@ -288,13 +313,7 @@ class _MainShellState extends State<MainShell> {
                     child: Row(
                       children: [
                         Icon(
-                          personalMode
-                              ? Icons.person_outline_rounded
-                              : massageMode
-                              ? Icons.spa_outlined
-                              : payeMode
-                              ? Icons.business_center_outlined
-                              : Icons.work_outline_rounded,
+                          _modeIcon(appMode),
                           size: 20,
                           color: const Color(0xFF4F8DF7),
                         ),
@@ -326,12 +345,14 @@ class _MainShellState extends State<MainShell> {
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: maxContentWidth),
+                      constraints: BoxConstraints(maxWidth: contentWidth),
                       child: RepaintBoundary(
                         child: personalMode
                             ? const PersonalScreen()
                             : massageMode
                             ? const MassageScreen()
+                            : caseworkMode
+                            ? const CaseworkScreen()
                             : _screen(),
                       ),
                     ),

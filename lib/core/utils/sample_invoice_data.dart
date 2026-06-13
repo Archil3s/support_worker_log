@@ -111,6 +111,15 @@ EntryType _parseType(String value) {
   final lower = value.toLowerCase();
 
   if (lower.contains('phone')) return EntryType.phoneCall;
+  if (lower.contains('video')) return EntryType.videoCall;
+  if (lower.contains('email') && lower.contains('professional')) {
+    return EntryType.emailProfessional;
+  }
+  if (lower.contains('email')) return EntryType.emailClient;
+  if (lower.contains('education') || lower.contains('resource')) {
+    return EntryType.adminEducationResources;
+  }
+  if (lower.contains('admin')) return EntryType.adminEducationResources;
   if (lower.contains('text')) return EntryType.textNote;
   if (lower.contains('home')) return EntryType.homeVisit;
 

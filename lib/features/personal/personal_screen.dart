@@ -67,6 +67,7 @@ class _PersonalScreenState extends State<PersonalScreen> {
     final gymEntries = entries
         .where((entry) => entry.category == PersonalLogCategory.gym)
         .toList();
+    final todaysGymEntries = gymEntries.where(_isToday).toList();
     final bodyWeightEntries = entries
         .where((entry) => entry.category == PersonalLogCategory.bodyWeight)
         .toList();
@@ -92,8 +93,8 @@ class _PersonalScreenState extends State<PersonalScreen> {
                 runSpacing: 10,
                 children: [
                   _MetricPill(
-                    label: 'Gym notes',
-                    value: '${gymEntries.length}',
+                    label: 'Today gym',
+                    value: '${todaysGymEntries.length}',
                   ),
                   _MetricPill(
                     label: 'Body weight',
@@ -168,7 +169,7 @@ class _PersonalScreenState extends State<PersonalScreen> {
           child: Column(
             children: [
               for (final split in _workoutSplits)
-                _WorkoutSplitCard(split: split, gymEntries: gymEntries),
+                _WorkoutSplitCard(split: split, gymEntries: todaysGymEntries),
             ],
           ),
         ),
@@ -182,12 +183,12 @@ class _PersonalScreenState extends State<PersonalScreen> {
         ),
         const SizedBox(height: 14),
         SectionCard(
-          title: 'Recent Gym Progress',
-          child: gymEntries.isEmpty
-              ? const EmptyState(message: 'No gym progress logged yet.')
+          title: 'Today Gym Progress',
+          child: todaysGymEntries.isEmpty
+              ? const EmptyState(message: 'No gym progress logged today.')
               : Column(
                   children: [
-                    for (final entry in gymEntries.take(5))
+                    for (final entry in todaysGymEntries.take(5))
                       _PersonalLogTile(entry: entry),
                   ],
                 ),
@@ -4201,6 +4202,7 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
   final metricController = TextEditingController();
   final notesController = TextEditingController();
   PersonalLogCategory category = PersonalLogCategory.gym;
+  _WorkoutExerciseOption? selectedWorkoutOption;
 
   @override
   void dispose() {
@@ -4233,6 +4235,26 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
       ),
     );
     Navigator.of(context).pop();
+  }
+
+  void _selectCategory(PersonalLogCategory value) {
+    setState(() {
+      category = value;
+      if (value != PersonalLogCategory.gym) {
+        selectedWorkoutOption = null;
+      }
+    });
+  }
+
+  void _selectWorkoutOption(_WorkoutExerciseOption? option) {
+    if (option == null) return;
+
+    setState(() {
+      selectedWorkoutOption = option;
+      titleController.text = option.title;
+      metricController.text = option.metric;
+      notesController.text = option.notes;
+    });
   }
 
   @override
@@ -4275,10 +4297,24 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
               ),
             ],
             selected: {category},
-            onSelectionChanged: (values) {
-              setState(() => category = values.first);
-            },
+            onSelectionChanged: (values) => _selectCategory(values.first),
           ),
+          if (category == PersonalLogCategory.gym) ...[
+            const SizedBox(height: 14),
+            DropdownButtonFormField<_WorkoutExerciseOption>(
+              initialValue: selectedWorkoutOption,
+              dropdownColor: const Color(0xFF20283B),
+              decoration: const InputDecoration(
+                labelText: 'Workout from science-backed list',
+                prefixIcon: Icon(Icons.fitness_center_rounded),
+              ),
+              items: [
+                for (final option in _workoutExerciseOptions)
+                  DropdownMenuItem(value: option, child: Text(option.label)),
+              ],
+              onChanged: _selectWorkoutOption,
+            ),
+          ],
           const SizedBox(height: 14),
           TextField(
             controller: titleController,
@@ -4462,6 +4498,35 @@ class _WorkoutExercise {
       progressionRule: progressionRule,
       fatigueProfile: fatigueProfile,
     );
+  }
+}
+
+class _WorkoutExerciseOption {
+  const _WorkoutExerciseOption({
+    required this.splitName,
+    required this.exercise,
+  });
+
+  final String splitName;
+  final _WorkoutExercise exercise;
+
+  String get label => '$splitName - ${exercise.name}';
+
+  String get title => '$splitName: ${exercise.name}';
+
+  String get metric {
+    return [
+      '${exercise.defaultSets} sets x ${exercise.defaultReps} reps',
+      'Reps ${exercise.scienceRepRange}',
+      'RIR ${exercise.targetRir}',
+    ].join(' | ');
+  }
+
+  String get notes {
+    return [
+      if (exercise.cue.trim().isNotEmpty) exercise.cue,
+      exercise.scienceProgressionRule,
+    ].join('\n');
   }
 }
 
@@ -4826,6 +4891,12 @@ const _workoutSplits = [
       ),
     ],
   ),
+];
+
+final _workoutExerciseOptions = [
+  for (final split in _workoutSplits)
+    for (final exercise in split.exercises)
+      _WorkoutExerciseOption(splitName: split.name, exercise: exercise),
 ];
 
 const _allExercisesLabel = 'All gym logs';
@@ -6548,6 +6619,15 @@ String _displayMetric(PersonalLogEntry entry) {
   }
 
   return displayMetric;
+}
+
+bool _isToday(PersonalLogEntry entry) {
+  final now = DateTime.now();
+  final date = entry.date.toLocal();
+
+  return date.year == now.year &&
+      date.month == now.month &&
+      date.day == now.day;
 }
 
 String _exerciseNameFromTitle(String title) {

@@ -271,11 +271,11 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       supportNoteBreakdown: widget.entry.supportNoteBreakdown,
       nextActions: widget.entry.nextActions,
       googleCalendarEntered: widget.entry.googleCalendarEntered,
-      importantText: selectedType == EntryType.textNote && importantText,
-      textContactDirection: selectedType == EntryType.textNote
+      importantText: selectedType.isWrittenContact && importantText,
+      textContactDirection: selectedType.isWrittenContact
           ? textContactDirection
           : TextContactDirection.received,
-      textReplyNeeded: selectedType == EntryType.textNote && textReplyNeeded,
+      textReplyNeeded: selectedType.isWrittenContact && textReplyNeeded,
       odometerStart: savedOdometerStart,
       odometerEnd: savedOdometerEnd,
     );
@@ -289,6 +289,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     final safeClients = widget.clients.isEmpty
         ? <String>[selectedClient]
         : widget.clients;
+    final availableTypes = entryTypesForMode(payeMode: !widget.showTravel);
 
     return SafeArea(
       child: DraggableScrollableSheet(
@@ -345,7 +346,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final type in EntryType.values)
+                    for (final type in availableTypes)
                       ChoiceChip(
                         avatar: Icon(type.icon, size: 18),
                         label: Text(type.label),
@@ -433,10 +434,10 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                   ),
                 ),
               ],
-              if (selectedType == EntryType.textNote) ...[
+              if (selectedType.isWrittenContact) ...[
                 const SizedBox(height: 12),
                 SectionCard(
-                  title: 'Text Details',
+                  title: 'Contact Details',
                   child: Column(
                     children: [
                       SegmentedButton<TextContactDirection>(
@@ -470,11 +471,11 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                           setState(() => importantText = value);
                         },
                         title: const Text(
-                          'Important text',
+                          'Important contact',
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                         subtitle: const Text(
-                          'Important texts are marked in invoice text summaries.',
+                          'Important written contacts are marked in invoice summaries.',
                           style: TextStyle(color: Color(0xFF8396C7)),
                         ),
                       ),
@@ -559,17 +560,17 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
                         value:
                             '${odometerStartController.text.trim().isEmpty ? '-' : odometerStartController.text.trim()} -> ${odometerEndController.text.trim().isEmpty ? '-' : odometerEndController.text.trim()}',
                       ),
-                    if (selectedType == EntryType.textNote)
+                    if (selectedType.isWrittenContact)
                       ReviewRow(
                         label: 'Direction',
                         value: textContactDirection.label,
                       ),
-                    if (selectedType == EntryType.textNote)
+                    if (selectedType.isWrittenContact)
                       ReviewRow(
                         label: 'Importance',
                         value: importantText ? 'Important' : 'Not important',
                       ),
-                    if (selectedType == EntryType.textNote)
+                    if (selectedType.isWrittenContact)
                       ReviewRow(
                         label: 'Reply',
                         value: textReplyNeeded ? 'Needed' : 'Not needed',
