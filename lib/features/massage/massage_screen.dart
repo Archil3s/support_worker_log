@@ -864,19 +864,54 @@ class _GuidedMassageTimer extends StatelessWidget {
   }
 }
 
-class _MassageStepVisual extends StatelessWidget {
+class _MassageStepVisual extends StatefulWidget {
   const _MassageStepVisual({required this.step, required this.completed});
 
   final _MassageRoutineStep step;
   final bool completed;
 
   @override
+  State<_MassageStepVisual> createState() => _MassageStepVisualState();
+}
+
+class _MassageStepVisualState extends State<_MassageStepVisual>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MassageStepVisual oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.step.title != widget.step.title ||
+        oldWidget.completed != widget.completed) {
+      _controller.forward(from: 0);
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final title = completed ? 'Cool-down complete' : step.visualTitle;
-    final cue = completed
+    final title = widget.completed
+        ? 'Cool-down complete'
+        : widget.step.visualTitle;
+    final cue = widget.completed
         ? 'Check comfort, offer water, and note what to repeat or skip next '
               'time.'
-        : step.visualCue;
+        : widget.step.visualCue;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -932,12 +967,32 @@ class _MassageStepVisual extends StatelessWidget {
                       'assets/massage/body_reference.png',
                       fit: BoxFit.cover,
                     ),
-                    CustomPaint(
-                      painter: _MassageBodyMapPainter(
-                        points: completed ? const [] : step.points,
-                        strokes: completed ? const [] : step.strokes,
-                      ),
+                    AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, _) {
+                        return CustomPaint(
+                          painter: _MassageBodyMapPainter(
+                            points: widget.completed
+                                ? const []
+                                : widget.step.points,
+                            strokes: widget.completed
+                                ? const []
+                                : widget.step.strokes,
+                            animationValue: _controller.value,
+                          ),
+                        );
+                      },
                     ),
+                    if (!widget.completed)
+                      Positioned(
+                        right: 10,
+                        bottom: 10,
+                        child: _MassageMotionBadge(
+                          label: widget.step.strokes.isEmpty
+                              ? 'pulsing hold'
+                              : 'moving guide',
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -950,19 +1005,61 @@ class _MassageStepVisual extends StatelessWidget {
             children: [
               _MassageLegendChip(
                 color: Color(0xFF31E981),
-                label: 'green arrows = glide path',
+                label: 'moving green = glide path',
               ),
               _MassageLegendChip(
                 color: Color(0xFFF59E0B),
-                label: 'gold = light hold',
+                label: 'pulsing gold = light hold',
               ),
               _MassageLegendChip(
                 color: Color(0xFFF97316),
-                label: 'orange = medium hold',
+                label: 'pulsing orange = medium hold',
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MassageMotionBadge extends StatelessWidget {
+  const _MassageMotionBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xDD101827),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF31E981)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF31E981),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1007,10 +1104,15 @@ class _MassageLegendChip extends StatelessWidget {
 }
 
 class _MassageBodyMapPainter extends CustomPainter {
-  const _MassageBodyMapPainter({required this.points, required this.strokes});
+  const _MassageBodyMapPainter({
+    required this.points,
+    required this.strokes,
+    required this.animationValue,
+  });
 
   final List<_MassageVisualPoint> points;
   final List<_MassageVisualStroke> strokes;
+  final double animationValue;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1020,34 +1122,63 @@ class _MassageBodyMapPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    for (final stroke in strokes) {
+    final baseStrokePaint = Paint()
+      ..color = const Color(0x6631E981)
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    for (var index = 0; index < strokes.length; index++) {
+      final stroke = strokes[index];
       final start = Offset(
         stroke.startDx * size.width,
         stroke.startDy * size.height,
       );
       final end = Offset(stroke.endDx * size.width, stroke.endDy * size.height);
-      canvas.drawLine(start, end, strokePaint);
+      final phase = _wrapUnit(animationValue + (index * 0.28));
+      final movingPoint = Offset.lerp(start, end, phase)!;
+      final guideStart = Offset.lerp(start, end, (phase - 0.25).clamp(0, 1))!;
+
+      canvas
+        ..drawLine(start, end, baseStrokePaint)
+        ..drawLine(guideStart, movingPoint, strokePaint);
       _drawEndArrow(canvas, start, end, const Color(0xFF31E981));
       canvas.drawCircle(start, 8, Paint()..color = const Color(0xFF4F8DF7));
       canvas.drawCircle(end, 8, Paint()..color = const Color(0xFFFFC857));
+      canvas
+        ..drawCircle(movingPoint, 18, Paint()..color = const Color(0x5531E981))
+        ..drawCircle(movingPoint, 9, Paint()..color = const Color(0xFF31E981))
+        ..drawCircle(movingPoint, 4, Paint()..color = Colors.white);
     }
 
-    for (final point in points) {
+    for (var index = 0; index < points.length; index++) {
+      final point = points[index];
       final centre = Offset(point.dx * size.width, point.dy * size.height);
       final color = point.pressure.color;
-      final ringPaint = Paint()
-        ..color = color.withAlpha(75)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6;
+      final pulse = _wrapUnit(animationValue + (index * 0.18));
       final fillPaint = Paint()..color = color;
       final labelPaint = Paint()
         ..color = const Color(0xFF101827)
         ..style = PaintingStyle.fill;
 
+      for (var ring = 0; ring < 3; ring++) {
+        final ringPulse = _wrapUnit(pulse + (ring * 0.33));
+        final alpha = ((1 - ringPulse) * 120).round().clamp(0, 120);
+        final radius = 22 + (ringPulse * 32);
+        canvas.drawCircle(
+          centre,
+          radius,
+          Paint()
+            ..color = color.withAlpha(alpha)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 5,
+        );
+      }
+
       canvas
-        ..drawCircle(centre, 34, ringPaint)
-        ..drawCircle(centre, 23, Paint()..color = color.withAlpha(45))
-        ..drawCircle(centre, 10, fillPaint);
+        ..drawCircle(centre, 24, Paint()..color = color.withAlpha(45))
+        ..drawCircle(centre, 13 + (pulse * 4), fillPaint)
+        ..drawCircle(centre, 5, Paint()..color = Colors.white);
 
       final label = '${point.label} ${point.pressure.label}';
       final textPainter = TextPainter(
@@ -1085,6 +1216,11 @@ class _MassageBodyMapPainter extends CustomPainter {
     return Offset(dx, dy);
   }
 
+  double _wrapUnit(double value) {
+    final wrapped = value % 1;
+    return wrapped < 0 ? wrapped + 1 : wrapped;
+  }
+
   void _drawEndArrow(Canvas canvas, Offset start, Offset end, Color color) {
     final direction = end - start;
     if (direction.distance == 0) return;
@@ -1109,7 +1245,9 @@ class _MassageBodyMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MassageBodyMapPainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.strokes != strokes;
+    return oldDelegate.points != points ||
+        oldDelegate.strokes != strokes ||
+        oldDelegate.animationValue != animationValue;
   }
 }
 
