@@ -18,7 +18,7 @@ class AppLockService {
     final value = prefs.getInt(_lockedUntilKey);
     if (value == null) return null;
 
-    final until = DateTime.fromMillisecondsSinceEpoch(value);
+    final until = _dateTimeFromStoredEpoch(value);
     if (until.isAfter(DateTime.now())) return until;
 
     await clearLockout();
@@ -30,7 +30,7 @@ class AppLockService {
     final value = prefs.getInt(_unlockValidUntilKey);
     if (value == null) return false;
 
-    final until = DateTime.fromMillisecondsSinceEpoch(value);
+    final until = _dateTimeFromStoredEpoch(value);
     if (until.isAfter(DateTime.now())) return true;
 
     await clearRememberedUnlock();
@@ -40,7 +40,7 @@ class AppLockService {
   Future<void> rememberUnlock() async {
     final prefs = await SharedPreferences.getInstance();
     final until = DateTime.now().add(_unlockDuration);
-    await prefs.setInt(_unlockValidUntilKey, until.millisecondsSinceEpoch);
+    await prefs.setInt(_unlockValidUntilKey, until.microsecondsSinceEpoch);
   }
 
   Future<DateTime?> recordFailedAttempt() async {
@@ -55,7 +55,7 @@ class AppLockService {
     }
 
     final until = DateTime.now().add(_lockoutDuration);
-    await prefs.setInt(_lockedUntilKey, until.millisecondsSinceEpoch);
+    await prefs.setInt(_lockedUntilKey, until.microsecondsSinceEpoch);
     await prefs.remove(_failedAttemptsKey);
     return until;
   }
@@ -69,5 +69,12 @@ class AppLockService {
   Future<void> clearRememberedUnlock() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_unlockValidUntilKey);
+  }
+
+  DateTime _dateTimeFromStoredEpoch(int value) {
+    if (value > 100000000000000) {
+      return DateTime.fromMicrosecondsSinceEpoch(value);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(value);
   }
 }

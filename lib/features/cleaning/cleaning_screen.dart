@@ -1,7 +1,23 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'cleaning_analytics.dart';
+import 'cleaning_models.dart';
+import 'cleaning_repository.dart';
+
+const _cleaningGreen = Color(0xFF31E981);
+const _cleaningBlue = Color(0xFF4F8DF7);
+const _cleaningAmber = Color(0xFFFFB84D);
+const _cleaningCoral = Color(0xFFFF7A7A);
+const _cleaningPanel = Color(0xFF151B29);
+const _cleaningPanel2 = Color(0xFF20283B);
+const _cleaningBorder = Color(0xFF34405F);
+const _cleaningMuted = Color(0xFF8396C7);
+
+enum _CleaningView { today, plan, insights }
+
+enum _TaskAction { complete, skip, reset }
 
 class CleaningScreen extends StatefulWidget {
   const CleaningScreen({super.key});
@@ -11,267 +27,465 @@ class CleaningScreen extends StatefulWidget {
 }
 
 class _CleaningScreenState extends State<CleaningScreen> {
-  static const _customTasksKey = 'cleaning_custom_tasks_v1';
+  final _repository = const CleaningRepository();
 
-  _CleaningFrequency selectedFrequency = _CleaningFrequency.daily;
-  final checkedTaskIdsByFrequency = <_CleaningFrequency, Set<String>>{
-    for (final frequency in _CleaningFrequency.values) frequency: <String>{},
-  };
-  final customTasks = <_CleaningFrequency, List<_CleaningTask>>{
-    for (final frequency in _CleaningFrequency.values) frequency: [],
-  };
-  bool loading = true;
+  CleaningData _data = const CleaningData(tasks: [], events: []);
+  _CleaningView _view = _CleaningView.today;
+  CleaningFrequency _planFrequency = CleaningFrequency.daily;
+  DateTime _selectedDate = cleaningDateOnly(DateTime.now());
+  int _insightDays = 7;
+  bool _loading = true;
+  String? _error;
 
-  Set<String> get checkedTaskIds =>
-      checkedTaskIdsByFrequency[selectedFrequency]!;
+  DateTime get _today => cleaningDateOnly(DateTime.now());
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawCustomTasks = prefs.getString(_customTasksKey);
-
-    if (rawCustomTasks != null && rawCustomTasks.trim().isNotEmpty) {
-      try {
-        final decoded = jsonDecode(rawCustomTasks);
-        if (decoded is Map<String, dynamic>) {
-          for (final frequency in _CleaningFrequency.values) {
-            final rawTasks = decoded[frequency.name];
-            if (rawTasks is! List) continue;
-
-            customTasks[frequency] = rawTasks
-                .whereType<Map<String, dynamic>>()
-                .map(_CleaningTask.fromJson)
-                .where((task) => task.label.trim().isNotEmpty)
-                .toList();
-          }
-        }
-      } catch (_) {
-        customTasks.updateAll((_, value) => []);
-      }
+    try {
+      final data = await _repository.load();
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        _loading = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Cleaning history could not be loaded.';
+        _loading = false;
+      });
     }
-
-    final storedChecked = {
-      for (final frequency in _CleaningFrequency.values)
-        frequency: prefs.getStringList(_checkedKey(frequency)) ?? const [],
-    };
-
-    if (!mounted) return;
-
-    setState(() {
-      for (final entry in storedChecked.entries) {
-        checkedTaskIdsByFrequency[entry.key]!
-          ..clear()
-          ..addAll(entry.value);
-      }
-      loading = false;
-    });
   }
 
-  Future<void> _loadChecked(_CleaningFrequency frequency) async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedChecked = prefs.getStringList(_checkedKey(frequency));
-
-    if (!mounted) return;
-
+  Future<void> _save(CleaningData data) async {
     setState(() {
-      selectedFrequency = frequency;
-      checkedTaskIdsByFrequency[frequency]!
-        ..clear()
-        ..addAll(storedChecked ?? const []);
+      _data = data;
+      _error = null;
     });
+    try {
+      await _repository.save(data);
+    } on Object {
+      if (!mounted) return;
+      setState(() => _error = 'Changes are visible but could not be saved.');
+    }
   }
 
-  Future<void> _saveChecked() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _checkedKey(selectedFrequency),
-      checkedTaskIdsByFrequency[selectedFrequency]!.toList()..sort(),
+  CleaningEvent? _eventFor(CleaningTask task, DateTime date) {
+    final key = '${task.id}:${cleaningDateKey(date)}';
+    for (final event in _data.events.reversed) {
+      if (event.key == key) return event;
+    }
+    return null;
+  }
+
+  List<CleaningTask> _tasksFor(DateTime date) {
+    final tasks = _data.tasks.where((task) => task.isDue(date)).toList();
+    tasks.sort((a, b) {
+      final byTime = a.time.index.compareTo(b.time.index);
+      return byTime != 0 ? byTime : a.label.compareTo(b.label);
+    });
+    return tasks;
+  }
+
+  Future<void> _setTaskStatus(
+    CleaningTask task,
+    DateTime date,
+    CleaningEventStatus? status,
+  ) async {
+    final key = '${task.id}:${cleaningDateKey(date)}';
+    final events = _data.events.where((event) => event.key != key).toList();
+    if (status != null) {
+      events.add(
+        CleaningEvent(
+          taskId: task.id,
+          scheduledDate: cleaningDateOnly(date),
+          recordedAt: DateTime.now(),
+          status: status,
+        ),
+      );
+    }
+    await _save(_data.copyWith(events: events));
+  }
+
+  Future<void> _toggleTaskActive(CleaningTask task) async {
+    final tasks = _data.tasks.map((current) {
+      return current.id == task.id
+          ? current.copyWith(isActive: !current.isActive)
+          : current;
+    }).toList();
+    await _save(_data.copyWith(tasks: tasks));
+  }
+
+  Future<void> _addTask() async {
+    final task = await showDialog<CleaningTask>(
+      context: context,
+      builder: (context) => const _CleaningTaskDialog(),
     );
+    if (task == null) return;
+    await _save(_data.copyWith(tasks: [..._data.tasks, task]));
   }
 
-  Future<void> _saveCustomTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = {
-      for (final item in customTasks.entries)
-        item.key.name: item.value.map((task) => task.toJson()).toList(),
-    };
-    await prefs.setString(_customTasksKey, jsonEncode(encoded));
-  }
-
-  Future<void> _toggleTask(String id, bool checked) async {
-    setState(() {
-      if (checked) {
-        checkedTaskIds.add(id);
-      } else {
-        checkedTaskIds.remove(id);
-      }
-    });
-
-    await _saveChecked();
-  }
-
-  Future<void> _resetCurrentPeriod() async {
-    setState(checkedTaskIds.clear);
-    await _saveChecked();
-  }
-
-  Future<void> _addCustomTask() async {
-    final controller = TextEditingController();
-    final label = await showDialog<String>(
+  Future<void> _deleteTask(CleaningTask task) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add ${selectedFrequency.label.toLowerCase()} task'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(labelText: 'Task'),
-            onSubmitted: (value) => Navigator.of(context).pop(value),
+          title: const Text('Delete cleaning task?'),
+          content: Text(
+            '"${task.label}" and its recorded history will be removed.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Add'),
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(backgroundColor: _cleaningCoral),
+              child: const Text('Delete'),
             ),
           ],
         );
       },
     );
-    controller.dispose();
-
-    final trimmed = label?.trim();
-    if (trimmed == null || trimmed.isEmpty) return;
-
-    final task = _CleaningTask(
-      id: 'custom-${selectedFrequency.name}-${DateTime.now().microsecondsSinceEpoch}',
-      label: trimmed,
-      area: 'Custom',
+    if (confirmed != true) return;
+    await _save(
+      CleaningData(
+        tasks: _data.tasks.where((item) => item.id != task.id).toList(),
+        events: _data.events.where((event) => event.taskId != task.id).toList(),
+        trackingStartedAt: _data.trackingStartedAt,
+      ),
     );
-
-    setState(() => customTasks[selectedFrequency]!.add(task));
-    await _saveCustomTasks();
-  }
-
-  Future<void> _deleteCustomTask(_CleaningTask task) async {
-    setState(() {
-      checkedTaskIds.remove(task.id);
-      customTasks[selectedFrequency]!.removeWhere((item) => item.id == task.id);
-    });
-
-    await _saveCustomTasks();
-    await _saveChecked();
-  }
-
-  List<_CleaningTask> _tasksFor(_CleaningFrequency frequency) {
-    return [..._defaultCleaningTasks[frequency]!, ...customTasks[frequency]!];
-  }
-
-  _CleaningProgress _progressFor(_CleaningFrequency frequency) {
-    final tasks = _tasksFor(frequency);
-    final checked = frequency == selectedFrequency ? checkedTaskIds : null;
-
-    return _CleaningProgress(
-      frequency: frequency,
-      total: tasks.length,
-      checkedIds: checked ?? checkedTaskIdsByFrequency[frequency],
-    );
-  }
-
-  String _checkedKey(_CleaningFrequency frequency) {
-    return 'cleaning_checked_${frequency.name}_${frequency.periodKey()}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final tasks = _tasksFor(selectedFrequency);
-    final completed = tasks
-        .where((task) => checkedTaskIds.contains(task.id))
-        .length;
-    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
-
-    if (loading) {
+    if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+    return Column(
       children: [
+        if (_error != null)
+          Container(
+            width: double.infinity,
+            color: _cleaningCoral.withValues(alpha: 0.16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: SegmentedButton<_CleaningView>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: _CleaningView.today,
+                icon: Icon(Icons.today_outlined),
+                label: Text('Today'),
+              ),
+              ButtonSegment(
+                value: _CleaningView.plan,
+                icon: Icon(Icons.calendar_view_week_outlined),
+                label: Text('Plan'),
+              ),
+              ButtonSegment(
+                value: _CleaningView.insights,
+                icon: Icon(Icons.insights_outlined),
+                label: Text('Insights'),
+              ),
+            ],
+            selected: {_view},
+            onSelectionChanged: (selection) {
+              setState(() => _view = selection.first);
+            },
+          ),
+        ),
+        Expanded(
+          child: switch (_view) {
+            _CleaningView.today => _buildToday(),
+            _CleaningView.plan => _buildPlan(),
+            _CleaningView.insights => _buildInsights(),
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToday() {
+    final tasks = _tasksFor(_selectedDate);
+    final completed = tasks.where((task) {
+      return _eventFor(task, _selectedDate)?.status ==
+          CleaningEventStatus.completed;
+    }).length;
+    final minutesLeft = tasks
+        .where((task) {
+          return _eventFor(task, _selectedDate) == null;
+        })
+        .fold(0, (total, task) => total + task.minutes);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      children: [
+        _DateNavigator(
+          date: _selectedDate,
+          today: _today,
+          onPrevious: () {
+            final earliest = _today.subtract(const Duration(days: 30));
+            if (_selectedDate.isAfter(earliest)) {
+              setState(() {
+                _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+              });
+            }
+          },
+          onNext: _selectedDate.isBefore(_today)
+              ? () {
+                  setState(() {
+                    _selectedDate = _selectedDate.add(const Duration(days: 1));
+                  });
+                }
+              : null,
+          onToday: () => setState(() => _selectedDate = _today),
+        ),
+        const SizedBox(height: 12),
         _CleaningHero(
           completed: completed,
           total: tasks.length,
-          progress: progress,
-          periodLabel: selectedFrequency.periodLabel(),
+          minutesLeft: minutesLeft,
+          isToday: _selectedDate == _today,
         ),
-        const SizedBox(height: 14),
-        SegmentedButton<_CleaningFrequency>(
+        const SizedBox(height: 18),
+        if (tasks.isEmpty)
+          const _EmptyCleaningState(
+            icon: Icons.event_available_outlined,
+            title: 'Nothing scheduled',
+            message: 'This day has no active cleaning tasks.',
+          )
+        else
+          for (final time in CleaningTime.values)
+            if (tasks.any((task) => task.time == time))
+              _CleaningTimeSection(
+                time: time,
+                tasks: tasks.where((task) => task.time == time).toList(),
+                date: _selectedDate,
+                today: _today,
+                eventFor: _eventFor,
+                onStatusChanged: _setTaskStatus,
+              ),
+      ],
+    );
+  }
+
+  Widget _buildPlan() {
+    final tasks =
+        _data.tasks.where((task) => task.frequency == _planFrequency).toList()
+          ..sort((a, b) {
+            final byActive = a.isActive == b.isActive
+                ? 0
+                : (a.isActive ? -1 : 1);
+            return byActive != 0 ? byActive : a.label.compareTo(b.label);
+          });
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      children: [
+        _SectionHeading(
+          eyebrow:
+              '${_data.tasks.where((task) => task.isActive).length} active',
+          title: 'Your house plan',
+          subtitle:
+              'Short daily resets, rotated weekly work, and deep-clean jobs.',
+          trailing: IconButton.filled(
+            onPressed: _addTask,
+            tooltip: 'Add task',
+            icon: const Icon(Icons.add_rounded),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SegmentedButton<CleaningFrequency>(
+          showSelectedIcon: false,
           segments: const [
+            ButtonSegment(value: CleaningFrequency.daily, label: Text('Daily')),
             ButtonSegment(
-              value: _CleaningFrequency.daily,
-              icon: Icon(Icons.today_outlined),
-              label: Text('Daily'),
-            ),
-            ButtonSegment(
-              value: _CleaningFrequency.weekly,
-              icon: Icon(Icons.date_range_outlined),
+              value: CleaningFrequency.weekly,
               label: Text('Weekly'),
             ),
             ButtonSegment(
-              value: _CleaningFrequency.monthly,
-              icon: Icon(Icons.calendar_view_month_outlined),
+              value: CleaningFrequency.monthly,
               label: Text('Monthly'),
             ),
           ],
-          selected: {selectedFrequency},
-          onSelectionChanged: (values) => _loadChecked(values.first),
+          selected: {_planFrequency},
+          onSelectionChanged: (selection) {
+            setState(() => _planFrequency = selection.first);
+          },
         ),
         const SizedBox(height: 14),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final frequency in _CleaningFrequency.values)
-              _CleaningProgressChip(progress: _progressFor(frequency)),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _addCustomTask,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Task'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton.filledTonal(
-              onPressed: _resetCurrentPeriod,
-              tooltip: 'Reset current checklist',
-              icon: const Icon(Icons.restart_alt_rounded),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        for (final area in _areasFor(tasks)) ...[
-          _CleaningAreaCard(
-            area: area,
-            tasks: tasks.where((task) => task.area == area).toList(),
-            checkedTaskIds: checkedTaskIds,
-            onChanged: _toggleTask,
-            onDeleteCustomTask: _deleteCustomTask,
+        for (final task in tasks)
+          _PlanTaskCard(
+            task: task,
+            onToggle: () => _toggleTaskActive(task),
+            onDelete: task.custom ? () => _deleteTask(task) : null,
           ),
-          const SizedBox(height: 12),
-        ],
+      ],
+    );
+  }
+
+  Widget _buildInsights() {
+    final insights = buildCleaningInsights(
+      _data,
+      today: _today,
+      dayCount: _insightDays,
+    );
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      children: [
+        _SectionHeading(
+          eyebrow: 'Your patterns',
+          title: 'Cleaning insights',
+          subtitle: 'See what gets done, what slips, and when you do it.',
+          trailing: SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 7, label: Text('7d')),
+              ButtonSegment(value: 30, label: Text('30d')),
+            ],
+            selected: {_insightDays},
+            onSelectionChanged: (selection) {
+              setState(() => _insightDays = selection.first);
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: _MetricCard(
+                    icon: Icons.check_circle_outline,
+                    color: _cleaningGreen,
+                    label: 'Completion',
+                    value: '${(insights.completionRate * 100).round()}%',
+                    detail: '${insights.completed} finished',
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _MetricCard(
+                    icon: Icons.event_busy_outlined,
+                    color: _cleaningCoral,
+                    label: 'Missed',
+                    value: '${insights.missed}',
+                    detail: '${insights.skipped} skipped',
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _MetricCard(
+                    icon: Icons.local_fire_department_outlined,
+                    color: _cleaningAmber,
+                    label: 'Streak',
+                    value: '${insights.currentStreak}d',
+                    detail: '70%+ each day',
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _MetricCard(
+                    icon: Icons.schedule_outlined,
+                    color: _cleaningBlue,
+                    label: 'Usual finish',
+                    value: _completionTime(insights.averageCompletionHour),
+                    detail: '${insights.completedLate} logged late',
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _DailyChart(days: insights.days),
+        const SizedBox(height: 12),
+        _AreaPerformance(areas: insights.areas),
+        const SizedBox(height: 12),
+        _MostMissedTasks(items: insights.mostMissed),
+        const SizedBox(height: 12),
+        _CleaningRecommendation(insights: insights),
+      ],
+    );
+  }
+}
+
+class _DateNavigator extends StatelessWidget {
+  const _DateNavigator({
+    required this.date,
+    required this.today,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onToday,
+  });
+
+  final DateTime date;
+  final DateTime today;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final isToday = date == today;
+    return Row(
+      children: [
+        IconButton.filledTonal(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          tooltip: 'Previous day',
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Text(
+                isToday ? 'TODAY' : _weekdayName(date.weekday).toUpperCase(),
+                style: const TextStyle(
+                  color: _cleaningGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${date.day} ${_monthName(date.month)} ${date.year}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isToday)
+          TextButton(onPressed: onToday, child: const Text('Today'))
+        else
+          IconButton.filledTonal(
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right_rounded),
+            tooltip: 'Next day',
+          ),
       ],
     );
   }
@@ -281,191 +495,406 @@ class _CleaningHero extends StatelessWidget {
   const _CleaningHero({
     required this.completed,
     required this.total,
-    required this.progress,
-    required this.periodLabel,
+    required this.minutesLeft,
+    required this.isToday,
   });
 
   final int completed;
   final int total;
-  final double progress;
-  final String periodLabel;
+  final int minutesLeft;
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
+    final progress = total == 0 ? 0.0 : completed / total;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF13241E),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF31E981)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF13241E), Color(0xFF14253A)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _cleaningGreen.withValues(alpha: 0.7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
       ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 76,
+            height: 76,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 8,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: const Color(0xFF34405F),
+                  color: _cleaningGreen,
+                ),
+                Text(
+                  '${(progress * 100).round()}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  total > 0 && completed == total
+                      ? 'House reset complete'
+                      : '$completed of $total done',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  minutesLeft == 0
+                      ? 'Everything scheduled is handled.'
+                      : isToday
+                      ? 'About $minutesLeft minutes left today'
+                      : '$minutesLeft minutes were left incomplete',
+                  style: const TextStyle(
+                    color: Color(0xFFD8E2FF),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CleaningTimeSection extends StatelessWidget {
+  const _CleaningTimeSection({
+    required this.time,
+    required this.tasks,
+    required this.date,
+    required this.today,
+    required this.eventFor,
+    required this.onStatusChanged,
+  });
+
+  final CleaningTime time;
+  final List<CleaningTask> tasks;
+  final DateTime date;
+  final DateTime today;
+  final CleaningEvent? Function(CleaningTask task, DateTime date) eventFor;
+  final Future<void> Function(
+    CleaningTask task,
+    DateTime date,
+    CleaningEventStatus? status,
+  )
+  onStatusChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.cleaning_services_outlined),
-              const SizedBox(width: 10),
+              Icon(_timeIcon(time), size: 19, color: _cleaningBlue),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'House Cleaning',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  _timeLabel(time),
+                  style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 17,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
               Text(
-                '$completed/$total',
+                '${tasks.fold(0, (total, task) => total + task.minutes)} min',
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                  color: _cleaningMuted,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: progress,
-            minHeight: 9,
-            borderRadius: BorderRadius.circular(999),
-            backgroundColor: const Color(0xFF243247),
-            color: const Color(0xFF31E981),
-          ),
           const SizedBox(height: 10),
-          Text(
-            periodLabel,
-            style: const TextStyle(
-              color: Color(0xFFD8E2FF),
-              fontWeight: FontWeight.w700,
+          for (final task in tasks)
+            _TodayTaskCard(
+              task: task,
+              event: eventFor(task, date),
+              missed: date.isBefore(today) && eventFor(task, date) == null,
+              onTap: () {
+                final event = eventFor(task, date);
+                onStatusChanged(
+                  task,
+                  date,
+                  event?.status == CleaningEventStatus.completed
+                      ? null
+                      : CleaningEventStatus.completed,
+                );
+              },
+              onAction: (action) {
+                final status = switch (action) {
+                  _TaskAction.complete => CleaningEventStatus.completed,
+                  _TaskAction.skip => CleaningEventStatus.skipped,
+                  _TaskAction.reset => null,
+                };
+                onStatusChanged(task, date, status);
+              },
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _CleaningProgressChip extends StatelessWidget {
-  const _CleaningProgressChip({required this.progress});
-
-  final _CleaningProgress progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final completed = progress.completed;
-    final total = progress.total;
-    final done = total > 0 && completed == total;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: done ? const Color(0xFF102A1C) : const Color(0xFF151B29),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: done ? const Color(0xFF31E981) : const Color(0xFF34405F),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            done ? Icons.check_circle_rounded : progress.frequency.icon,
-            color: done ? const Color(0xFF31E981) : const Color(0xFF8396C7),
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '${progress.frequency.label} $completed/$total',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CleaningAreaCard extends StatelessWidget {
-  const _CleaningAreaCard({
-    required this.area,
-    required this.tasks,
-    required this.checkedTaskIds,
-    required this.onChanged,
-    required this.onDeleteCustomTask,
+class _TodayTaskCard extends StatelessWidget {
+  const _TodayTaskCard({
+    required this.task,
+    required this.event,
+    required this.missed,
+    required this.onTap,
+    required this.onAction,
   });
 
-  final String area;
-  final List<_CleaningTask> tasks;
-  final Set<String> checkedTaskIds;
-  final Future<void> Function(String id, bool checked) onChanged;
-  final Future<void> Function(_CleaningTask task) onDeleteCustomTask;
+  final CleaningTask task;
+  final CleaningEvent? event;
+  final bool missed;
+  final VoidCallback onTap;
+  final ValueChanged<_TaskAction> onAction;
 
   @override
   Widget build(BuildContext context) {
-    final completed = tasks
-        .where((task) => checkedTaskIds.contains(task.id))
-        .length;
+    final completed = event?.status == CleaningEventStatus.completed;
+    final skipped = event?.status == CleaningEventStatus.skipped;
+    final color = completed
+        ? _cleaningGreen
+        : skipped
+        ? _cleaningAmber
+        : missed
+        ? _cleaningCoral
+        : _cleaningBlue;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.fromLTRB(12, 11, 6, 11),
+      decoration: BoxDecoration(
+        color: completed
+            ? _cleaningGreen.withValues(alpha: 0.09)
+            : _cleaningPanel,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: color.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: completed ? _cleaningGreen : _cleaningPanel2,
+              ),
+              child: Icon(
+                completed ? Icons.check_rounded : _areaIcon(task.area),
+                color: completed ? const Color(0xFF07140D) : color,
+                size: 22,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.label,
+                  style: TextStyle(
+                    color: skipped ? _cleaningMuted : Colors.white,
+                    fontWeight: FontWeight.w800,
+                    decoration: skipped ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _taskDetail(task, event, missed),
+                  style: TextStyle(
+                    color: missed ? _cleaningCoral : _cleaningMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<_TaskAction>(
+            tooltip: 'Task options',
+            onSelected: onAction,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _TaskAction.complete,
+                child: Text('Mark complete'),
+              ),
+              PopupMenuItem(
+                value: _TaskAction.skip,
+                child: Text('Skip this time'),
+              ),
+              PopupMenuItem(
+                value: _TaskAction.reset,
+                child: Text('Clear status'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eyebrow.toUpperCase(),
+                style: const TextStyle(
+                  color: _cleaningGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: _cleaningMuted,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+      ],
+    );
+  }
+}
+
+class _PlanTaskCard extends StatelessWidget {
+  const _PlanTaskCard({
+    required this.task,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  final CleaningTask task;
+  final VoidCallback onToggle;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.only(bottom: 9),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: _areaColor(task.area).withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                _areaIcon(task.area),
+                color: _areaColor(task.area),
+                size: 21,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      area,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
+                  Text(
+                    task.label,
+                    style: TextStyle(
+                      color: task.isActive ? Colors.white : _cleaningMuted,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
+                  const SizedBox(height: 3),
                   Text(
-                    '$completed/${tasks.length}',
+                    '${task.area} · ${task.minutes} min · '
+                    '${_taskSchedule(task)}',
                     style: const TextStyle(
-                      color: Color(0xFF8396C7),
-                      fontWeight: FontWeight.w800,
+                      color: _cleaningMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
-            for (final task in tasks)
-              CheckboxListTile(
-                value: checkedTaskIds.contains(task.id),
-                onChanged: (value) => onChanged(task.id, value ?? false),
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  task.label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    decoration: checkedTaskIds.contains(task.id)
-                        ? TextDecoration.lineThrough
-                        : null,
-                  ),
-                ),
-                secondary: task.custom
-                    ? IconButton(
-                        tooltip: 'Delete task',
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        onPressed: () => onDeleteCustomTask(task),
-                      )
-                    : null,
+            if (onDelete != null)
+              IconButton(
+                onPressed: onDelete,
+                tooltip: 'Delete custom task',
+                icon: const Icon(Icons.delete_outline_rounded),
               ),
+            Switch(value: task.isActive, onChanged: (_) => onToggle()),
           ],
         ),
       ),
@@ -473,250 +902,651 @@ class _CleaningAreaCard extends StatelessWidget {
   }
 }
 
-class _CleaningProgress {
-  const _CleaningProgress({
-    required this.frequency,
-    required this.total,
-    required this.checkedIds,
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.detail,
   });
 
-  final _CleaningFrequency frequency;
-  final int total;
-  final Set<String>? checkedIds;
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final String detail;
 
-  int get completed {
-    if (checkedIds == null) return 0;
-    return checkedIds!.length;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: _cleaningPanel,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cleaningBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 19),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: _cleaningMuted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _cleaningMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-class _CleaningTask {
-  const _CleaningTask({
-    required this.id,
-    required this.label,
-    required this.area,
-    this.custom = false,
+class _DailyChart extends StatelessWidget {
+  const _DailyChart({required this.days});
+
+  final List<CleaningDaySummary> days;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AnalyticsCard(
+      title: 'Day-by-day',
+      subtitle: 'Completed compared with everything scheduled.',
+      child: SizedBox(
+        height: 150,
+        child: SingleChildScrollView(
+          reverse: true,
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final day in days)
+                SizedBox(
+                  width: 42,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${(day.rate * 100).round()}%',
+                        style: const TextStyle(
+                          color: _cleaningMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        width: 22,
+                        height: 105,
+                        alignment: Alignment.bottomCenter,
+                        decoration: BoxDecoration(
+                          color: _cleaningPanel2,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Container(
+                          width: 22,
+                          height: day.due == 0 ? 3 : 105 * day.rate,
+                          decoration: BoxDecoration(
+                            color: day.rate >= 0.7
+                                ? _cleaningGreen
+                                : _cleaningCoral,
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${day.date.day}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AreaPerformance extends StatelessWidget {
+  const _AreaPerformance({required this.areas});
+
+  final List<CleaningAreaSummary> areas;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AnalyticsCard(
+      title: 'Areas of the house',
+      subtitle: 'Which spaces are staying under control.',
+      child: Column(
+        children: [
+          for (final area in areas) ...[
+            Row(
+              children: [
+                Icon(
+                  _areaIcon(area.area),
+                  size: 18,
+                  color: _areaColor(area.area),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    area.area,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${(area.rate * 100).round()}%',
+                  style: const TextStyle(
+                    color: _cleaningMuted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                minHeight: 8,
+                value: area.rate,
+                color: area.rate >= 0.7 ? _cleaningGreen : _cleaningAmber,
+                backgroundColor: _cleaningPanel2,
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MostMissedTasks extends StatelessWidget {
+  const _MostMissedTasks({required this.items});
+
+  final List<CleaningMissSummary> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AnalyticsCard(
+      title: 'Most often missed',
+      subtitle: 'Use this to simplify or reschedule difficult tasks.',
+      child: items.isEmpty
+          ? const Text(
+              'No missed tasks in this period.',
+              style: TextStyle(color: _cleaningMuted),
+            )
+          : Column(
+              children: [
+                for (final item in items.take(5))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _cleaningCoral.withValues(alpha: 0.13),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            _areaIcon(item.task.area),
+                            color: _cleaningCoral,
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            item.task.label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${item.missed}×',
+                          style: const TextStyle(
+                            color: _cleaningCoral,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _CleaningRecommendation extends StatelessWidget {
+  const _CleaningRecommendation({required this.insights});
+
+  final CleaningInsights insights;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = switch (insights.completionRate) {
+      >= 0.8 =>
+        'Your routine is holding well. Keep the dish rounds short so the sink '
+            'never becomes one large job.',
+      >= 0.5 =>
+        'The plan is partly working. Switch off one low-priority daily task '
+            'or move a difficult job to a better day.',
+      _ =>
+        'Focus first on dishes, kitchen surfaces, laundry containment, and '
+            'one floor reset. The rest can rotate weekly.',
+    };
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cleaningGreen.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cleaningGreen.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lightbulb_outline_rounded, color: _cleaningGreen),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsCard extends StatelessWidget {
+  const _AnalyticsCard({
+    required this.title,
+    required this.subtitle,
+    required this.child,
   });
 
-  final String id;
-  final String label;
-  final String area;
-  final bool custom;
+  final String title;
+  final String subtitle;
+  final Widget child;
 
-  factory _CleaningTask.fromJson(Map<String, dynamic> json) {
-    return _CleaningTask(
-      id: json['id'] as String? ?? '',
-      label: json['label'] as String? ?? '',
-      area: json['area'] as String? ?? 'Custom',
-      custom: true,
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                color: _cleaningMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 18),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyCleaningState extends StatelessWidget {
+  const _EmptyCleaningState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _cleaningPanel,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cleaningBorder),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 38, color: _cleaningGreen),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _cleaningMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CleaningTaskDialog extends StatefulWidget {
+  const _CleaningTaskDialog();
+
+  @override
+  State<_CleaningTaskDialog> createState() => _CleaningTaskDialogState();
+}
+
+class _CleaningTaskDialogState extends State<_CleaningTaskDialog> {
+  final _labelController = TextEditingController();
+  var _area = 'Kitchen';
+  var _minutes = 10.0;
+  var _frequency = CleaningFrequency.daily;
+  var _time = CleaningTime.anytime;
+  var _weekday = DateTime.now().weekday;
+  var _monthDay = DateTime.now().day;
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add cleaning task'),
+      content: SizedBox(
+        width: 430,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _labelController,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Task'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _area,
+                decoration: const InputDecoration(labelText: 'Area'),
+                items:
+                    const [
+                      'Kitchen',
+                      'Bathroom',
+                      'Bedroom',
+                      'Living room',
+                      'Laundry',
+                      'Floors',
+                      'Whole house',
+                    ].map((area) {
+                      return DropdownMenuItem(value: area, child: Text(area));
+                    }).toList(),
+                onChanged: (value) => setState(() => _area = value ?? _area),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<CleaningFrequency>(
+                initialValue: _frequency,
+                decoration: const InputDecoration(labelText: 'Frequency'),
+                items: CleaningFrequency.values.map((frequency) {
+                  return DropdownMenuItem(
+                    value: frequency,
+                    child: Text(_frequencyLabel(frequency)),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => _frequency = value ?? _frequency);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<CleaningTime>(
+                initialValue: _time,
+                decoration: const InputDecoration(labelText: 'Best time'),
+                items: CleaningTime.values.map((time) {
+                  return DropdownMenuItem(
+                    value: time,
+                    child: Text(_timeLabel(time)),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _time = value ?? _time),
+              ),
+              if (_frequency == CleaningFrequency.weekly) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _weekday,
+                  decoration: const InputDecoration(labelText: 'Day'),
+                  items: [
+                    for (var day = 1; day <= 7; day++)
+                      DropdownMenuItem(
+                        value: day,
+                        child: Text(_weekdayName(day)),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _weekday = value ?? _weekday);
+                  },
+                ),
+              ],
+              if (_frequency == CleaningFrequency.monthly) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _monthDay,
+                  decoration: const InputDecoration(labelText: 'Day of month'),
+                  items: [
+                    for (var day = 1; day <= 28; day++)
+                      DropdownMenuItem(value: day, child: Text('$day')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _monthDay = value ?? _monthDay);
+                  },
+                ),
+              ],
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('${_minutes.round()} minutes'),
+              ),
+              Slider(
+                min: 5,
+                max: 60,
+                divisions: 11,
+                value: _minutes,
+                onChanged: (value) => setState(() => _minutes = value),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Add task')),
+      ],
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {'id': id, 'label': label, 'area': area};
-  }
-}
-
-enum _CleaningFrequency { daily, weekly, monthly }
-
-extension _CleaningFrequencyDetails on _CleaningFrequency {
-  String get label {
-    return switch (this) {
-      _CleaningFrequency.daily => 'Daily',
-      _CleaningFrequency.weekly => 'Weekly',
-      _CleaningFrequency.monthly => 'Monthly',
-    };
-  }
-
-  IconData get icon {
-    return switch (this) {
-      _CleaningFrequency.daily => Icons.today_outlined,
-      _CleaningFrequency.weekly => Icons.date_range_outlined,
-      _CleaningFrequency.monthly => Icons.calendar_view_month_outlined,
-    };
-  }
-
-  String periodKey() {
+  void _submit() {
+    final label = _labelController.text.trim();
+    if (label.isEmpty) return;
     final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-
-    return switch (this) {
-      _CleaningFrequency.daily =>
-        '${now.year}-${_twoDigits(now.month)}-${_twoDigits(now.day)}',
-      _CleaningFrequency.weekly =>
-        '${weekStart.year}-w${_twoDigits(_weekOfYear(weekStart))}',
-      _CleaningFrequency.monthly => '${now.year}-${_twoDigits(now.month)}',
-    };
-  }
-
-  String periodLabel() {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 6));
-
-    return switch (this) {
-      _CleaningFrequency.daily =>
-        'Today: ${_twoDigits(now.day)}/${_twoDigits(now.month)}/${now.year}',
-      _CleaningFrequency.weekly =>
-        'Week: ${_shortDate(weekStart)} - ${_shortDate(weekEnd)}',
-      _CleaningFrequency.monthly =>
-        'Month: ${_monthName(now.month)} ${now.year}',
-    };
+    Navigator.pop(
+      context,
+      CleaningTask(
+        id: 'custom-${now.microsecondsSinceEpoch}',
+        label: label,
+        area: _area,
+        minutes: _minutes.round(),
+        frequency: _frequency,
+        time: _time,
+        weekdays: _frequency == CleaningFrequency.weekly
+            ? [_weekday]
+            : const [],
+        monthDay: _frequency == CleaningFrequency.monthly ? _monthDay : null,
+        custom: true,
+      ),
+    );
   }
 }
 
-const _defaultCleaningTasks = {
-  _CleaningFrequency.daily: [
-    _CleaningTask(id: 'daily-make-bed', label: 'Make bed', area: 'Bedroom'),
-    _CleaningTask(
-      id: 'daily-dishes',
-      label: 'Wash dishes or load dishwasher',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'daily-benches',
-      label: 'Wipe kitchen benches and table',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'daily-floor',
-      label: 'Quick sweep or vacuum high-traffic floor',
-      area: 'Floors',
-    ),
-    _CleaningTask(
-      id: 'daily-bathroom',
-      label: 'Wipe bathroom sink and toilet seat',
-      area: 'Bathroom',
-    ),
-    _CleaningTask(
-      id: 'daily-laundry',
-      label: 'Put clothes in basket or start one load',
-      area: 'Laundry',
-    ),
-    _CleaningTask(
-      id: 'daily-rubbish',
-      label: 'Empty rubbish if full',
-      area: 'Whole house',
-    ),
-    _CleaningTask(
-      id: 'daily-reset',
-      label: '10-minute tidy reset',
-      area: 'Whole house',
-    ),
-  ],
-  _CleaningFrequency.weekly: [
-    _CleaningTask(
-      id: 'weekly-sheets',
-      label: 'Change bed sheets',
-      area: 'Bedroom',
-    ),
-    _CleaningTask(
-      id: 'weekly-vacuum',
-      label: 'Vacuum all rooms',
-      area: 'Floors',
-    ),
-    _CleaningTask(id: 'weekly-mop', label: 'Mop hard floors', area: 'Floors'),
-    _CleaningTask(
-      id: 'weekly-bathroom',
-      label: 'Clean shower, bath, sink, and toilet',
-      area: 'Bathroom',
-    ),
-    _CleaningTask(
-      id: 'weekly-dust',
-      label: 'Dust shelves, TV, desk, and surfaces',
-      area: 'Whole house',
-    ),
-    _CleaningTask(
-      id: 'weekly-fridge',
-      label: 'Clear old food from fridge',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'weekly-appliances',
-      label: 'Wipe microwave, stovetop, and appliances',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'weekly-towels',
-      label: 'Wash towels and bathroom mats',
-      area: 'Laundry',
-    ),
-    _CleaningTask(
-      id: 'weekly-bins',
-      label: 'Empty bins and wipe bin lids',
-      area: 'Whole house',
-    ),
-  ],
-  _CleaningFrequency.monthly: [
-    _CleaningTask(
-      id: 'monthly-oven',
-      label: 'Deep clean oven or air fryer',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'monthly-fridge',
-      label: 'Wipe fridge shelves and seals',
-      area: 'Kitchen',
-    ),
-    _CleaningTask(
-      id: 'monthly-windows',
-      label: 'Clean windows and mirrors',
-      area: 'Whole house',
-    ),
-    _CleaningTask(
-      id: 'monthly-skirting',
-      label: 'Wipe skirting boards, doors, and handles',
-      area: 'Whole house',
-    ),
-    _CleaningTask(
-      id: 'monthly-under-furniture',
-      label: 'Vacuum under bed, couch, and furniture',
-      area: 'Floors',
-    ),
-    _CleaningTask(
-      id: 'monthly-cupboards',
-      label: 'Declutter one cupboard or drawer',
-      area: 'Whole house',
-    ),
-    _CleaningTask(
-      id: 'monthly-bedding',
-      label: 'Wash blankets, doona cover, or pillows',
-      area: 'Bedroom',
-    ),
-    _CleaningTask(
-      id: 'monthly-machines',
-      label: 'Clean washing machine and dishwasher filters',
-      area: 'Laundry',
-    ),
-    _CleaningTask(
-      id: 'monthly-vents',
-      label: 'Dust vents, fans, and light fittings',
-      area: 'Whole house',
-    ),
-  ],
-};
-
-List<String> _areasFor(List<_CleaningTask> tasks) {
-  final seen = <String>{};
-  final areas = <String>[];
-
-  for (final task in tasks) {
-    if (seen.add(task.area)) areas.add(task.area);
+String _taskDetail(CleaningTask task, CleaningEvent? event, bool missed) {
+  final base =
+      '${task.area} · ${task.minutes} min${task.essential ? ' · essential' : ''}';
+  if (event?.status == CleaningEventStatus.skipped) return '$base · skipped';
+  if (event?.status == CleaningEventStatus.completed) {
+    final time =
+        '${event!.recordedAt.hour.toString().padLeft(2, '0')}:'
+        '${event.recordedAt.minute.toString().padLeft(2, '0')}';
+    return '$base · done $time${event.completedLate ? ' late' : ''}';
   }
-
-  return areas;
+  return missed ? '$base · missed' : base;
 }
 
-String _twoDigits(int value) => value.toString().padLeft(2, '0');
-
-String _shortDate(DateTime value) {
-  return '${_twoDigits(value.day)}/${_twoDigits(value.month)}';
+String _taskSchedule(CleaningTask task) {
+  return switch (task.frequency) {
+    CleaningFrequency.daily => _timeLabel(task.time),
+    CleaningFrequency.weekly => task.weekdays.map(_weekdayName).join(', '),
+    CleaningFrequency.monthly => 'day ${task.monthDay ?? 1}',
+  };
 }
 
-int _weekOfYear(DateTime date) {
-  final firstDay = DateTime(date.year);
-  final days = date.difference(firstDay).inDays;
-  return ((days + firstDay.weekday) / 7).ceil();
+String _completionTime(double? hour) {
+  if (hour == null) return '--';
+  final wholeHour = hour.floor();
+  final minute = ((hour - wholeHour) * 60).round();
+  final suffix = wholeHour >= 12 ? 'pm' : 'am';
+  final displayHour = wholeHour % 12 == 0 ? 12 : wholeHour % 12;
+  return '$displayHour:${minute.toString().padLeft(2, '0')}$suffix';
+}
+
+String _frequencyLabel(CleaningFrequency frequency) {
+  return switch (frequency) {
+    CleaningFrequency.daily => 'Daily',
+    CleaningFrequency.weekly => 'Weekly',
+    CleaningFrequency.monthly => 'Monthly',
+  };
+}
+
+String _timeLabel(CleaningTime time) {
+  return switch (time) {
+    CleaningTime.morning => 'Morning reset',
+    CleaningTime.daytime => 'Daytime upkeep',
+    CleaningTime.evening => 'Evening close-down',
+    CleaningTime.anytime => 'Anytime',
+  };
+}
+
+IconData _timeIcon(CleaningTime time) {
+  return switch (time) {
+    CleaningTime.morning => Icons.wb_sunny_outlined,
+    CleaningTime.daytime => Icons.light_mode_outlined,
+    CleaningTime.evening => Icons.nights_stay_outlined,
+    CleaningTime.anytime => Icons.schedule_outlined,
+  };
+}
+
+IconData _areaIcon(String area) {
+  return switch (area) {
+    'Kitchen' => Icons.soup_kitchen_outlined,
+    'Bathroom' => Icons.bathroom_outlined,
+    'Bedroom' => Icons.bed_outlined,
+    'Living room' => Icons.weekend_outlined,
+    'Laundry' => Icons.local_laundry_service_outlined,
+    'Floors' => Icons.cleaning_services_outlined,
+    _ => Icons.home_outlined,
+  };
+}
+
+Color _areaColor(String area) {
+  return switch (area) {
+    'Kitchen' => _cleaningCoral,
+    'Bathroom' => _cleaningBlue,
+    'Bedroom' => _cleaningGreen,
+    'Living room' => _cleaningAmber,
+    'Laundry' => const Color(0xFFB184F5),
+    'Floors' => const Color(0xFF55C7D9),
+    _ => _cleaningMuted,
+  };
+}
+
+String _weekdayName(int weekday) {
+  const names = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  return names[weekday - 1];
 }
 
 String _monthName(int month) {
@@ -734,6 +1564,5 @@ String _monthName(int month) {
     'November',
     'December',
   ];
-
   return names[month - 1];
 }
