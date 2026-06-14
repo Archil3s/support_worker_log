@@ -5873,11 +5873,356 @@ const _workoutSplits = [
   ),
 ];
 
-final _workoutExerciseOptions = [
+const _supplementalWorkoutSplits = [
+  _WorkoutSplit(
+    name: 'Science Chest',
+    icon: Icons.fitness_center_rounded,
+    focus: 'Stable presses, stretched flys, and progressive chest loading.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Incline dumbbell press',
+        repRange: '6-10',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.moderate,
+        alternatives: ['Incline machine press', 'Low incline barbell press'],
+      ),
+      _WorkoutExercise(
+        name: 'Incline Smith machine press',
+        repRange: '6-10',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        alternatives: ['Incline dumbbell press', 'Incline machine press'],
+      ),
+      _WorkoutExercise(
+        name: 'Machine chest press',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        alternatives: [
+          'Dumbbell bench press',
+          'Iso press / seated chest fly machine',
+        ],
+      ),
+      _WorkoutExercise(
+        name: 'Pec deck',
+        repRange: '10-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Cable fly', 'Dumbbell fly'],
+      ),
+      _WorkoutExercise(
+        name: 'Low-to-high cable fly',
+        repRange: '10-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Incline cable fly', 'Pec deck'],
+      ),
+      _WorkoutExercise(
+        name: 'Deficit push up',
+        repRange: '8-20',
+        targetRir: 1,
+        defaultRepCount: 15,
+        tracksLoad: false,
+        alternatives: ['Push ups', 'Incline push ups'],
+      ),
+    ],
+  ),
+  _WorkoutSplit(
+    name: 'Science Back',
+    icon: Icons.accessibility_new_rounded,
+    focus:
+        'Rows and pulldowns that keep tension on lats, mid-back and rear delts.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Weighted pull up',
+        repRange: '5-8',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        alternatives: ['Neutral-grip pulldown', 'Assisted pull up'],
+      ),
+      _WorkoutExercise(
+        name: 'Neutral-grip pulldown',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 8,
+        alternatives: [
+          'Single-arm cable pulldown',
+          'Reverse lat pulldown machine',
+        ],
+      ),
+      _WorkoutExercise(
+        name: 'Chest-supported T-bar row',
+        repRange: '6-12',
+        targetRir: 2,
+        weeklySetTarget: 8,
+        alternatives: ['Chest-supported row', 'Machine row'],
+      ),
+      _WorkoutExercise(
+        name: 'One-arm dumbbell row',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        alternatives: ['Single-arm cable row', 'Machine row'],
+      ),
+      _WorkoutExercise(
+        name: 'Single-arm cable row',
+        repRange: '10-15',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        alternatives: ['One-arm dumbbell row', 'Seated cable row'],
+      ),
+      _WorkoutExercise(
+        name: 'Cable pullover',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Cable lat prayers', 'Dumbbell pullover'],
+      ),
+      _WorkoutExercise(
+        name: 'Face pull',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 4,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Cable rear delt fly', 'Reverse pec deck'],
+      ),
+    ],
+  ),
+  _WorkoutSplit(
+    name: 'Science Shoulders',
+    icon: Icons.accessibility_rounded,
+    focus: 'Side delt and rear delt volume with controlled pressing.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Seated dumbbell shoulder press',
+        repRange: '6-10',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        fatigueProfile: _FatigueProfile.high,
+        alternatives: ['Machine shoulder press', 'Standing overhead press'],
+      ),
+      _WorkoutExercise(
+        name: 'Machine shoulder press',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        alternatives: [
+          'Seated dumbbell shoulder press',
+          'Standing overhead press',
+        ],
+      ),
+      _WorkoutExercise(
+        name: 'Cable lateral raise',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 8,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Lateral raises', 'Machine lateral raise'],
+      ),
+      _WorkoutExercise(
+        name: 'Lean-away cable lateral raise',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Cable lateral raise', 'Dumbbell lateral raise'],
+      ),
+      _WorkoutExercise(
+        name: 'Cable rear delt fly',
+        repRange: '12-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Reverse pec deck', 'Rear delt dumbbell fly'],
+      ),
+    ],
+  ),
+  _WorkoutSplit(
+    name: 'Science Legs',
+    icon: Icons.directions_walk_rounded,
+    focus:
+        'Quad, hamstring, glute and calf exercises with repeatable progression.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Hack squat',
+        repRange: '6-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
+        alternatives: ['Leg press', 'Box squats'],
+      ),
+      _WorkoutExercise(
+        name: 'Leg press',
+        repRange: '8-15',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
+        alternatives: ['Hack squat', 'Goblet squat'],
+      ),
+      _WorkoutExercise(
+        name: 'Leg extension',
+        repRange: '10-20',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Sissy squat', 'Goblet squat'],
+      ),
+      _WorkoutExercise(
+        name: 'Seated leg curl',
+        repRange: '8-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        alternatives: ['Lying leg curl', 'Single-leg RDL'],
+      ),
+      _WorkoutExercise(
+        name: 'Lying leg curl',
+        repRange: '8-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        alternatives: ['Seated leg curl', 'Nordic curl'],
+      ),
+      _WorkoutExercise(
+        name: 'Barbell hip thrust',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 8,
+        alternatives: [
+          'Hip thrust machine',
+          'Glute bridges with sand bag holds',
+        ],
+      ),
+      _WorkoutExercise(
+        name: 'Bulgarian split squat',
+        repRange: '8-12',
+        targetRir: 2,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.high,
+        alternatives: ['Split squats', 'Reverse lunges'],
+      ),
+      _WorkoutExercise(
+        name: 'Standing calf raise',
+        repRange: '8-15',
+        targetRir: 1,
+        weeklySetTarget: 8,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Seated calf raise', 'Leg press calf raise'],
+      ),
+      _WorkoutExercise(
+        name: 'Seated calf raise',
+        repRange: '10-20',
+        targetRir: 1,
+        weeklySetTarget: 8,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Standing calf raise', 'Leg press calf raise'],
+      ),
+    ],
+  ),
+  _WorkoutSplit(
+    name: 'Science Arms',
+    icon: Icons.sports_martial_arts_rounded,
+    focus: 'Long-length curls and triceps extensions with stable isolation.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Bayesian cable curl',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Incline dumbbell curl', 'Cable curl'],
+      ),
+      _WorkoutExercise(
+        name: 'Preacher curl',
+        repRange: '8-12',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Machine preacher curl', 'EZ bar curl'],
+      ),
+      _WorkoutExercise(
+        name: 'Hammer curl',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Cable hammer curl', 'Dumbbell curl'],
+      ),
+      _WorkoutExercise(
+        name: 'Overhead cable triceps extension',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Overhead dumbbell extension', 'Triceps pressdown'],
+      ),
+      _WorkoutExercise(
+        name: 'Cable triceps pressdown',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        fatigueProfile: _FatigueProfile.low,
+        alternatives: ['Rope pressdown', 'Close-grip bench press'],
+      ),
+      _WorkoutExercise(
+        name: 'Close-grip bench press',
+        repRange: '6-10',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        fatigueProfile: _FatigueProfile.moderate,
+        alternatives: ['Dips', 'Cable triceps pressdown'],
+      ),
+    ],
+  ),
+  _WorkoutSplit(
+    name: 'Science Abs',
+    icon: Icons.self_improvement_rounded,
+    focus: 'Loaded flexion, anti-extension and anti-rotation core work.',
+    exercises: [
+      _WorkoutExercise(
+        name: 'Cable crunch',
+        repRange: '10-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        alternatives: ['Reverse crunch', 'Machine crunch'],
+      ),
+      _WorkoutExercise(
+        name: 'Hanging leg raise',
+        repRange: '8-15',
+        targetRir: 1,
+        weeklySetTarget: 6,
+        tracksLoad: false,
+        alternatives: ['Captain chair leg raise', 'Reverse crunch'],
+      ),
+      _WorkoutExercise(
+        name: 'Ab wheel rollout',
+        repRange: '6-12',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        tracksLoad: false,
+        alternatives: ['Stability ball rollout', 'Dead bug press'],
+      ),
+      _WorkoutExercise(
+        name: 'Pallof press',
+        repRange: '10-15',
+        targetRir: 2,
+        weeklySetTarget: 4,
+        alternatives: ['Cable chop', 'Side plank'],
+      ),
+    ],
+  ),
+];
+
+final _workoutExerciseOptions = _dedupeWorkoutExerciseOptions([
   for (final split in _workoutSplits)
     for (final exercise in split.exercises)
       _WorkoutExerciseOption(splitName: split.name, exercise: exercise),
-];
+  for (final split in _supplementalWorkoutSplits)
+    for (final exercise in split.exercises)
+      _WorkoutExerciseOption(splitName: split.name, exercise: exercise),
+]);
 
 final _quickWorkoutOptions = [
   for (final name in _quickWorkoutExerciseNames)
@@ -5886,6 +6231,20 @@ final _quickWorkoutOptions = [
       orElse: () => _workoutExerciseOptions.first,
     ),
 ];
+
+List<_WorkoutExerciseOption> _dedupeWorkoutExerciseOptions(
+  List<_WorkoutExerciseOption> options,
+) {
+  final seen = <String>{};
+  final output = <_WorkoutExerciseOption>[];
+
+  for (final option in options) {
+    final key = _normaliseExerciseName(option.exercise.name);
+    if (seen.add(key)) output.add(option);
+  }
+
+  return output;
+}
 
 const _quickWorkoutExerciseNames = [
   'Bench press',
@@ -6969,7 +7328,7 @@ _BodyweightProgressSummary _bodyweightProgress(
 }
 
 _WorkoutExercise? _workoutExerciseForName(String name) {
-  for (final split in _workoutSplits) {
+  for (final split in [..._workoutSplits, ..._supplementalWorkoutSplits]) {
     for (final exercise in split.exercises) {
       if (_sameExercise(exercise.name, name)) return exercise;
     }
