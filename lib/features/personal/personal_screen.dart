@@ -4211,6 +4211,9 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
   final notesController = TextEditingController();
   PersonalLogCategory category = PersonalLogCategory.gym;
   _WorkoutExerciseOption? selectedWorkoutOption;
+  double quickWeightKg = 0;
+  int quickSets = 3;
+  int quickReps = 10;
 
   @override
   void dispose() {
@@ -4221,9 +4224,16 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
   }
 
   void _save() {
-    final title = titleController.text.trim();
-    final notes = notesController.text.trim();
-    final metric = metricController.text.trim();
+    final title = _entryTitle();
+    final notes = _entryNotes();
+    final metric = _entryMetric();
+
+    if (category == PersonalLogCategory.gym && selectedWorkoutOption == null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(const SnackBar(content: Text('Pick an exercise.')));
+      return;
+    }
 
     if (title.isEmpty && notes.isEmpty && metric.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -4259,10 +4269,48 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
 
     setState(() {
       selectedWorkoutOption = option;
-      titleController.text = option.title;
-      metricController.text = option.metric;
-      notesController.text = option.notes;
+      quickSets = int.tryParse(option.exercise.defaultSets) ?? quickSets;
+      quickReps = int.tryParse(option.exercise.defaultReps) ?? quickReps;
+      if (!option.exercise.tracksLoad) quickWeightKg = 0;
     });
+  }
+
+  String _entryTitle() {
+    if (category != PersonalLogCategory.gym) {
+      final title = titleController.text.trim();
+      return title.isEmpty ? category.label : title;
+    }
+
+    return selectedWorkoutOption?.title ?? '';
+  }
+
+  String _entryMetric() {
+    if (category != PersonalLogCategory.gym) {
+      return metricController.text.trim();
+    }
+
+    final option = selectedWorkoutOption;
+    if (option == null) return '';
+
+    return [
+      '$quickSets x $quickReps',
+      if (option.exercise.tracksLoad && quickWeightKg > 0)
+        '${_formatWeightKg(quickWeightKg)} kg'
+      else if (!option.exercise.tracksLoad)
+        'bodyweight',
+      'RIR ${option.exercise.targetRir}',
+      option.splitName,
+    ].join(' | ');
+  }
+
+  String _entryNotes() {
+    final notes = notesController.text.trim();
+    if (category != PersonalLogCategory.gym) return notes;
+
+    final cue = selectedWorkoutOption?.exercise.cue.trim() ?? '';
+    if (notes.isEmpty) return cue;
+    if (cue.isEmpty) return notes;
+    return '$notes\nCue: $cue';
   }
 
   @override
@@ -4309,47 +4357,45 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
           ),
           if (category == PersonalLogCategory.gym) ...[
             const SizedBox(height: 14),
-            DropdownButtonFormField<_WorkoutExerciseOption>(
-              initialValue: selectedWorkoutOption,
-              dropdownColor: const Color(0xFF20283B),
+            _GymQuickEntryControls(
+              selectedWorkoutOption: selectedWorkoutOption,
+              quickWeightKg: quickWeightKg,
+              quickSets: quickSets,
+              quickReps: quickReps,
+              onExerciseSelected: _selectWorkoutOption,
+              onWeightChanged: (value) => setState(() => quickWeightKg = value),
+              onSetsChanged: (value) => setState(() => quickSets = value),
+              onRepsChanged: (value) => setState(() => quickReps = value),
+            ),
+          ] else ...[
+            const SizedBox(height: 14),
+            TextField(
+              controller: titleController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
-                labelText: 'Workout from science-backed list',
-                prefixIcon: Icon(Icons.fitness_center_rounded),
+                labelText: 'Title',
+                prefixIcon: Icon(Icons.title_rounded),
               ),
-              items: [
-                for (final option in _workoutExerciseOptions)
-                  DropdownMenuItem(value: option, child: Text(option.label)),
-              ],
-              onChanged: _selectWorkoutOption,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: metricController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Metric',
+                hintText: 'Weight, distance, time, body weight, or target',
+                prefixIcon: Icon(Icons.trending_up_rounded),
+              ),
             ),
           ],
-          const SizedBox(height: 14),
-          TextField(
-            controller: titleController,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Title',
-              prefixIcon: Icon(Icons.title_rounded),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: metricController,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Metric',
-              hintText: 'Sets, reps, weight, distance, time, or body weight',
-              prefixIcon: Icon(Icons.trending_up_rounded),
-            ),
-          ),
           const SizedBox(height: 12),
           TextField(
             controller: notesController,
-            minLines: 5,
-            maxLines: 10,
+            minLines: category == PersonalLogCategory.gym ? 2 : 4,
+            maxLines: category == PersonalLogCategory.gym ? 4 : 8,
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
-              labelText: 'Progress notes',
+              labelText: 'Notes',
               prefixIcon: Icon(Icons.edit_note_rounded),
             ),
           ),
@@ -4360,6 +4406,144 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
             label: const Text('Save Log'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _GymQuickEntryControls extends StatelessWidget {
+  const _GymQuickEntryControls({
+    required this.selectedWorkoutOption,
+    required this.quickWeightKg,
+    required this.quickSets,
+    required this.quickReps,
+    required this.onExerciseSelected,
+    required this.onWeightChanged,
+    required this.onSetsChanged,
+    required this.onRepsChanged,
+  });
+
+  final _WorkoutExerciseOption? selectedWorkoutOption;
+  final double quickWeightKg;
+  final int quickSets;
+  final int quickReps;
+  final ValueChanged<_WorkoutExerciseOption?> onExerciseSelected;
+  final ValueChanged<double> onWeightChanged;
+  final ValueChanged<int> onSetsChanged;
+  final ValueChanged<int> onRepsChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tracksLoad = selectedWorkoutOption?.exercise.tracksLoad ?? true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Exercise',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final option in _quickWorkoutOptions)
+              ChoiceChip(
+                label: Text(_shortExerciseLabel(option.exercise.name)),
+                selected: selectedWorkoutOption == option,
+                onSelected: (_) => onExerciseSelected(option),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<_WorkoutExerciseOption>(
+          initialValue: selectedWorkoutOption,
+          dropdownColor: const Color(0xFF20283B),
+          decoration: const InputDecoration(
+            labelText: 'More exercises',
+            prefixIcon: Icon(Icons.fitness_center_rounded),
+          ),
+          items: [
+            for (final option in _workoutExerciseOptions)
+              DropdownMenuItem(value: option, child: Text(option.label)),
+          ],
+          onChanged: onExerciseSelected,
+        ),
+        if (selectedWorkoutOption != null) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _NumberStepper(
+                  label: 'Sets',
+                  value: quickSets,
+                  min: 1,
+                  onChanged: onSetsChanged,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _NumberStepper(
+                  label: 'Reps',
+                  value: quickReps,
+                  min: 1,
+                  onChanged: onRepsChanged,
+                ),
+              ),
+            ],
+          ),
+          if (tracksLoad) ...[
+            const SizedBox(height: 10),
+            _WeightStepper(value: quickWeightKg, onChanged: onWeightChanged),
+          ],
+          const SizedBox(height: 10),
+          _QuickGymPreview(
+            option: selectedWorkoutOption!,
+            sets: quickSets,
+            reps: quickReps,
+            weightKg: quickWeightKg,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _QuickGymPreview extends StatelessWidget {
+  const _QuickGymPreview({
+    required this.option,
+    required this.sets,
+    required this.reps,
+    required this.weightKg,
+  });
+
+  final _WorkoutExerciseOption option;
+  final int sets;
+  final int reps;
+  final double weightKg;
+
+  @override
+  Widget build(BuildContext context) {
+    final load = option.exercise.tracksLoad && weightKg > 0
+        ? ' | ${_formatWeightKg(weightKg)} kg'
+        : option.exercise.tracksLoad
+        ? ''
+        : ' | bodyweight';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Text(
+        '${option.exercise.name}: $sets x $reps$load',
+        style: const TextStyle(
+          color: Color(0xFFD8E2FF),
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -4906,6 +5090,37 @@ final _workoutExerciseOptions = [
     for (final exercise in split.exercises)
       _WorkoutExerciseOption(splitName: split.name, exercise: exercise),
 ];
+
+final _quickWorkoutOptions = [
+  for (final name in _quickWorkoutExerciseNames)
+    _workoutExerciseOptions.firstWhere(
+      (option) => option.exercise.name == name,
+      orElse: () => _workoutExerciseOptions.first,
+    ),
+];
+
+const _quickWorkoutExerciseNames = [
+  'Bench press',
+  'Conventional deadlift',
+  'Box squats',
+  'Reverse lat pulldown machine',
+  'Standing overhead press',
+  'Lateral raises',
+  'Push ups',
+  'Bicep EZ bar',
+  'Walking lunges',
+  'Dead bug press',
+];
+
+String _shortExerciseLabel(String name) {
+  return switch (name) {
+    'Conventional deadlift' => 'Deadlift',
+    'Reverse lat pulldown machine' => 'Pulldown',
+    'Standing overhead press' => 'OHP',
+    'Bicep EZ bar' => 'EZ curl',
+    _ => name,
+  };
+}
 
 const _allExercisesLabel = 'All gym logs';
 const _defaultBodyWeightKg = 112.5;

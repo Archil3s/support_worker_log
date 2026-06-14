@@ -50,6 +50,47 @@
       return true;
     };
 
+    window.supportWorkerLogSpeechToText = function() {
+      return new Promise(function(resolve) {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+          resolve(null);
+          return;
+        }
+
+        const recognition = new SpeechRecognition();
+        let finished = false;
+
+        recognition.lang = navigator.language || 'en-NZ';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = function(event) {
+          const result = event.results && event.results[0] && event.results[0][0];
+          finished = true;
+          resolve(result && result.transcript ? result.transcript : null);
+        };
+
+        recognition.onerror = function() {
+          if (!finished) {
+            finished = true;
+            resolve(null);
+          }
+        };
+
+        recognition.onend = function() {
+          if (!finished) {
+            finished = true;
+            resolve(null);
+          }
+        };
+
+        recognition.start();
+      });
+    };
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
         registrations.forEach(function(registration) {

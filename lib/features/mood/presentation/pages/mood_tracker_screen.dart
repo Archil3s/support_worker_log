@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/services/speech_to_text_service.dart';
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/empty_state.dart';
@@ -600,6 +601,9 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
   final phq9Responses = List<int?>.filled(9, null);
   final gad7Responses = List<int?>.filled(7, null);
   final selectedCueIds = <String>{};
+  final selectedStartingTrtCueIds = <String>{};
+  final selectedCommunityTrtCueIds = <String>{};
+  bool listeningForNote = false;
 
   @override
   void dispose() {
@@ -688,6 +692,32 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
             ),
           ),
           const SizedBox(height: 8),
+          _StartingTrtCueGroup(
+            selectedCueIds: selectedStartingTrtCueIds,
+            onChanged: (cueId, selected) {
+              setState(() {
+                if (selected) {
+                  selectedStartingTrtCueIds.add(cueId);
+                } else {
+                  selectedStartingTrtCueIds.remove(cueId);
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          _CommunityTrtCueGroup(
+            selectedCueIds: selectedCommunityTrtCueIds,
+            onChanged: (cueId, selected) {
+              setState(() {
+                if (selected) {
+                  selectedCommunityTrtCueIds.add(cueId);
+                } else {
+                  selectedCommunityTrtCueIds.remove(cueId);
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 8),
           const Text(
             'Optional: complete PHQ-9 or GAD-7 to add validated low-mood and '
             'anxiety scores. These scores track severity over time, but they '
@@ -730,6 +760,18 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
               hintText: 'Trigger, body feeling, thought, or anything unusual',
             ),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: listeningForNote ? null : _addVoiceNote,
+            icon: listeningForNote
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.mic_outlined),
+            label: Text(listeningForNote ? 'Listening...' : 'Speak note'),
+          ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _save,
@@ -738,6 +780,31 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _addVoiceNote() async {
+    setState(() => listeningForNote = true);
+
+    final spokenText = await SpeechToTextService().listenOnce();
+    if (!mounted) return;
+
+    setState(() => listeningForNote = false);
+
+    if (spokenText == null || spokenText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice input is not available in this browser.'),
+        ),
+      );
+      return;
+    }
+
+    final existing = notesController.text.trim();
+    final nextText = existing.isEmpty ? spokenText : '$existing $spokenText';
+    notesController.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextText.length),
     );
   }
 
@@ -775,7 +842,7 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
                 .length,
           ),
       },
-      notes: notesController.text.trim(),
+      notes: _notesWithStartingTrtCues(),
       phq9Score: _completedMeasureScore(phq9Responses),
       gad7Score: _completedMeasureScore(gad7Responses),
     );
@@ -799,6 +866,31 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Finish every $label item or leave it blank.')),
     );
+  }
+
+  String _notesWithStartingTrtCues() {
+    final notes = notesController.text.trim();
+    final cueLines = <String>[];
+
+    if (selectedStartingTrtCueIds.isNotEmpty) {
+      final selectedLabels = [
+        for (final cue in _startingTrtCues)
+          if (selectedStartingTrtCueIds.contains(cue.id)) cue.label,
+      ];
+      cueLines.add('Starting TRT cues: ${selectedLabels.join(', ')}.');
+    }
+
+    if (selectedCommunityTrtCueIds.isNotEmpty) {
+      final selectedLabels = [
+        for (final cue in _communityTrtCues)
+          if (selectedCommunityTrtCueIds.contains(cue.id)) cue.label,
+      ];
+      cueLines.add('Other people mention cues: ${selectedLabels.join(', ')}.');
+    }
+
+    if (cueLines.isEmpty) return notes;
+    if (notes.isEmpty) return cueLines.join('\n');
+    return '$notes\n${cueLines.join('\n')}';
   }
 }
 
@@ -908,6 +1000,143 @@ class _EmotionCue {
 
   final String id;
   final String label;
+}
+
+class _StartingTrtCueGroup extends StatelessWidget {
+  const _StartingTrtCueGroup({
+    required this.selectedCueIds,
+    required this.onChanged,
+  });
+
+  final Set<String> selectedCueIds;
+  final void Function(String cueId, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withAlpha(24),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B).withAlpha(120)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        iconColor: const Color(0xFFF59E0B),
+        collapsedIconColor: const Color(0xFFF59E0B),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        leading: const Icon(Icons.science_outlined, color: Color(0xFFF59E0B)),
+        title: const Text(
+          'Starting TRT / first weeks',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        subtitle: Text(
+          selectedCueIds.isEmpty
+              ? 'Optional cues to add to today\'s note'
+              : '${selectedCueIds.length} cue${selectedCueIds.length == 1 ? '' : 's'} selected',
+          style: const TextStyle(color: Color(0xFFB7C4E2)),
+        ),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              'These are context notes, not proof that testosterone caused the '
+              'feeling. Show patterns to your prescriber.',
+              style: TextStyle(color: Color(0xFFCDD7F0), height: 1.35),
+            ),
+          ),
+          for (final cue in _startingTrtCues)
+            CheckboxListTile(
+              value: selectedCueIds.contains(cue.id),
+              onChanged: (value) => onChanged(cue.id, value ?? false),
+              activeColor: const Color(0xFFF59E0B),
+              checkColor: const Color(0xFF07111F),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              dense: true,
+              title: Text(
+                cue.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommunityTrtCueGroup extends StatelessWidget {
+  const _CommunityTrtCueGroup({
+    required this.selectedCueIds,
+    required this.onChanged,
+  });
+
+  final Set<String> selectedCueIds;
+  final void Function(String cueId, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFEC4899).withAlpha(24),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEC4899).withAlpha(120)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        iconColor: const Color(0xFFEC4899),
+        collapsedIconColor: const Color(0xFFEC4899),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        leading: const Icon(Icons.forum_outlined, color: Color(0xFFEC4899)),
+        title: const Text(
+          'Other people mention',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        subtitle: Text(
+          selectedCueIds.isEmpty
+              ? 'Anecdotal cues to compare with your own experience'
+              : '${selectedCueIds.length} cue${selectedCueIds.length == 1 ? '' : 's'} selected',
+          style: const TextStyle(color: Color(0xFFB7C4E2)),
+        ),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              'These are not medical claims. Tick only what fits today, and '
+              'use your own pattern over time rather than other people\'s '
+              'stories.',
+              style: TextStyle(color: Color(0xFFCDD7F0), height: 1.35),
+            ),
+          ),
+          for (final cue in _communityTrtCues)
+            CheckboxListTile(
+              value: selectedCueIds.contains(cue.id),
+              onChanged: (value) => onChanged(cue.id, value ?? false),
+              activeColor: const Color(0xFFEC4899),
+              checkColor: const Color(0xFF07111F),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              dense: true,
+              title: Text(
+                cue.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ValidatedMeasureSection extends StatelessWidget {
@@ -1077,6 +1306,45 @@ const _measureOptions = [
   _MeasureOption(1, '1 Several days'),
   _MeasureOption(2, '2 Half+ days'),
   _MeasureOption(3, '3 Nearly daily'),
+];
+
+const _startingTrtCues = [
+  _EmotionCue(id: 'trt_waiting', label: 'Waiting to notice a change'),
+  _EmotionCue(id: 'trt_hopeful', label: 'Hopeful or relieved to have started'),
+  _EmotionCue(id: 'trt_unsure', label: 'Unsure what is TRT vs normal life'),
+  _EmotionCue(id: 'trt_body_scan', label: 'Checking my body more than usual'),
+  _EmotionCue(id: 'trt_energy_shift', label: 'Energy feels different today'),
+  _EmotionCue(id: 'trt_sleep_shift', label: 'Sleep feels different today'),
+  _EmotionCue(id: 'trt_libido_shift', label: 'Libido feels different today'),
+  _EmotionCue(id: 'trt_irritable', label: 'More irritable or reactive'),
+  _EmotionCue(id: 'trt_anxious', label: 'More anxious about the treatment'),
+  _EmotionCue(id: 'trt_impatient', label: 'Impatient for results'),
+  _EmotionCue(
+    id: 'trt_headache_skin',
+    label: 'Headache, skin, or gel-site issue',
+  ),
+  _EmotionCue(id: 'trt_no_change', label: 'No clear change noticed'),
+];
+
+const _communityTrtCues = [
+  _EmotionCue(id: 'community_clearer', label: 'Clearer head / less foggy'),
+  _EmotionCue(id: 'community_steady', label: 'More steady or grounded'),
+  _EmotionCue(id: 'community_confident', label: 'More confident or assertive'),
+  _EmotionCue(id: 'community_drive', label: 'More drive to get things done'),
+  _EmotionCue(id: 'community_social', label: 'More social or talkative'),
+  _EmotionCue(id: 'community_less_teary', label: 'Less tearful or sensitive'),
+  _EmotionCue(
+    id: 'community_more_emotional',
+    label: 'More emotional than expected',
+  ),
+  _EmotionCue(id: 'community_restless', label: 'Restless or keyed up'),
+  _EmotionCue(id: 'community_flat', label: 'Flat / not much different yet'),
+  _EmotionCue(id: 'community_crash', label: 'Energy dip or crash later'),
+  _EmotionCue(id: 'community_skin', label: 'Oily skin, acne, or itchiness'),
+  _EmotionCue(id: 'community_warm', label: 'Feeling warmer or sweating more'),
+  _EmotionCue(id: 'community_appetite', label: 'Appetite changed'),
+  _EmotionCue(id: 'community_strength', label: 'Gym strength feels different'),
+  _EmotionCue(id: 'community_recovery', label: 'Recovery feels different'),
 ];
 
 const _phq9Items = [
