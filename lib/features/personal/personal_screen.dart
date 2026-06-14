@@ -515,7 +515,9 @@ class _WorkoutSplitEditorSheet extends StatefulWidget {
 class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
   late final TextEditingController nameController;
   late final TextEditingController focusController;
-  late final TextEditingController exercisesController;
+  late final TextEditingController customExerciseController;
+  final selectedExercises = <_WorkoutExercise>[];
+  _WorkoutExerciseOption? selectedExerciseOption;
 
   @override
   void initState() {
@@ -523,22 +525,68 @@ class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
     final split = widget.split;
     nameController = TextEditingController(text: split?.name ?? '');
     focusController = TextEditingController(text: split?.focus ?? '');
-    exercisesController = TextEditingController(
-      text: split?.exercises.map((exercise) => exercise.name).join('\n') ?? '',
-    );
+    customExerciseController = TextEditingController();
+    selectedExercises.addAll(split?.exercises ?? const []);
   }
 
   @override
   void dispose() {
     nameController.dispose();
     focusController.dispose();
-    exercisesController.dispose();
+    customExerciseController.dispose();
     super.dispose();
+  }
+
+  void _addExercise(_WorkoutExercise exercise) {
+    final exists = selectedExercises.any(
+      (item) => _sameExercise(item.name, exercise.name),
+    );
+
+    if (exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${exercise.name} is already in this week.')),
+      );
+      return;
+    }
+
+    setState(() {
+      selectedExercises.add(exercise);
+      selectedExerciseOption = null;
+    });
+  }
+
+  void _addCustomExercise() {
+    final exercises = _workoutExercisesFromLines(customExerciseController.text);
+
+    if (exercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Type an exercise name first.')),
+      );
+      return;
+    }
+
+    for (final exercise in exercises) {
+      final exists = selectedExercises.any(
+        (item) => _sameExercise(item.name, exercise.name),
+      );
+      if (!exists) selectedExercises.add(exercise);
+    }
+
+    setState(() {
+      customExerciseController.clear();
+    });
+  }
+
+  void _removeExercise(_WorkoutExercise exercise) {
+    setState(() {
+      selectedExercises.removeWhere(
+        (item) => _sameExercise(item.name, exercise.name),
+      );
+    });
   }
 
   void _save() {
     final name = nameController.text.trim();
-    final exercises = _workoutExercisesFromLines(exercisesController.text);
 
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -547,7 +595,7 @@ class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
       return;
     }
 
-    if (exercises.isEmpty) {
+    if (selectedExercises.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least one exercise.')),
       );
@@ -559,7 +607,7 @@ class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
         name: name,
         icon: widget.split?.icon ?? Icons.fitness_center_rounded,
         focus: focusController.text.trim(),
-        exercises: exercises,
+        exercises: List.unmodifiable(selectedExercises),
         isCustom: true,
       ),
     );
@@ -602,18 +650,98 @@ class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: exercisesController,
-            minLines: 8,
-            maxLines: 14,
-            textCapitalization: TextCapitalization.words,
+          DropdownButtonFormField<_WorkoutExerciseOption>(
+            initialValue: selectedExerciseOption,
+            isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'Exercises',
-              hintText: 'One exercise per line',
-              helperText:
-                  'Known exercises keep their saved cues. New names use normal gym defaults.',
-              alignLabelWithHint: true,
-              prefixIcon: Icon(Icons.fitness_center_rounded),
+              labelText: 'Add exercise from list',
+              prefixIcon: Icon(Icons.arrow_drop_down_circle_outlined),
+            ),
+            items: [
+              for (final option in _workoutExerciseOptions)
+                DropdownMenuItem(
+                  value: option,
+                  child: Text(option.label, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (option) {
+              if (option == null) return;
+              _addExercise(option.exercise);
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: customExerciseController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Custom exercise',
+                    hintText: 'Exercise not in dropdown',
+                    prefixIcon: Icon(Icons.add_rounded),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filled(
+                tooltip: 'Add custom exercise',
+                onPressed: _addCustomExercise,
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF151B29),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF34405F)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Selected exercises',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (selectedExercises.isEmpty)
+                  const Text(
+                    'Pick exercises from the dropdown above.',
+                    style: TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else
+                  for (final exercise in selectedExercises)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.fitness_center_rounded,
+                        color: Color(0xFF4F8DF7),
+                      ),
+                      title: Text(
+                        exercise.name,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        '${exercise.defaultSets} x ${exercise.defaultReps} | RIR ${exercise.targetRir}',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Remove exercise',
+                        onPressed: () => _removeExercise(exercise),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
