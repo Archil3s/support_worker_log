@@ -298,6 +298,72 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     );
   }
 
+  Widget _autosaveChip() {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 190),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF102A1C),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF31E981)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 18,
+            offset: Offset(0, 8),
+            color: Color(0x55000000),
+          ),
+        ],
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.save_outlined, color: Color(0xFF31E981), size: 17),
+          SizedBox(width: 7),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Autosave on',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                Text(
+                  'Local drafts active',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFF9BE7B3),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _autosaveOverlay() {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 70, 12, 12),
+          child: Material(color: Colors.transparent, child: _autosaveChip()),
+        ),
+      ),
+    );
+  }
+
   Widget _sessionCountdownRow(AppState appState) {
     final sessionText = _sessionCountdownText(appState);
     if (sessionText == null) return const SizedBox.shrink();
@@ -508,7 +574,10 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
             if (user == null) {
               _lastAutoSyncUid = null;
-              return widget.child;
+              return Stack(
+                fit: StackFit.expand,
+                children: [widget.child, _autosaveOverlay()],
+              );
             }
 
             _scheduleFirstLoginSync(user.uid);
@@ -517,6 +586,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
               fit: StackFit.expand,
               children: [
                 widget.child,
+                _autosaveOverlay(),
                 if (_expanded)
                   Positioned.fill(
                     child: GestureDetector(
