@@ -224,6 +224,33 @@ class LocalSupportNoteService {
     return meta;
   }
 
+  static Future<EntrySupportNoteMeta> saveDraftMeta({
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+    required String noteText,
+  }) async {
+    final cleanedInitials = initials.trim().toUpperCase().isEmpty
+        ? defaultInitialsForEntry(entry)
+        : initials.trim().toUpperCase();
+    final meta = EntrySupportNoteMeta(
+      entryId: entry.id,
+      initials: cleanedInitials,
+      status: status,
+      fileName: noteFileName(
+        entry: entry,
+        initials: cleanedInitials,
+        status: status,
+      ),
+      noteText: noteText,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_metaKey(entry.id), jsonEncode(meta.toJson()));
+
+    return meta;
+  }
+
   static Future<bool> openNote(EntrySupportNoteMeta meta) {
     return _platform.openFile(meta.fileName);
   }

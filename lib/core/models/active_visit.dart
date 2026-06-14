@@ -10,6 +10,7 @@ class ActiveVisit {
     required this.startedAt,
     this.odometerStart,
     this.notes = const [],
+    this.supportNoteDraft,
   });
 
   final String id;
@@ -18,6 +19,7 @@ class ActiveVisit {
   final DateTime startedAt;
   final double? odometerStart;
   final List<String> notes;
+  final String? supportNoteDraft;
 
   ActiveVisit copyWith({
     String? id,
@@ -26,6 +28,7 @@ class ActiveVisit {
     DateTime? startedAt,
     double? odometerStart,
     List<String>? notes,
+    String? supportNoteDraft,
   }) {
     return ActiveVisit(
       id: id ?? this.id,
@@ -34,6 +37,7 @@ class ActiveVisit {
       startedAt: startedAt ?? this.startedAt,
       odometerStart: odometerStart ?? this.odometerStart,
       notes: notes ?? this.notes,
+      supportNoteDraft: supportNoteDraft ?? this.supportNoteDraft,
     );
   }
 
@@ -45,6 +49,7 @@ class ActiveVisit {
       'startedAt': startedAt.toIso8601String(),
       'odometerStart': odometerStart,
       'notes': notes,
+      'supportNoteDraft': supportNoteDraft,
     };
   }
 
@@ -78,6 +83,7 @@ class ActiveVisit {
       startedAt: startedAt,
       odometerStart: readNullableDouble('odometerStart'),
       notes: notes,
+      supportNoteDraft: json['supportNoteDraft'] as String?,
     );
   }
 

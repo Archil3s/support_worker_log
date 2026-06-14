@@ -188,6 +188,82 @@ String _buildSupportNoteBreakdown({
   ].join('\n').trim();
 }
 
+class _SupportNoteDraftFields {
+  const _SupportNoteDraftFields({
+    required this.mainTopic,
+    required this.outcomes,
+    required this.nextActions,
+    required this.impression,
+    required this.referrals,
+    required this.safetyConcerns,
+  });
+
+  final String mainTopic;
+  final String outcomes;
+  final String nextActions;
+  final String impression;
+  final String referrals;
+  final String safetyConcerns;
+}
+
+_SupportNoteDraftFields _parseSupportNoteDraft(String value) {
+  final sections = <String, List<String>>{
+    'mainTopic': [],
+    'outcomes': [],
+    'nextActions': [],
+    'impression': [],
+    'referrals': [],
+    'safetyConcerns': [],
+  };
+  String? current;
+
+  for (final rawLine in value.split(RegExp(r'\r?\n'))) {
+    final line = rawLine.trim();
+    final normalized = line.toLowerCase();
+
+    if (normalized.startsWith('main topic')) {
+      current = 'mainTopic';
+      continue;
+    }
+    if (normalized.startsWith('outcome')) {
+      current = 'outcomes';
+      continue;
+    }
+    if (normalized.startsWith('next action')) {
+      current = 'nextActions';
+      continue;
+    }
+    if (normalized.startsWith('overall impression')) {
+      current = 'impression';
+      continue;
+    }
+    if (normalized.startsWith('local referral')) {
+      current = 'referrals';
+      continue;
+    }
+    if (normalized.startsWith('safety concerns')) {
+      current = 'safetyConcerns';
+      continue;
+    }
+
+    if (current == null || line.isEmpty) continue;
+    sections[current]!.add(line);
+  }
+
+  String section(String key) {
+    return _cleanSupportNoteSection(sections[key]!.join('\n'));
+  }
+
+  return _SupportNoteDraftFields(
+    mainTopic: section('mainTopic'),
+    outcomes: section('outcomes'),
+    nextActions: section('nextActions'),
+    impression: section('impression'),
+    referrals: section('referrals'),
+    safetyConcerns: section('safetyConcerns'),
+  );
+}
+
 String _buildTextNoteBreakdown({
   required TextContactDirection direction,
   required String summary,
@@ -649,6 +725,13 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
           notes: notes,
           minutes: minutes,
           kilometres: kilometres,
+          initialDraft: activeVisit.supportNoteDraft,
+          onSaveDraft: (draft) {
+            context.read<AppState>().updateActiveVisit(
+              activeVisit.copyWith(supportNoteDraft: draft),
+            );
+            _snack('Support note draft saved. Reopen this visit to finish it.');
+          },
         );
       },
     );
@@ -871,12 +954,16 @@ class _SupportNoteBreakdownSheet extends StatefulWidget {
     required this.notes,
     required this.minutes,
     required this.kilometres,
+    required this.initialDraft,
+    required this.onSaveDraft,
   });
 
   final ActiveVisit activeVisit;
   final List<String> notes;
   final int minutes;
   final double kilometres;
+  final String? initialDraft;
+  final ValueChanged<String> onSaveDraft;
 
   @override
   State<_SupportNoteBreakdownSheet> createState() =>
@@ -1165,7 +1252,25 @@ class _SupportNoteBreakdownSheetState
   @override
   void initState() {
     super.initState();
-    mainTopicController.text = _initialMainTopicText(widget.notes);
+    final draft = widget.initialDraft?.trim();
+    if (draft != null && draft.isNotEmpty) {
+      final fields = _parseSupportNoteDraft(draft);
+      mainTopicController.text = fields.mainTopic;
+      outcomesController.text = fields.outcomes;
+      nextActionsController.text = fields.nextActions;
+      impressionController.text = fields.impression;
+      noNextAction = fields.nextActions.isEmpty;
+      noReferrals = fields.referrals.toLowerCase().startsWith('no referrals');
+      referralNotesController.text = noReferrals ? '' : fields.referrals;
+      noSafetyConcerns = fields.safetyConcerns.toLowerCase().startsWith(
+        'no safety concerns',
+      );
+      safetyConcernsController.text = noSafetyConcerns
+          ? ''
+          : fields.safetyConcerns;
+    } else {
+      mainTopicController.text = _initialMainTopicText(widget.notes);
+    }
     mainTopicController.selection = TextSelection.collapsed(
       offset: mainTopicController.text.length,
     );
@@ -1197,12 +1302,10 @@ class _SupportNoteBreakdownSheetState
   }
 
   void _save() {
+    final breakdown = _currentBreakdown();
     final mainTopic = _cleanSupportNoteSection(mainTopicController.text);
     final outcomes = _cleanSupportNoteSection(outcomesController.text);
     final impression = _cleanSupportNoteSection(impressionController.text);
-    final nextActions = noNextAction
-        ? ''
-        : _cleanSupportNoteSection(nextActionsController.text);
     final safetyConcerns = noSafetyConcerns
         ? 'No safety concerns noted.'
         : _cleanSupportNoteSection(safetyConcernsController.text);
@@ -1232,16 +1335,27 @@ class _SupportNoteBreakdownSheetState
       return;
     }
 
-    Navigator.of(context).pop(
-      _buildSupportNoteBreakdown(
-        mainTopic: mainTopic,
-        outcomes: outcomes,
-        nextActions: nextActions,
-        impression: impression,
-        referrals: referralSummary,
-        safetyConcerns: safetyConcerns,
-      ),
+    Navigator.of(context).pop(breakdown);
+  }
+
+  String _currentBreakdown() {
+    return _buildSupportNoteBreakdown(
+      mainTopic: _cleanSupportNoteSection(mainTopicController.text),
+      outcomes: _cleanSupportNoteSection(outcomesController.text),
+      nextActions: noNextAction
+          ? ''
+          : _cleanSupportNoteSection(nextActionsController.text),
+      impression: _cleanSupportNoteSection(impressionController.text),
+      referrals: _referralSummary(),
+      safetyConcerns: noSafetyConcerns
+          ? 'No safety concerns noted.'
+          : _cleanSupportNoteSection(safetyConcernsController.text),
     );
+  }
+
+  void _saveDraftAndClose() {
+    widget.onSaveDraft(_currentBreakdown());
+    Navigator.of(context).pop();
   }
 
   String? _validationError({
@@ -1597,6 +1711,12 @@ class _SupportNoteBreakdownSheetState
             const SizedBox(height: 12),
             Expanded(child: SingleChildScrollView(child: _stepBody())),
             const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: _saveDraftAndClose,
+              icon: const Icon(Icons.drafts_outlined),
+              label: const Text('Save Draft & Return'),
+            ),
+            const SizedBox(height: 8),
             _PromptNavButtons(
               isFirst: stepIndex == 0,
               isLast: stepIndex == 6,

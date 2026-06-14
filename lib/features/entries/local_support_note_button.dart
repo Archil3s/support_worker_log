@@ -209,8 +209,53 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     } catch (error) {
       if (!mounted) return;
 
+      await _saveDraftOnly(
+        'Could not create the local DOCX: $error\nDraft saved in the app.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveDraftOnly(String nextMessage) async {
+    final updated = await LocalSupportNoteService.saveDraftMeta(
+      entry: widget.entry,
+      initials: initialsController.text,
+      status: status,
+      noteText: noteController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      meta = updated;
+      message = nextMessage;
+    });
+  }
+
+  Future<void> _saveDraftAndReturn() async {
+    setState(() {
+      busy = true;
+      message = 'Saving note draft...';
+    });
+
+    try {
+      await _saveDraftOnly(
+        'Draft saved in the app. Connect Google Drive, then reopen this entry.',
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+
       setState(() {
-        message = 'Could not save local note: $error';
+        message = 'Could not save note draft: $error';
       });
     } finally {
       if (mounted) {
@@ -312,9 +357,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     } catch (error) {
       if (!mounted) return;
 
-      setState(() {
-        message = 'Could not save to Google Drive: $error';
-      });
+      await _saveDraftOnly(
+        'Could not save to Google Drive: $error\nDraft saved in the app. '
+        'Connect Google Drive, then reopen this entry and save again.',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -621,6 +667,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
                   ? 'Create Google Drive DOCX Note'
                   : 'Update Google Drive DOCX Note',
             ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _saveDraftAndReturn,
+            icon: const Icon(Icons.drafts_outlined),
+            label: const Text('Save Draft & Return'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
