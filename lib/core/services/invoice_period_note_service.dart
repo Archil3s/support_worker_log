@@ -178,6 +178,35 @@ class InvoicePeriodNoteService {
     return meta;
   }
 
+  static Future<InvoicePeriodNoteMeta> saveDraftMeta({
+    required int invoiceNumber,
+    required PayPeriodRange range,
+    required String initials,
+    required InvoicePeriodNoteStatus status,
+    required String noteText,
+  }) async {
+    final cleanedInitials = initials.trim().toUpperCase().isEmpty
+        ? 'NA'
+        : initials.trim().toUpperCase();
+    final meta = InvoicePeriodNoteMeta(
+      periodKey: periodKey(range),
+      initials: cleanedInitials,
+      status: status,
+      fileName: _fileName(
+        invoiceNumber: invoiceNumber,
+        range: range,
+        initials: cleanedInitials,
+        status: status,
+      ),
+      noteText: noteText,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_metaKey(range), jsonEncode(meta.toJson()));
+
+    return meta;
+  }
+
   static Future<bool> openNote(InvoicePeriodNoteMeta meta) {
     return _platform.openFile(meta.fileName);
   }

@@ -187,8 +187,55 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
     } catch (error) {
       if (!mounted) return;
 
+      await _saveDraftOnly(
+        'Could not create the local invoice note: $error\n'
+        'Draft saved in the app.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveDraftOnly(String nextMessage) async {
+    final updated = await InvoicePeriodNoteService.saveDraftMeta(
+      invoiceNumber: widget.invoiceNumber,
+      range: widget.range,
+      initials: initialsController.text,
+      status: status,
+      noteText: noteController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      meta = updated;
+      message = nextMessage;
+    });
+  }
+
+  Future<void> _saveDraftAndReturn() async {
+    setState(() {
+      busy = true;
+      message = 'Saving invoice note draft...';
+    });
+
+    try {
+      await _saveDraftOnly(
+        'Draft saved in the app. Reopen this invoice note to finish it.',
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+
       setState(() {
-        message = 'Could not save local note: $error';
+        message = 'Could not save invoice note draft: $error';
       });
     } finally {
       if (mounted) {
@@ -361,6 +408,12 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
                   ? 'Create Local Period Note'
                   : 'Update / Rename Local Period Note',
             ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _saveDraftAndReturn,
+            icon: const Icon(Icons.drafts_outlined),
+            label: const Text('Save Draft & Return'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
