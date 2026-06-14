@@ -300,8 +300,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
   Widget _autosaveChip() {
     return Container(
-      constraints: const BoxConstraints(maxWidth: 190),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      constraints: const BoxConstraints(maxWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF102A1C),
         borderRadius: BorderRadius.circular(999),
@@ -317,8 +317,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.save_outlined, color: Color(0xFF31E981), size: 17),
-          SizedBox(width: 7),
+          Icon(Icons.save_outlined, color: Color(0xFF31E981), size: 14),
+          SizedBox(width: 6),
           Flexible(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -329,17 +329,17 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
                     decoration: TextDecoration.none,
                   ),
                 ),
                 Text(
-                  'Local drafts active',
+                  'Local drafts',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Color(0xFF9BE7B3),
-                    fontSize: 10,
+                    fontSize: 8,
                     fontWeight: FontWeight.w800,
                     decoration: TextDecoration.none,
                   ),
