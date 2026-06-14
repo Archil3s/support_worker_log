@@ -1457,6 +1457,12 @@ class _GymProgressAnalyticsState extends State<_GymProgressAnalytics> {
         const SizedBox(height: 14),
         _SmartTrainingPanel(logs: filtered, totals: totals),
         const SizedBox(height: 14),
+        _MuscleGrowthDashboard(logs: logs),
+        const SizedBox(height: 14),
+        _ProgressiveOverloadPanel(logs: filtered),
+        const SizedBox(height: 14),
+        _DeloadWarningPanel(logs: filtered),
+        const SizedBox(height: 14),
         const _ScienceBackedPrinciplesPanel(),
         const SizedBox(height: 14),
         _WorkoutActionPlanPanel(logs: logs, entries: widget.entries),
@@ -1885,6 +1891,264 @@ class _ActionPlanRow extends StatelessWidget {
                     color: Color(0xFFB5C3EA),
                     fontWeight: FontWeight.w700,
                     height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MuscleGrowthDashboard extends StatelessWidget {
+  const _MuscleGrowthDashboard({required this.logs});
+
+  final List<_GymProgressLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) return const SizedBox.shrink();
+
+    final rows = _MuscleGrowthRow.fromLogs(logs);
+    final growthScore = _muscleGrowthSignalScore(rows, logs);
+    final label = _muscleGrowthSignalLabel(growthScore);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13294D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2F65A7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.monitor_heart_outlined,
+                color: Color(0xFF31E981),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Muscle growth signal',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF31E981),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Evidence-informed signal only: hard sets, progression, effort and consistency. It is not a direct measurement of muscle gain.',
+            style: const TextStyle(
+              color: Color(0xFFB5C3EA),
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _ProfileBar(
+            label: 'Growth signal',
+            value: growthScore,
+            maxValue: 100,
+            color: const Color(0xFF31E981),
+            suffix: '%',
+          ),
+          const SizedBox(height: 12),
+          for (final row in rows) ...[
+            _MuscleGrowthSetRow(row: row),
+            if (row != rows.last) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MuscleGrowthSetRow extends StatelessWidget {
+  const _MuscleGrowthSetRow({required this.row});
+
+  final _MuscleGrowthRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (row.weeklySets / row.targetHigh).clamp(0.0, 1.0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                row.muscle,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Text(
+              '${row.weeklySets}/${row.targetLow}-${row.targetHigh} sets',
+              style: const TextStyle(
+                color: Color(0xFFD8E2FF),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            minHeight: 8,
+            value: progress,
+            backgroundColor: const Color(0xFF20283B),
+            valueColor: AlwaysStoppedAnimation<Color>(row.color),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          row.status,
+          style: const TextStyle(
+            color: Color(0xFFB5C3EA),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProgressiveOverloadPanel extends StatelessWidget {
+  const _ProgressiveOverloadPanel({required this.logs});
+
+  final List<_GymProgressLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) return const SizedBox.shrink();
+
+    final suggestion = _progressiveOverloadSuggestion(logs);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.trending_up_rounded, color: Color(0xFF4F8DF7)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Progressive overload next step',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            suggestion.title,
+            style: const TextStyle(
+              color: Color(0xFFD8E2FF),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            suggestion.detail,
+            style: const TextStyle(
+              color: Color(0xFFB5C3EA),
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeloadWarningPanel extends StatelessWidget {
+  const _DeloadWarningPanel({required this.logs});
+
+  final List<_GymProgressLog> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.length < 3) return const SizedBox.shrink();
+
+    final signal = _deloadSignal(logs);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: signal.warning
+            ? const Color(0xFF3A2812)
+            : const Color(0xFF102A1C),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: signal.warning
+              ? const Color(0xFFFFC857)
+              : const Color(0xFF31E981),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            signal.warning
+                ? Icons.warning_amber_rounded
+                : Icons.check_circle_outline,
+            color: signal.warning
+                ? const Color(0xFFFFC857)
+                : const Color(0xFF31E981),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  signal.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  signal.detail,
+                  style: const TextStyle(
+                    color: Color(0xFFD8E2FF),
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -5842,6 +6106,87 @@ class _CaloriesByDate {
   }
 }
 
+class _MuscleGrowthRow {
+  const _MuscleGrowthRow({
+    required this.muscle,
+    required this.weeklySets,
+    required this.targetLow,
+    required this.targetHigh,
+    required this.status,
+    required this.color,
+  });
+
+  final String muscle;
+  final int weeklySets;
+  final int targetLow;
+  final int targetHigh;
+  final String status;
+  final Color color;
+
+  static List<_MuscleGrowthRow> fromLogs(List<_GymProgressLog> logs) {
+    if (logs.isEmpty) return [];
+
+    final latestDate = logs.last.date;
+    final weekStart = latestDate.subtract(const Duration(days: 6));
+    final weekLogs = logs.where((log) => !log.date.isBefore(weekStart));
+    final setsByMuscle = <String, int>{};
+
+    for (final log in weekLogs) {
+      final muscles = _muscleGroupsForExercise(log.exerciseName);
+
+      for (final muscle in muscles) {
+        setsByMuscle.update(
+          muscle,
+          (value) => value + log.sets,
+          ifAbsent: () => log.sets,
+        );
+      }
+    }
+
+    const orderedMuscles = [
+      'Chest',
+      'Back',
+      'Shoulders',
+      'Quads',
+      'Hamstrings / glutes',
+      'Biceps',
+      'Triceps',
+      'Abs',
+    ];
+
+    return [
+      for (final muscle in orderedMuscles)
+        _MuscleGrowthRow(
+          muscle: muscle,
+          weeklySets: setsByMuscle[muscle] ?? 0,
+          targetLow: 6,
+          targetHigh: 16,
+          status: _muscleSetStatus(setsByMuscle[muscle] ?? 0),
+          color: _muscleSetColor(setsByMuscle[muscle] ?? 0),
+        ),
+    ];
+  }
+}
+
+class _ProgressionSuggestion {
+  const _ProgressionSuggestion({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+}
+
+class _DeloadSignal {
+  const _DeloadSignal({
+    required this.warning,
+    required this.title,
+    required this.detail,
+  });
+
+  final bool warning;
+  final String title;
+  final String detail;
+}
+
 class _BodyWeightPoint {
   const _BodyWeightPoint({required this.date, required this.weightKg});
 
@@ -6503,6 +6848,230 @@ _WorkoutExercise? _workoutExerciseForName(String name) {
   }
 
   return null;
+}
+
+List<String> _muscleGroupsForExercise(String exerciseName) {
+  final name = _normaliseExerciseName(exerciseName);
+  final groups = <String>{};
+
+  void add(String value) => groups.add(value);
+
+  if (name.contains('bench') ||
+      name.contains('chest') ||
+      name.contains('fly') ||
+      name.contains('push up') ||
+      name.contains('pushup') ||
+      name.contains('dips')) {
+    add('Chest');
+  }
+  if (name.contains('row') ||
+      name.contains('pulldown') ||
+      name.contains('lat') ||
+      name.contains('deadlift') ||
+      name.contains('pull apart')) {
+    add('Back');
+  }
+  if (name.contains('shoulder') ||
+      name.contains('overhead') ||
+      name.contains('lateral raise') ||
+      name.contains('rear delt') ||
+      name.contains('pec deck')) {
+    add('Shoulders');
+  }
+  if (name.contains('squat') ||
+      name.contains('lunge') ||
+      name.contains('step up') ||
+      name.contains('leg press')) {
+    add('Quads');
+  }
+  if (name.contains('glute') ||
+      name.contains('rdl') ||
+      name.contains('hamstring') ||
+      name.contains('hip thrust') ||
+      name.contains('back extension') ||
+      name.contains('bridge')) {
+    add('Hamstrings / glutes');
+  }
+  if (name.contains('curl') || name.contains('bicep')) {
+    add('Biceps');
+  }
+  if (name.contains('tricep') ||
+      name.contains('dips') ||
+      name.contains('pressdown')) {
+    add('Triceps');
+  }
+  if (name.contains('abs') ||
+      name.contains('crunch') ||
+      name.contains('dead bug') ||
+      name.contains('plank') ||
+      name.contains('hollow')) {
+    add('Abs');
+  }
+
+  if (groups.isEmpty && !_isStretchExerciseName(exerciseName)) {
+    add('Back');
+  }
+
+  return groups.toList();
+}
+
+String _muscleSetStatus(int sets) {
+  if (sets == 0) return 'No direct work logged this week.';
+  if (sets < 6) return 'Under-dosed for growth. Add a few hard sets.';
+  if (sets <= 16) return 'Good growth range if recovery and effort are solid.';
+  if (sets <= 20) return 'High volume. Watch joints, sleep, and performance.';
+  return 'Recovery limited risk. Consider reducing sets.';
+}
+
+Color _muscleSetColor(int sets) {
+  if (sets == 0) return const Color(0xFF8396C7);
+  if (sets < 6) return const Color(0xFFFFC857);
+  if (sets <= 16) return const Color(0xFF31E981);
+  if (sets <= 20) return const Color(0xFFF59E0B);
+  return const Color(0xFFFF6B6B);
+}
+
+double _muscleGrowthSignalScore(
+  List<_MuscleGrowthRow> rows,
+  List<_GymProgressLog> logs,
+) {
+  if (rows.isEmpty || logs.isEmpty) return 0;
+
+  final volumeScores = [
+    for (final row in rows)
+      if (row.weeklySets > 0)
+        row.weeklySets <= 16
+            ? (row.weeklySets / 10 * 100).clamp(0.0, 100.0)
+            : (100 - (row.weeklySets - 16) * 8).clamp(20.0, 100.0),
+  ];
+  final volumeScore = volumeScores.isEmpty
+      ? 0.0
+      : volumeScores.fold<double>(0, (sum, value) => sum + value) /
+            volumeScores.length;
+  final rirValues = [
+    for (final log in logs)
+      if (log.averageRir != null) log.averageRir!,
+  ];
+  final effortScore = rirValues.isEmpty
+      ? 55.0
+      : rirValues
+                .map((rir) => rir <= 3 ? 100.0 : (100 - (rir - 3) * 18))
+                .fold<double>(0, (sum, value) => sum + value.clamp(20, 100)) /
+            rirValues.length;
+  final consistencyScore =
+      (logs.map((log) => log.date).toSet().length / 3 * 100).clamp(0.0, 100.0);
+
+  return (volumeScore * 0.45 + effortScore * 0.3 + consistencyScore * 0.25)
+      .clamp(0.0, 100.0);
+}
+
+String _muscleGrowthSignalLabel(double score) {
+  if (score >= 80) return 'Strong';
+  if (score >= 60) return 'Building';
+  if (score >= 35) return 'Maintenance';
+  return 'Under-dosed';
+}
+
+_ProgressionSuggestion _progressiveOverloadSuggestion(
+  List<_GymProgressLog> logs,
+) {
+  if (logs.isEmpty) {
+    return const _ProgressionSuggestion(
+      title: 'Log a workout first.',
+      detail:
+          'The app needs sets, reps, load and RIR before it can suggest progression.',
+    );
+  }
+
+  final latest = logs.last;
+  final exercise = _workoutExerciseForName(latest.exerciseName);
+  final topRange = _topRepRange(exercise?.scienceRepRange ?? '');
+  final avgReps = latest.averageRepsPerSet;
+  final avgRir = latest.averageRir;
+  final recent = logs.length >= 2 ? logs[logs.length - 2] : null;
+  final improved =
+      recent == null ||
+      latest.performanceValue >= recent.performanceValue * 1.02;
+
+  if (avgRir != null && avgRir > 3) {
+    return _ProgressionSuggestion(
+      title: 'Make ${latest.exerciseName} harder before adding volume.',
+      detail:
+          'Average RIR was ${_formatCompactNumber(avgRir)}. Add reps, slow tempo, or a small load increase so working sets land closer to RIR 1-3.',
+    );
+  }
+
+  if (topRange > 0 && avgReps >= topRange && latest.bestWeightKg > 0) {
+    final nextLoad = latest.bestWeightKg * 1.025;
+    return _ProgressionSuggestion(
+      title: 'Add a small load jump next time.',
+      detail:
+          '${latest.exerciseName} hit the top rep range. Try about ${_formatCompactNumber(nextLoad)} kg, then build reps back up.',
+    );
+  }
+
+  if (!improved) {
+    return _ProgressionSuggestion(
+      title: 'Hold load and rebuild reps.',
+      detail:
+          '${latest.exerciseName} dipped versus the prior log. Keep the same weight, aim for cleaner reps, and avoid adding sets until it rebounds.',
+    );
+  }
+
+  return _ProgressionSuggestion(
+    title: 'Add reps before adding weight.',
+    detail:
+        '${latest.exerciseName}: keep the same load and add 1-2 reps across sets. Add load once the top rep range is clean at target RIR.',
+  );
+}
+
+_DeloadSignal _deloadSignal(List<_GymProgressLog> logs) {
+  if (logs.length < 3) {
+    return const _DeloadSignal(
+      warning: false,
+      title: 'Keep building data',
+      detail: 'Deload checks need at least three logged sessions.',
+    );
+  }
+
+  final recent = logs.sublist(logs.length - 3);
+  final declining =
+      recent[2].performanceValue < recent[1].performanceValue &&
+      recent[1].performanceValue < recent[0].performanceValue;
+  final veryHard =
+      recent.where((log) => (log.averageRir ?? 99) <= 1).length >= 2;
+  final highVolume = recent.fold<int>(0, (sum, log) => sum + log.sets) >= 18;
+
+  if (declining && (veryHard || highVolume)) {
+    return const _DeloadSignal(
+      warning: true,
+      title: 'Deload suggested',
+      detail:
+          'Performance is dropping while effort or volume is high. Reduce sets by about 30-50% for a week, keep movement quality, then rebuild.',
+    );
+  }
+
+  if (declining) {
+    return const _DeloadSignal(
+      warning: true,
+      title: 'Watch recovery',
+      detail:
+          'Performance has dropped across recent logs. Hold load, keep RIR 2-3, and check sleep, food, stress and soreness.',
+    );
+  }
+
+  return const _DeloadSignal(
+    warning: false,
+    title: 'No deload signal',
+    detail:
+        'Recent performance is not showing a clear drop. Progress gradually and keep most hard sets near RIR 1-3.',
+  );
+}
+
+int _topRepRange(String value) {
+  final matches = RegExp(r'\d+').allMatches(value).toList();
+  if (matches.isEmpty) return 0;
+  return int.tryParse(matches.last.group(0) ?? '') ?? 0;
 }
 
 List<_WorkoutExercise> _workoutExercisesFromLines(String value) {
