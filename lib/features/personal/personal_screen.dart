@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/personal_log_entry.dart';
@@ -21,9 +25,125 @@ class PersonalScreen extends StatefulWidget {
 }
 
 class _PersonalScreenState extends State<PersonalScreen> {
+  static const _customWorkoutSplitsKey = 'personal_custom_workout_splits_v1';
+
+  final customWorkoutSplits = <_WorkoutSplit>[];
   bool openingDrive = false;
   String? message;
   bool messageIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCustomWorkoutSplits());
+  }
+
+  Future<void> _loadCustomWorkoutSplits() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_customWorkoutSplitsKey);
+
+    if (raw == null || raw.trim().isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+
+      final splits = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(_WorkoutSplit.fromJson)
+          .where((split) => split.name.trim().isNotEmpty)
+          .toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        customWorkoutSplits
+          ..clear()
+          ..addAll(splits);
+      });
+    } catch (_) {
+      return;
+    }
+  }
+
+  Future<void> _saveCustomWorkoutSplits() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _customWorkoutSplitsKey,
+      jsonEncode(customWorkoutSplits.map((split) => split.toJson()).toList()),
+    );
+  }
+
+  List<_WorkoutSplit> _workoutWeekSplits() {
+    final overrides = {
+      for (final split in customWorkoutSplits)
+        split.name.trim().toLowerCase(): split,
+    };
+    final defaultNames = _workoutSplits
+        .map((split) => split.name.trim().toLowerCase())
+        .toSet();
+
+    return [
+      for (final split in _workoutSplits)
+        overrides[split.name.trim().toLowerCase()]?.copyWith(
+              icon: split.icon,
+              isCustom: true,
+            ) ??
+            split,
+      for (final split in customWorkoutSplits)
+        if (!defaultNames.contains(split.name.trim().toLowerCase())) split,
+    ];
+  }
+
+  bool _hasCustomWorkoutSplit(_WorkoutSplit split) {
+    final name = split.name.trim().toLowerCase();
+    return customWorkoutSplits.any(
+      (item) => item.name.trim().toLowerCase() == name,
+    );
+  }
+
+  Future<void> _upsertCustomWorkoutSplit(_WorkoutSplit split) async {
+    final name = split.name.trim().toLowerCase();
+    final index = customWorkoutSplits.indexWhere(
+      (item) => item.name.trim().toLowerCase() == name,
+    );
+    final updated = split.copyWith(isCustom: true);
+
+    setState(() {
+      if (index == -1) {
+        customWorkoutSplits.add(updated);
+      } else {
+        customWorkoutSplits[index] = updated;
+      }
+    });
+
+    await _saveCustomWorkoutSplits();
+  }
+
+  Future<void> _deleteCustomWorkoutSplit(_WorkoutSplit split) async {
+    final name = split.name.trim().toLowerCase();
+
+    setState(() {
+      customWorkoutSplits.removeWhere(
+        (item) => item.name.trim().toLowerCase() == name,
+      );
+    });
+
+    await _saveCustomWorkoutSplits();
+  }
+
+  Future<void> _showWorkoutSplitEditor({_WorkoutSplit? split}) async {
+    final edited = await showModalBottomSheet<_WorkoutSplit>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _WorkoutSplitEditorSheet(split: split),
+    );
+
+    if (edited == null || !mounted) return;
+
+    await _upsertCustomWorkoutSplit(edited);
+  }
 
   Future<void> _openDriveFolder({
     required Future<String> Function(AppState appState) folderId,
@@ -176,9 +296,24 @@ class _PersonalScreenState extends State<PersonalScreen> {
         SectionCard(
           title: 'Workout Week',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final split in _workoutSplits)
-                _WorkoutSplitCard(split: split, gymEntries: todaysGymEntries),
+              FilledButton.icon(
+                onPressed: () => _showWorkoutSplitEditor(),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Workout Week'),
+              ),
+              const SizedBox(height: 12),
+              for (final split in _workoutWeekSplits())
+                _WorkoutSplitCard(
+                  split: split,
+                  gymEntries: todaysGymEntries,
+                  isCustom: _hasCustomWorkoutSplit(split),
+                  onEdit: () => _showWorkoutSplitEditor(split: split),
+                  onDelete: _hasCustomWorkoutSplit(split)
+                      ? () => _deleteCustomWorkoutSplit(split)
+                      : null,
+                ),
             ],
           ),
         ),
@@ -219,10 +354,19 @@ class _PersonalScreenState extends State<PersonalScreen> {
 }
 
 class _WorkoutSplitCard extends StatelessWidget {
-  const _WorkoutSplitCard({required this.split, required this.gymEntries});
+  const _WorkoutSplitCard({
+    required this.split,
+    required this.gymEntries,
+    required this.isCustom,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final _WorkoutSplit split;
   final List<PersonalLogEntry> gymEntries;
+  final bool isCustom;
+  final VoidCallback onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +405,28 @@ class _WorkoutSplitCard extends StatelessWidget {
               ),
             ),
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(
+                        isCustom ? 'Change Exercises' : 'Edit This Week',
+                      ),
+                    ),
+                  ),
+                  if (onDelete != null) ...[
+                    const SizedBox(width: 10),
+                    IconButton.filledTonal(
+                      tooltip: 'Reset or delete workout week',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.restore_from_trash_outlined),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 10),
               if (split.focus.isNotEmpty) ...[
                 _FocusNote(text: split.focus),
                 const SizedBox(height: 10),
@@ -331,6 +497,132 @@ class _FocusNote extends StatelessWidget {
           fontWeight: FontWeight.w800,
           height: 1.35,
         ),
+      ),
+    );
+  }
+}
+
+class _WorkoutSplitEditorSheet extends StatefulWidget {
+  const _WorkoutSplitEditorSheet({this.split});
+
+  final _WorkoutSplit? split;
+
+  @override
+  State<_WorkoutSplitEditorSheet> createState() =>
+      _WorkoutSplitEditorSheetState();
+}
+
+class _WorkoutSplitEditorSheetState extends State<_WorkoutSplitEditorSheet> {
+  late final TextEditingController nameController;
+  late final TextEditingController focusController;
+  late final TextEditingController exercisesController;
+
+  @override
+  void initState() {
+    super.initState();
+    final split = widget.split;
+    nameController = TextEditingController(text: split?.name ?? '');
+    focusController = TextEditingController(text: split?.focus ?? '');
+    exercisesController = TextEditingController(
+      text: split?.exercises.map((exercise) => exercise.name).join('\n') ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    focusController.dispose();
+    exercisesController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = nameController.text.trim();
+    final exercises = _workoutExercisesFromLines(exercisesController.text);
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name the workout week first.')),
+      );
+      return;
+    }
+
+    if (exercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one exercise.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _WorkoutSplit(
+        name: name,
+        icon: widget.split?.icon ?? Icons.fitness_center_rounded,
+        focus: focusController.text.trim(),
+        exercises: exercises,
+        isCustom: true,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          _SheetHeader(
+            title: widget.split == null
+                ? 'Add Workout Week'
+                : 'Change Workout Week',
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: nameController,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Workout week name',
+              hintText: 'Push, Pull, Legs, Upper, Deload',
+              prefixIcon: Icon(Icons.event_note_outlined),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: focusController,
+            minLines: 2,
+            maxLines: 4,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Focus note',
+              hintText: 'What this week/session is for',
+              prefixIcon: Icon(Icons.flag_outlined),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: exercisesController,
+            minLines: 8,
+            maxLines: 14,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Exercises',
+              hintText: 'One exercise per line',
+              helperText:
+                  'Known exercises keep their saved cues. New names use normal gym defaults.',
+              alignLabelWithHint: true,
+              prefixIcon: Icon(Icons.fitness_center_rounded),
+            ),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _save,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save Workout Week'),
+          ),
+        ],
       ),
     );
   }
@@ -4571,19 +4863,56 @@ class _WorkoutSplit {
     required this.icon,
     required this.focus,
     required this.exercises,
+    this.isCustom = false,
   });
 
   final String name;
   final IconData icon;
   final String focus;
   final List<_WorkoutExercise> exercises;
+  final bool isCustom;
 
-  _WorkoutSplit copyWith({List<_WorkoutExercise>? exercises}) {
+  _WorkoutSplit copyWith({
+    String? name,
+    IconData? icon,
+    String? focus,
+    List<_WorkoutExercise>? exercises,
+    bool? isCustom,
+  }) {
     return _WorkoutSplit(
-      name: name,
-      icon: icon,
-      focus: focus,
+      name: name ?? this.name,
+      icon: icon ?? this.icon,
+      focus: focus ?? this.focus,
       exercises: exercises ?? this.exercises,
+      isCustom: isCustom ?? this.isCustom,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'focus': focus,
+      'exercises': exercises.map((exercise) => exercise.toJson()).toList(),
+      'isCustom': isCustom,
+    };
+  }
+
+  factory _WorkoutSplit.fromJson(Map<String, dynamic> json) {
+    final rawExercises = json['exercises'];
+    final exercises = rawExercises is List
+        ? rawExercises
+              .whereType<Map<String, dynamic>>()
+              .map(_WorkoutExercise.fromJson)
+              .where((exercise) => exercise.name.trim().isNotEmpty)
+              .toList()
+        : <_WorkoutExercise>[];
+
+    return _WorkoutSplit(
+      name: json['name'] as String? ?? '',
+      icon: Icons.fitness_center_rounded,
+      focus: json['focus'] as String? ?? '',
+      exercises: exercises,
+      isCustom: json['isCustom'] as bool? ?? true,
     );
   }
 }
@@ -4704,6 +5033,57 @@ class _WorkoutExercise {
       targetRir: targetRir,
       weeklySetTarget: weeklySetTarget,
       progressionRule: progressionRule,
+      fatigueProfile: fatigueProfile,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'target': target,
+      'cue': cue,
+      'alternatives': alternatives,
+      'defaultSetCount': defaultSetCount,
+      'defaultRepCount': defaultRepCount,
+      'tracksLoad': tracksLoad,
+      'repRange': repRange,
+      'targetRir': targetRir,
+      'weeklySetTarget': weeklySetTarget,
+      'progressionRule': progressionRule,
+      'fatigueProfile': fatigueProfile.name,
+    };
+  }
+
+  factory _WorkoutExercise.fromJson(Map<String, dynamic> json) {
+    int readInt(String key, int fallback) {
+      final value = json[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return fallback;
+    }
+
+    final rawAlternatives = json['alternatives'];
+    final alternatives = rawAlternatives is List
+        ? rawAlternatives.whereType<String>().toList()
+        : <String>[];
+    final fatigueName = json['fatigueProfile'] as String?;
+    final fatigueProfile = _FatigueProfile.values.firstWhere(
+      (item) => item.name == fatigueName,
+      orElse: () => _FatigueProfile.moderate,
+    );
+
+    return _WorkoutExercise(
+      name: json['name'] as String? ?? '',
+      target: json['target'] as String? ?? '',
+      cue: json['cue'] as String? ?? '',
+      alternatives: alternatives,
+      defaultSetCount: readInt('defaultSetCount', 3).clamp(1, 20),
+      defaultRepCount: readInt('defaultRepCount', 12).clamp(1, 200),
+      tracksLoad: json['tracksLoad'] as bool? ?? true,
+      repRange: json['repRange'] as String? ?? '',
+      targetRir: readInt('targetRir', 2).clamp(0, 5),
+      weeklySetTarget: readInt('weeklySetTarget', 10).clamp(1, 100),
+      progressionRule: json['progressionRule'] as String? ?? '',
       fatigueProfile: fatigueProfile,
     );
   }
@@ -6123,6 +6503,37 @@ _WorkoutExercise? _workoutExerciseForName(String name) {
   }
 
   return null;
+}
+
+List<_WorkoutExercise> _workoutExercisesFromLines(String value) {
+  final seen = <String>{};
+  final exercises = <_WorkoutExercise>[];
+
+  for (final rawLine in value.split(RegExp(r'\r?\n'))) {
+    final name = rawLine
+        .replaceFirst(RegExp(r'^[-*]\s*'), '')
+        .replaceFirst(RegExp(r'^\d+[\.)]\s*'), '')
+        .trim();
+    final key = name.toLowerCase();
+
+    if (name.isEmpty || !seen.add(key)) continue;
+
+    exercises.add(
+      _workoutExerciseForName(name) ??
+          _WorkoutExercise(
+            name: name,
+            tracksLoad: !_isStretchExerciseName(name),
+            defaultRepCount: _isStretchExerciseName(name) ? 30 : 12,
+            repRange: _isStretchExerciseName(name) ? '20-60' : '8-12',
+            targetRir: _isStretchExerciseName(name) ? 3 : 2,
+            fatigueProfile: _isStretchExerciseName(name)
+                ? _FatigueProfile.low
+                : _FatigueProfile.moderate,
+          ),
+    );
+  }
+
+  return exercises;
 }
 
 _WorkoutSplit _adaptiveSplitForEntries(
