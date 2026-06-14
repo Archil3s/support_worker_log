@@ -16,6 +16,7 @@ void main() {
     final data = await const CleaningRepository().load();
 
     expect(data.tasks, isNotEmpty);
+    expect(data.members.single.name, 'Me');
     expect(
       data.tasks.any((task) => task.label == 'Wash dinner dishes'),
       isTrue,
@@ -44,11 +45,23 @@ void main() {
     );
     const repository = CleaningRepository();
 
-    await repository.save(CleaningData(tasks: const [task], events: [event]));
+    const member = CleaningMember(
+      id: 'member-sam',
+      name: 'Sam',
+      colorValue: 0xFF4F8DF7,
+    );
+    await repository.save(
+      CleaningData(
+        tasks: const [task],
+        events: [event],
+        members: const [member],
+      ),
+    );
     final restored = await repository.load();
 
     expect(restored.tasks.any((item) => item.id == task.id), isTrue);
     expect(restored.events.single.taskId, task.id);
+    expect(restored.members.single.name, 'Sam');
   });
 
   test('migrates legacy custom tasks', () async {
@@ -63,5 +76,18 @@ void main() {
     final data = await const CleaningRepository().load();
 
     expect(data.tasks.any((task) => task.id == 'legacy-task'), isTrue);
+  });
+
+  test('old saved data gains a default household member', () async {
+    SharedPreferences.setMockInitialValues({
+      'cleaning_data_v2': jsonEncode({
+        'tasks': <Object?>[],
+        'events': <Object?>[],
+      }),
+    });
+
+    final data = await const CleaningRepository().load();
+
+    expect(data.members.single.id, 'member-me');
   });
 }

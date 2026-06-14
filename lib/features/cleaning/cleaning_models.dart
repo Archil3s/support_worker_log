@@ -4,6 +4,47 @@ enum CleaningTime { morning, daytime, evening, anytime }
 
 enum CleaningEventStatus { completed, skipped }
 
+class CleaningMember {
+  const CleaningMember({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    this.isActive = true,
+  });
+
+  factory CleaningMember.fromJson(Map<String, dynamic> json) {
+    return CleaningMember(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      colorValue: json['colorValue'] as int? ?? 0xFF4F8DF7,
+      isActive: json['isActive'] as bool? ?? true,
+    );
+  }
+
+  final String id;
+  final String name;
+  final int colorValue;
+  final bool isActive;
+
+  CleaningMember copyWith({String? name, bool? isActive}) {
+    return CleaningMember(
+      id: id,
+      name: name ?? this.name,
+      colorValue: colorValue,
+      isActive: isActive ?? this.isActive,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'colorValue': colorValue,
+      'isActive': isActive,
+    };
+  }
+}
+
 class CleaningTask {
   const CleaningTask({
     required this.id,
@@ -17,6 +58,8 @@ class CleaningTask {
     this.essential = false,
     this.custom = false,
     this.isActive = true,
+    this.assigneeIds = const [],
+    this.rotateAssignees = false,
   });
 
   factory CleaningTask.fromJson(Map<String, dynamic> json) {
@@ -36,6 +79,10 @@ class CleaningTask {
       essential: json['essential'] as bool? ?? false,
       custom: json['custom'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
+      assigneeIds: (json['assigneeIds'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(),
+      rotateAssignees: json['rotateAssignees'] as bool? ?? false,
     );
   }
 
@@ -50,6 +97,8 @@ class CleaningTask {
   final bool essential;
   final bool custom;
   final bool isActive;
+  final List<String> assigneeIds;
+  final bool rotateAssignees;
 
   bool isDue(DateTime date) {
     if (!isActive) return false;
@@ -60,7 +109,11 @@ class CleaningTask {
     };
   }
 
-  CleaningTask copyWith({bool? isActive}) {
+  CleaningTask copyWith({
+    bool? isActive,
+    List<String>? assigneeIds,
+    bool? rotateAssignees,
+  }) {
     return CleaningTask(
       id: id,
       label: label,
@@ -73,6 +126,8 @@ class CleaningTask {
       essential: essential,
       custom: custom,
       isActive: isActive ?? this.isActive,
+      assigneeIds: assigneeIds ?? this.assigneeIds,
+      rotateAssignees: rotateAssignees ?? this.rotateAssignees,
     );
   }
 
@@ -89,6 +144,8 @@ class CleaningTask {
       'essential': essential,
       'custom': custom,
       'isActive': isActive,
+      'assigneeIds': assigneeIds,
+      'rotateAssignees': rotateAssignees,
     };
   }
 }
@@ -99,6 +156,7 @@ class CleaningEvent {
     required this.scheduledDate,
     required this.recordedAt,
     required this.status,
+    this.completedByMemberId,
   });
 
   factory CleaningEvent.fromJson(Map<String, dynamic> json) {
@@ -109,6 +167,7 @@ class CleaningEvent {
       status: CleaningEventStatus.values.byName(
         json['status'] as String? ?? 'completed',
       ),
+      completedByMemberId: json['completedByMemberId'] as String?,
     );
   }
 
@@ -116,6 +175,7 @@ class CleaningEvent {
   final DateTime scheduledDate;
   final DateTime recordedAt;
   final CleaningEventStatus status;
+  final String? completedByMemberId;
 
   String get key => '$taskId:${cleaningDateKey(scheduledDate)}';
 
@@ -128,6 +188,7 @@ class CleaningEvent {
       'scheduledDate': scheduledDate.toIso8601String(),
       'recordedAt': recordedAt.toIso8601String(),
       'status': status.name,
+      'completedByMemberId': completedByMemberId,
     };
   }
 }
@@ -136,23 +197,54 @@ class CleaningData {
   const CleaningData({
     required this.tasks,
     required this.events,
+    this.members = const [],
     this.trackingStartedAt,
   });
 
   final List<CleaningTask> tasks;
   final List<CleaningEvent> events;
+  final List<CleaningMember> members;
   final DateTime? trackingStartedAt;
 
   CleaningData copyWith({
     List<CleaningTask>? tasks,
     List<CleaningEvent>? events,
+    List<CleaningMember>? members,
   }) {
     return CleaningData(
       tasks: tasks ?? this.tasks,
       events: events ?? this.events,
+      members: members ?? this.members,
       trackingStartedAt: trackingStartedAt,
     );
   }
+}
+
+CleaningMember? assignedCleaningMember(
+  CleaningTask task,
+  DateTime date,
+  List<CleaningMember> members,
+) {
+  final activeMembers = {
+    for (final member in members)
+      if (member.isActive) member.id: member,
+  };
+  final assignees = task.assigneeIds
+      .where(activeMembers.containsKey)
+      .map((id) => activeMembers[id]!)
+      .toList();
+  if (assignees.isEmpty) return null;
+  if (!task.rotateAssignees || assignees.length == 1) return assignees.first;
+
+  final normalizedDate = cleaningDateOnly(date);
+  final index = switch (task.frequency) {
+    CleaningFrequency.daily => normalizedDate.difference(DateTime(2020)).inDays,
+    CleaningFrequency.weekly =>
+      normalizedDate.difference(DateTime(2020)).inDays ~/ 7,
+    CleaningFrequency.monthly =>
+      (normalizedDate.year - 2020) * 12 + normalizedDate.month,
+  };
+  return assignees[index.abs() % assignees.length];
 }
 
 DateTime cleaningDateOnly(DateTime date) {

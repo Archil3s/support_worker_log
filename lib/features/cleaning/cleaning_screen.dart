@@ -15,7 +15,7 @@ const _cleaningPanel2 = Color(0xFF20283B);
 const _cleaningBorder = Color(0xFF34405F);
 const _cleaningMuted = Color(0xFF8396C7);
 
-enum _CleaningView { today, plan, insights }
+enum _CleaningView { today, roster, plan, insights }
 
 enum _TaskAction { complete, skip, reset }
 
@@ -106,6 +106,9 @@ class _CleaningScreenState extends State<CleaningScreen> {
           scheduledDate: cleaningDateOnly(date),
           recordedAt: DateTime.now(),
           status: status,
+          completedByMemberId: status == CleaningEventStatus.completed
+              ? assignedCleaningMember(task, date, _data.members)?.id
+              : null,
         ),
       );
     }
@@ -116,6 +119,87 @@ class _CleaningScreenState extends State<CleaningScreen> {
     final tasks = _data.tasks.map((current) {
       return current.id == task.id
           ? current.copyWith(isActive: !current.isActive)
+          : current;
+    }).toList();
+    await _save(_data.copyWith(tasks: tasks));
+  }
+
+  Future<void> _addMember() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _AddCleaningMemberDialog(),
+    );
+    if (name == null || name.trim().isEmpty) return;
+    const colors = [
+      0xFF31E981,
+      0xFF4F8DF7,
+      0xFFFFB84D,
+      0xFFFF7A7A,
+      0xFFB184F5,
+      0xFF55C7D9,
+    ];
+    final member = CleaningMember(
+      id: 'member-${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim(),
+      colorValue: colors[_data.members.length % colors.length],
+    );
+    await _save(_data.copyWith(members: [..._data.members, member]));
+  }
+
+  Future<void> _deleteMember(CleaningMember member) async {
+    if (_data.members.length <= 1) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Remove ${member.name}?'),
+          content: const Text(
+            'Their task assignments will be cleared. Cleaning history stays.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(backgroundColor: _cleaningCoral),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    final tasks = _data.tasks.map((task) {
+      return task.copyWith(
+        assigneeIds: task.assigneeIds.where((id) => id != member.id).toList(),
+      );
+    }).toList();
+    await _save(
+      _data.copyWith(
+        tasks: tasks,
+        members: _data.members.where((item) => item.id != member.id).toList(),
+      ),
+    );
+  }
+
+  Future<void> _editAssignment(CleaningTask task) async {
+    final result = await showModalBottomSheet<_AssignmentResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return _AssignmentSheet(task: task, members: _data.members);
+      },
+    );
+    if (result == null) return;
+    final tasks = _data.tasks.map((current) {
+      return current.id == task.id
+          ? current.copyWith(
+              assigneeIds: result.memberIds,
+              rotateAssignees: result.rotate,
+            )
           : current;
     }).toList();
     await _save(_data.copyWith(tasks: tasks));
@@ -158,6 +242,7 @@ class _CleaningScreenState extends State<CleaningScreen> {
       CleaningData(
         tasks: _data.tasks.where((item) => item.id != task.id).toList(),
         events: _data.events.where((event) => event.taskId != task.id).toList(),
+        members: _data.members,
         trackingStartedAt: _data.trackingStartedAt,
       ),
     );
@@ -183,35 +268,16 @@ class _CleaningScreenState extends State<CleaningScreen> {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: SegmentedButton<_CleaningView>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: _CleaningView.today,
-                icon: Icon(Icons.today_outlined),
-                label: Text('Today'),
-              ),
-              ButtonSegment(
-                value: _CleaningView.plan,
-                icon: Icon(Icons.calendar_view_week_outlined),
-                label: Text('Plan'),
-              ),
-              ButtonSegment(
-                value: _CleaningView.insights,
-                icon: Icon(Icons.insights_outlined),
-                label: Text('Insights'),
-              ),
-            ],
-            selected: {_view},
-            onSelectionChanged: (selection) {
-              setState(() => _view = selection.first);
-            },
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: _CleaningTopNavigation(
+            selected: _view,
+            onSelected: (view) => setState(() => _view = view),
           ),
         ),
         Expanded(
           child: switch (_view) {
             _CleaningView.today => _buildToday(),
+            _CleaningView.roster => _buildRoster(),
             _CleaningView.plan => _buildPlan(),
             _CleaningView.insights => _buildInsights(),
           },
@@ -277,9 +343,61 @@ class _CleaningScreenState extends State<CleaningScreen> {
                 tasks: tasks.where((task) => task.time == time).toList(),
                 date: _selectedDate,
                 today: _today,
+                members: _data.members,
                 eventFor: _eventFor,
                 onStatusChanged: _setTaskStatus,
               ),
+      ],
+    );
+  }
+
+  Widget _buildRoster() {
+    final weekStart = _today.subtract(Duration(days: _today.weekday - 1));
+    final week = [
+      for (var offset = 0; offset < 7; offset++)
+        weekStart.add(Duration(days: offset)),
+    ];
+    final members = _data.members.where((member) => member.isActive).toList();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      children: [
+        _SectionHeading(
+          eyebrow: 'This week',
+          title: 'House roster',
+          subtitle: 'Everyone can see what they own and what is already done.',
+          trailing: IconButton.filled(
+            onPressed: _addMember,
+            tooltip: 'Add household member',
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _MemberStrip(
+          members: members,
+          onAdd: _addMember,
+          onDelete: _deleteMember,
+        ),
+        if (members.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _RosterBalanceCard(members: members, week: week, tasksFor: _tasksFor),
+        ],
+        const SizedBox(height: 18),
+        for (final date in week)
+          _RosterDayCard(
+            date: date,
+            today: _today,
+            tasks: _tasksFor(date),
+            members: members,
+            eventFor: _eventFor,
+            onComplete: (task) => _setTaskStatus(
+              task,
+              date,
+              _eventFor(task, date)?.status == CleaningEventStatus.completed
+                  ? null
+                  : CleaningEventStatus.completed,
+            ),
+            onAssign: _editAssignment,
+          ),
       ],
     );
   }
@@ -332,6 +450,8 @@ class _CleaningScreenState extends State<CleaningScreen> {
         for (final task in tasks)
           _PlanTaskCard(
             task: task,
+            members: _data.members,
+            onAssign: () => _editAssignment(task),
             onToggle: () => _toggleTaskActive(task),
             onDelete: task.custom ? () => _deleteTask(task) : null,
           ),
@@ -425,6 +545,73 @@ class _CleaningScreenState extends State<CleaningScreen> {
         const SizedBox(height: 12),
         _CleaningRecommendation(insights: insights),
       ],
+    );
+  }
+}
+
+class _CleaningTopNavigation extends StatelessWidget {
+  const _CleaningTopNavigation({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final _CleaningView selected;
+  final ValueChanged<_CleaningView> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 58,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101622),
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: _cleaningBorder),
+      ),
+      child: Row(
+        children: [
+          _item(_CleaningView.today, Icons.today_outlined, 'Today'),
+          _item(_CleaningView.roster, Icons.groups_2_outlined, 'Roster'),
+          _item(_CleaningView.plan, Icons.tune_rounded, 'Plan'),
+          _item(_CleaningView.insights, Icons.insights_outlined, 'Stats'),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(_CleaningView view, IconData icon, String label) {
+    final isSelected = selected == view;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onSelected(view),
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: isSelected ? _cleaningBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 19,
+                color: isSelected ? Colors.white : _cleaningMuted,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : _cleaningMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -591,6 +778,7 @@ class _CleaningTimeSection extends StatelessWidget {
     required this.tasks,
     required this.date,
     required this.today,
+    required this.members,
     required this.eventFor,
     required this.onStatusChanged,
   });
@@ -599,6 +787,7 @@ class _CleaningTimeSection extends StatelessWidget {
   final List<CleaningTask> tasks;
   final DateTime date;
   final DateTime today;
+  final List<CleaningMember> members;
   final CleaningEvent? Function(CleaningTask task, DateTime date) eventFor;
   final Future<void> Function(
     CleaningTask task,
@@ -642,6 +831,7 @@ class _CleaningTimeSection extends StatelessWidget {
             _TodayTaskCard(
               task: task,
               event: eventFor(task, date),
+              assignedMember: assignedCleaningMember(task, date, members),
               missed: date.isBefore(today) && eventFor(task, date) == null,
               onTap: () {
                 final event = eventFor(task, date);
@@ -672,6 +862,7 @@ class _TodayTaskCard extends StatelessWidget {
   const _TodayTaskCard({
     required this.task,
     required this.event,
+    required this.assignedMember,
     required this.missed,
     required this.onTap,
     required this.onAction,
@@ -679,6 +870,7 @@ class _TodayTaskCard extends StatelessWidget {
 
   final CleaningTask task;
   final CleaningEvent? event;
+  final CleaningMember? assignedMember;
   final bool missed;
   final VoidCallback onTap;
   final ValueChanged<_TaskAction> onAction;
@@ -745,6 +937,10 @@ class _TodayTaskCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (assignedMember != null) ...[
+                  const SizedBox(height: 7),
+                  _MemberPill(member: assignedMember!, compact: true),
+                ],
               ],
             ),
           ),
@@ -831,14 +1027,555 @@ class _SectionHeading extends StatelessWidget {
   }
 }
 
+class _MemberStrip extends StatelessWidget {
+  const _MemberStrip({
+    required this.members,
+    required this.onAdd,
+    required this.onDelete,
+  });
+
+  final List<CleaningMember> members;
+  final VoidCallback onAdd;
+  final ValueChanged<CleaningMember> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 82,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: members.length + 1,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          if (index == members.length) {
+            return InkWell(
+              onTap: onAdd,
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                width: 68,
+                decoration: BoxDecoration(
+                  color: _cleaningPanel,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _cleaningBorder),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_rounded, color: _cleaningBlue),
+                    SizedBox(height: 5),
+                    Text(
+                      'Add',
+                      style: TextStyle(
+                        color: _cleaningMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          final member = members[index];
+          return PopupMenuButton<String>(
+            tooltip: member.name,
+            onSelected: (value) {
+              if (value == 'remove') onDelete(member);
+            },
+            itemBuilder: (context) => [
+              if (members.length > 1)
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: Text('Remove member'),
+                ),
+            ],
+            child: SizedBox(
+              width: 68,
+              child: Column(
+                children: [
+                  _MemberAvatar(member: member, size: 50),
+                  const SizedBox(height: 6),
+                  Text(
+                    member.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RosterBalanceCard extends StatelessWidget {
+  const _RosterBalanceCard({
+    required this.members,
+    required this.week,
+    required this.tasksFor,
+  });
+
+  final List<CleaningMember> members;
+  final List<DateTime> week;
+  final List<CleaningTask> Function(DateTime date) tasksFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final minutesByMember = {for (final member in members) member.id: 0};
+    for (final date in week) {
+      for (final task in tasksFor(date)) {
+        final member = assignedCleaningMember(task, date, members);
+        if (member != null) {
+          minutesByMember[member.id] =
+              (minutesByMember[member.id] ?? 0) + task.minutes;
+        }
+      }
+    }
+    final maxMinutes = minutesByMember.values.fold<int>(
+      1,
+      (maximum, minutes) => minutes > maximum ? minutes : maximum,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF13241E), Color(0xFF14253A)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _cleaningBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.balance_rounded, color: _cleaningGreen, size: 19),
+              SizedBox(width: 8),
+              Text(
+                'Weekly balance',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          for (final member in members) ...[
+            Row(
+              children: [
+                _MemberAvatar(member: member, size: 28),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 64,
+                  child: Text(
+                    member.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: (minutesByMember[member.id] ?? 0) / maxMinutes,
+                      minHeight: 8,
+                      color: Color(member.colorValue),
+                      backgroundColor: _cleaningPanel2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 42,
+                  child: Text(
+                    '${minutesByMember[member.id] ?? 0}m',
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      color: _cleaningMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RosterDayCard extends StatelessWidget {
+  const _RosterDayCard({
+    required this.date,
+    required this.today,
+    required this.tasks,
+    required this.members,
+    required this.eventFor,
+    required this.onComplete,
+    required this.onAssign,
+  });
+
+  final DateTime date;
+  final DateTime today;
+  final List<CleaningTask> tasks;
+  final List<CleaningMember> members;
+  final CleaningEvent? Function(CleaningTask task, DateTime date) eventFor;
+  final ValueChanged<CleaningTask> onComplete;
+  final ValueChanged<CleaningTask> onAssign;
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = tasks.where((task) {
+      return eventFor(task, date)?.status == CleaningEventStatus.completed;
+    }).length;
+    final isToday = date == today;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: _cleaningPanel,
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(
+          color: isToday ? _cleaningGreen : _cleaningBorder,
+          width: isToday ? 1.4 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: isToday,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          leading: Container(
+            width: 43,
+            height: 49,
+            decoration: BoxDecoration(
+              color: isToday
+                  ? _cleaningGreen.withValues(alpha: 0.14)
+                  : _cleaningPanel2,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _weekdayName(date.weekday).substring(0, 3).toUpperCase(),
+                  style: TextStyle(
+                    color: isToday ? _cleaningGreen : _cleaningMuted,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  '${date.day}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          title: Text(
+            isToday ? 'Today' : _weekdayName(date.weekday),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          subtitle: Text(
+            '$completed/${tasks.length} done · '
+            '${tasks.fold(0, (sum, task) => sum + task.minutes)} min',
+            style: const TextStyle(
+              color: _cleaningMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          children: [
+            if (tasks.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'No jobs scheduled.',
+                  style: TextStyle(color: _cleaningMuted),
+                ),
+              )
+            else
+              for (final task in tasks)
+                _RosterTaskRow(
+                  task: task,
+                  member: assignedCleaningMember(task, date, members),
+                  completed:
+                      eventFor(task, date)?.status ==
+                      CleaningEventStatus.completed,
+                  onComplete: () => onComplete(task),
+                  onAssign: () => onAssign(task),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterTaskRow extends StatelessWidget {
+  const _RosterTaskRow({
+    required this.task,
+    required this.member,
+    required this.completed,
+    required this.onComplete,
+    required this.onAssign,
+  });
+
+  final CleaningTask task;
+  final CleaningMember? member;
+  final bool completed;
+  final VoidCallback onComplete;
+  final VoidCallback onAssign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: completed
+            ? _cleaningGreen.withValues(alpha: 0.08)
+            : const Color(0xFF101622),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: completed
+              ? _cleaningGreen.withValues(alpha: 0.55)
+              : _cleaningBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: onComplete,
+            borderRadius: BorderRadius.circular(99),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: completed ? _cleaningGreen : _cleaningPanel2,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                completed ? Icons.check_rounded : _areaIcon(task.area),
+                size: 19,
+                color: completed ? const Color(0xFF07140D) : _cleaningBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: completed ? _cleaningMuted : Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    decoration: completed ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${task.minutes} min · ${task.area}',
+                  style: const TextStyle(
+                    color: _cleaningMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 7),
+          InkWell(
+            onTap: onAssign,
+            borderRadius: BorderRadius.circular(99),
+            child: member == null
+                ? const _UnassignedPill()
+                : _MemberAvatar(member: member!, size: 34),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberAvatar extends StatelessWidget {
+  const _MemberAvatar({required this.member, required this.size});
+
+  final CleaningMember member;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(member.colorValue);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.18),
+        border: Border.all(color: color, width: 1.4),
+      ),
+      child: Text(
+        _memberInitials(member.name),
+        style: TextStyle(
+          color: color,
+          fontSize: size * 0.3,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberPill extends StatelessWidget {
+  const _MemberPill({required this.member, this.compact = false});
+
+  final CleaningMember member;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(member.colorValue);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 9,
+        vertical: compact ? 3 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: compact ? 6 : 8,
+            height: compact ? 6 : 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            member.name,
+            style: TextStyle(
+              color: color,
+              fontSize: compact ? 10 : 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnassignedPill extends StatelessWidget {
+  const _UnassignedPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: _cleaningPanel2,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: _cleaningBorder),
+      ),
+      child: const Text(
+        'Assign',
+        style: TextStyle(
+          color: _cleaningMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _AssignmentSummary extends StatelessWidget {
+  const _AssignmentSummary({required this.task, required this.members});
+
+  final CleaningTask task;
+  final List<CleaningMember> members;
+
+  @override
+  Widget build(BuildContext context) {
+    final assigned = members
+        .where((member) => task.assigneeIds.contains(member.id))
+        .toList();
+    if (assigned.isEmpty) return const _UnassignedPill();
+    return Wrap(
+      spacing: 5,
+      runSpacing: 5,
+      children: [
+        for (final member in assigned)
+          _MemberPill(member: member, compact: true),
+        if (task.rotateAssignees && assigned.length > 1)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: _cleaningBlue.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: const Text(
+              'Rotates',
+              style: TextStyle(
+                color: _cleaningBlue,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _PlanTaskCard extends StatelessWidget {
   const _PlanTaskCard({
     required this.task,
+    required this.members,
+    required this.onAssign,
     required this.onToggle,
     required this.onDelete,
   });
 
   final CleaningTask task;
+  final List<CleaningMember> members;
+  final VoidCallback onAssign;
   final VoidCallback onToggle;
   final VoidCallback? onDelete;
 
@@ -884,6 +1621,12 @@ class _PlanTaskCard extends StatelessWidget {
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
+                  ),
+                  const SizedBox(height: 7),
+                  InkWell(
+                    onTap: onAssign,
+                    borderRadius: BorderRadius.circular(99),
+                    child: _AssignmentSummary(task: task, members: members),
                   ),
                 ],
               ),
@@ -1294,6 +2037,194 @@ class _EmptyCleaningState extends StatelessWidget {
   }
 }
 
+class _AssignmentResult {
+  const _AssignmentResult({required this.memberIds, required this.rotate});
+
+  final List<String> memberIds;
+  final bool rotate;
+}
+
+class _AssignmentSheet extends StatefulWidget {
+  const _AssignmentSheet({required this.task, required this.members});
+
+  final CleaningTask task;
+  final List<CleaningMember> members;
+
+  @override
+  State<_AssignmentSheet> createState() => _AssignmentSheetState();
+}
+
+class _AssignmentSheetState extends State<_AssignmentSheet> {
+  late final Set<String> _selectedIds = widget.task.assigneeIds.toSet();
+  late bool _rotate = widget.task.rotateAssignees;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          18,
+          4,
+          18,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Assign this job',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              widget.task.label,
+              style: const TextStyle(
+                color: _cleaningMuted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 18),
+            for (final member in widget.members)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (!_selectedIds.add(member.id)) {
+                        _selectedIds.remove(member.id);
+                      }
+                      if (_selectedIds.length < 2) _rotate = false;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(17),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _selectedIds.contains(member.id)
+                          ? Color(member.colorValue).withValues(alpha: 0.12)
+                          : _cleaningPanel,
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(
+                        color: _selectedIds.contains(member.id)
+                            ? Color(member.colorValue)
+                            : _cleaningBorder,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        _MemberAvatar(member: member, size: 42),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            member.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _selectedIds.contains(member.id)
+                              ? Icons.check_circle_rounded
+                              : Icons.circle_outlined,
+                          color: _selectedIds.contains(member.id)
+                              ? Color(member.colorValue)
+                              : _cleaningMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (_selectedIds.length > 1)
+              SwitchListTile(
+                value: _rotate,
+                onChanged: (value) => setState(() => _rotate = value),
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Rotate automatically',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                subtitle: const Text(
+                  'The assigned person changes each scheduled day.',
+                  style: TextStyle(color: _cleaningMuted),
+                ),
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  _AssignmentResult(
+                    memberIds: _selectedIds.toList(),
+                    rotate: _rotate && _selectedIds.length > 1,
+                  ),
+                );
+              },
+              child: const Text('Save assignment'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddCleaningMemberDialog extends StatefulWidget {
+  const _AddCleaningMemberDialog();
+
+  @override
+  State<_AddCleaningMemberDialog> createState() =>
+      _AddCleaningMemberDialogState();
+}
+
+class _AddCleaningMemberDialogState extends State<_AddCleaningMemberDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add household member'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Name or nickname',
+          hintText: 'e.g. Sam',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Add')),
+      ],
+    );
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+}
+
 class _CleaningTaskDialog extends StatefulWidget {
   const _CleaningTaskDialog();
 
@@ -1565,4 +2496,17 @@ String _monthName(int month) {
     'December',
   ];
   return names[month - 1];
+}
+
+String _memberInitials(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) {
+    return parts.first.substring(0, 1).toUpperCase();
+  }
+  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }

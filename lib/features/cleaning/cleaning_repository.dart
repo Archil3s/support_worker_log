@@ -40,6 +40,7 @@ class CleaningRepository {
         'trackingStartedAt':
             (data.trackingStartedAt ?? cleaningDateOnly(DateTime.now()))
                 .toIso8601String(),
+        'members': data.members.map((member) => member.toJson()).toList(),
         'tasks': data.tasks.map((task) => task.toJson()).toList(),
         'events': events.map((event) => event.toJson()).toList(),
       }),
@@ -58,6 +59,14 @@ class CleaningRepository {
         .map(CleaningEvent.fromJson)
         .where((event) => event.taskId.isNotEmpty)
         .toList();
+    final storedMembers = (decoded['members'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(CleaningMember.fromJson)
+        .where((member) => member.id.isNotEmpty && member.name.isNotEmpty)
+        .toList();
+    final members = storedMembers.isEmpty
+        ? const [defaultCleaningMember]
+        : storedMembers;
     final storedById = {for (final task in storedTasks) task.id: task};
     final mergedTasks = [
       for (final task in defaultCleaningTasks)
@@ -68,6 +77,7 @@ class CleaningRepository {
     return CleaningData(
       tasks: mergedTasks,
       events: events,
+      members: members,
       trackingStartedAt: rawTrackingStartedAt == null
           ? cleaningDateOnly(DateTime.now())
           : cleaningDateOnly(DateTime.parse(rawTrackingStartedAt)),
@@ -126,9 +136,20 @@ class CleaningRepository {
         status: CleaningEventStatus.completed,
       );
     }).toList();
-    return CleaningData(tasks: tasks, events: events, trackingStartedAt: today);
+    return CleaningData(
+      tasks: tasks,
+      events: events,
+      members: const [defaultCleaningMember],
+      trackingStartedAt: today,
+    );
   }
 }
+
+const defaultCleaningMember = CleaningMember(
+  id: 'member-me',
+  name: 'Me',
+  colorValue: 0xFF31E981,
+);
 
 const defaultCleaningTasks = [
   CleaningTask(

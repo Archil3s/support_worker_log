@@ -17,6 +17,8 @@ const _caseworkLine = Color(0xFF34405F);
 const _caseworkMuted = Color(0xFF8396C7);
 const _caseworkPanel = Color(0xFF101827);
 const _caseworkSelected = Color(0xFF13294D);
+const _caseworkUpdated = Color(0xFFFFB84D);
+const _caseworkCompleted = Color(0xFF31D17C);
 
 enum _CaseworkFocus {
   walkIn,
@@ -69,6 +71,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   final supportNeeds = <String>{};
   final referralFilters = <String>{};
   final roadblocks = <String>{};
+  final updatedFocuses = <_CaseworkFocus>{};
+  final completedFocuses = <_CaseworkFocus>{};
   final actionLog = <_ActionLogEntry>[];
   final requestHistory = <_RequestHistoryEntry>[];
   final profiles = <String, _CaseProfileRecord>{};
@@ -135,10 +139,14 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               children: [
                 _DesktopWorkflowRail(
                   current: focus,
+                  updatedFocuses: updatedFocuses,
+                  completedFocuses: completedFocuses,
                   onChanged: (value) {
                     setState(() => focus = value);
                     unawaited(_saveDraft());
                   },
+                  onUpdatedToggle: _toggleUpdated,
+                  onCompletedToggle: _toggleCompleted,
                 ),
                 _DesktopClientRail(
                   clientInitialsController: clientInitialsController,
@@ -244,6 +252,7 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         ),
       ),
       child: ListView(
+        key: const ValueKey('casework-compact-list'),
         primary: false,
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 96),
         children: [
@@ -309,10 +318,14 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           const SizedBox(height: 12),
           _CompactFocusBar(
             current: focus,
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
             onChanged: (value) {
               setState(() => focus = value);
               unawaited(_saveDraft());
             },
+            onUpdatedToggle: (value) => _toggleUpdated([value]),
+            onCompletedToggle: (value) => _toggleCompleted([value]),
           ),
           const SizedBox(height: 12),
           _desktopFocusedSection(),
@@ -1791,6 +1804,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       'supportNeeds': supportNeeds.toList(),
       'referralFilters': referralFilters.toList(),
       'roadblocks': roadblocks.toList(),
+      'updatedFocuses': updatedFocuses.map((focus) => focus.name).toList(),
+      'completedFocuses': completedFocuses.map((focus) => focus.name).toList(),
       'actionLog': [
         for (final entry in actionLog)
           {
@@ -1839,6 +1854,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     _replaceSet(supportNeeds, data['supportNeeds']);
     _replaceSet(referralFilters, data['referralFilters']);
     _replaceSet(roadblocks, data['roadblocks']);
+    _replaceFocusSet(updatedFocuses, data['updatedFocuses']);
+    _replaceFocusSet(completedFocuses, data['completedFocuses']);
     actionLog
       ..clear()
       ..addAll(_readActionLog(data['actionLog']));
@@ -1874,6 +1891,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     supportNeeds.clear();
     referralFilters.clear();
     roadblocks.clear();
+    updatedFocuses.clear();
+    completedFocuses.clear();
     actionLog.clear();
     requestHistory.clear();
   }
@@ -1882,6 +1901,46 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     target
       ..clear()
       ..addAll(_readStringList(value));
+  }
+
+  void _replaceFocusSet(Set<_CaseworkFocus> target, Object? value) {
+    target
+      ..clear()
+      ..addAll(
+        _readStringList(value).map(_focusFromName).whereType<_CaseworkFocus>(),
+      );
+  }
+
+  _CaseworkFocus? _focusFromName(String name) {
+    for (final focus in _CaseworkFocus.values) {
+      if (focus.name == name) return focus;
+    }
+    return null;
+  }
+
+  void _toggleUpdated(Iterable<_CaseworkFocus> focuses) {
+    final values = focuses.toSet();
+    setState(() {
+      if (values.every(updatedFocuses.contains)) {
+        updatedFocuses.removeAll(values);
+      } else {
+        updatedFocuses.addAll(values);
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _toggleCompleted(Iterable<_CaseworkFocus> focuses) {
+    final values = focuses.toSet();
+    setState(() {
+      if (values.every(completedFocuses.contains)) {
+        completedFocuses.removeAll(values);
+      } else {
+        completedFocuses.addAll(values);
+        updatedFocuses.addAll(values);
+      }
+    });
+    unawaited(_saveDraft());
   }
 
   List<String> _readStringList(Object? value) {
@@ -2559,39 +2618,205 @@ class _CompactLiveCard extends StatelessWidget {
 }
 
 class _CompactFocusBar extends StatelessWidget {
-  const _CompactFocusBar({required this.current, required this.onChanged});
+  const _CompactFocusBar({
+    required this.current,
+    required this.updatedFocuses,
+    required this.completedFocuses,
+    required this.onChanged,
+    required this.onUpdatedToggle,
+    required this.onCompletedToggle,
+  });
 
   final _CaseworkFocus current;
+  final Set<_CaseworkFocus> updatedFocuses;
+  final Set<_CaseworkFocus> completedFocuses;
   final ValueChanged<_CaseworkFocus> onChanged;
+  final ValueChanged<_CaseworkFocus> onUpdatedToggle;
+  final ValueChanged<_CaseworkFocus> onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
     return _DesktopCard(
       title: 'Workflow',
       icon: Icons.account_tree_outlined,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      child: Column(
         children: [
+          const _StatusLegend(),
+          const SizedBox(height: 10),
           for (final item in _focusItems)
-            ChoiceChip(
-              selected: current == item.focus,
-              avatar: Icon(item.icon, size: 17),
-              label: Text(item.label),
-              onSelected: (_) => onChanged(item.focus),
-              backgroundColor: _caseworkInkSoft,
-              selectedColor: _caseworkSelected,
-              labelStyle: TextStyle(
-                color: _caseworkInk,
-                fontWeight: FontWeight.w800,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _CompactFocusTab(
+                item: item,
+                selected: current == item.focus,
+                updated: updatedFocuses.contains(item.focus),
+                completed: completedFocuses.contains(item.focus),
+                onTap: () => onChanged(item.focus),
+                onUpdatedToggle: () => onUpdatedToggle(item.focus),
+                onCompletedToggle: () => onCompletedToggle(item.focus),
               ),
-              side: BorderSide(
-                color: current == item.focus ? _caseworkBlue : _caseworkLine,
-              ),
-              shape: const StadiumBorder(),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactFocusTab extends StatelessWidget {
+  const _CompactFocusTab({
+    required this.item,
+    required this.selected,
+    required this.updated,
+    required this.completed,
+    required this.onTap,
+    required this.onUpdatedToggle,
+    required this.onCompletedToggle,
+  });
+
+  final _FocusItem item;
+  final bool selected;
+  final bool updated;
+  final bool completed;
+  final VoidCallback onTap;
+  final VoidCallback onUpdatedToggle;
+  final VoidCallback onCompletedToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? _caseworkSelected : _caseworkInkSoft,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: selected ? _caseworkBlue : _caseworkLine),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 18,
+                      color: selected ? _caseworkBlue : _caseworkMuted,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      item.label,
+                      style: TextStyle(
+                        color: _caseworkInk,
+                        fontWeight: selected
+                            ? FontWeight.w900
+                            : FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _FocusStatusButton(
+            key: ValueKey('casework-${item.focus.name}-updated'),
+            label: item.label,
+            status: 'updated',
+            icon: Icons.update_rounded,
+            color: _caseworkUpdated,
+            active: updated,
+            onPressed: onUpdatedToggle,
+          ),
+          _FocusStatusButton(
+            key: ValueKey('casework-${item.focus.name}-completed'),
+            label: item.label,
+            status: 'completed',
+            icon: Icons.check_circle_rounded,
+            color: _caseworkCompleted,
+            active: completed,
+            onPressed: onCompletedToggle,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusStatusButton extends StatelessWidget {
+  const _FocusStatusButton({
+    super.key,
+    required this.label,
+    required this.status,
+    required this.icon,
+    required this.color,
+    required this.active,
+    required this.onPressed,
+  });
+
+  final String label;
+  final String status;
+  final IconData icon;
+  final Color color;
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = active ? 'Clear' : 'Mark';
+    return IconButton(
+      tooltip: '$action $label $status',
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
+      icon: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: active ? color.withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? color : _caseworkLine),
+        ),
+        child: Icon(icon, size: 17, color: active ? color : _caseworkMuted),
+      ),
+    );
+  }
+}
+
+class _StatusLegend extends StatelessWidget {
+  const _StatusLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Icon(Icons.update_rounded, size: 15, color: _caseworkUpdated),
+        SizedBox(width: 5),
+        Text(
+          'Updated',
+          style: TextStyle(
+            color: _caseworkUpdated,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(width: 14),
+        Icon(Icons.check_circle_rounded, size: 15, color: _caseworkCompleted),
+        SizedBox(width: 5),
+        Text(
+          'Completed',
+          style: TextStyle(
+            color: _caseworkCompleted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2757,15 +2982,26 @@ class _TopBarButton extends StatelessWidget {
 }
 
 class _DesktopWorkflowRail extends StatelessWidget {
-  const _DesktopWorkflowRail({required this.current, required this.onChanged});
+  const _DesktopWorkflowRail({
+    required this.current,
+    required this.updatedFocuses,
+    required this.completedFocuses,
+    required this.onChanged,
+    required this.onUpdatedToggle,
+    required this.onCompletedToggle,
+  });
 
   final _CaseworkFocus current;
+  final Set<_CaseworkFocus> updatedFocuses;
+  final Set<_CaseworkFocus> completedFocuses;
   final ValueChanged<_CaseworkFocus> onChanged;
+  final ValueChanged<Iterable<_CaseworkFocus>> onUpdatedToggle;
+  final ValueChanged<Iterable<_CaseworkFocus>> onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 238,
+      width: 280,
       decoration: const BoxDecoration(
         color: _caseworkSurface,
         border: Border(right: BorderSide(color: _caseworkLine)),
@@ -2773,59 +3009,109 @@ class _DesktopWorkflowRail extends StatelessWidget {
       child: ListView(
         children: [
           const _RailHeader('Workflow'),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 2, 14, 8),
+            child: _StatusLegend(),
+          ),
           _RailItem(
             icon: Icons.sync_alt_outlined,
             label: 'Case Flow',
+            statusFocuses: const [
+              _CaseworkFocus.walkIn,
+              _CaseworkFocus.situation,
+            ],
             selected:
                 current == _CaseworkFocus.walkIn ||
                 current == _CaseworkFocus.situation,
             onTap: () => onChanged(_CaseworkFocus.walkIn),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.apartment_outlined,
             label: 'Housing + MSD',
+            statusFocuses: const [_CaseworkFocus.msd],
             selected: current == _CaseworkFocus.msd,
             onTap: () => onChanged(_CaseworkFocus.msd),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.check_box_outlined,
             label: 'Evidence Gathered',
+            statusFocuses: const [_CaseworkFocus.documents],
             selected: current == _CaseworkFocus.documents,
             onTap: () => onChanged(_CaseworkFocus.documents),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.explore_outlined,
             label: 'CMM Housing',
+            statusFocuses: const [
+              _CaseworkFocus.housing,
+              _CaseworkFocus.accommodation,
+            ],
             selected:
                 current == _CaseworkFocus.housing ||
                 current == _CaseworkFocus.accommodation,
             onTap: () => onChanged(_CaseworkFocus.housing),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.phone_forwarded_outlined,
             label: 'Programmes + Referrals',
+            statusFocuses: const [_CaseworkFocus.referrals],
             selected: current == _CaseworkFocus.referrals,
             onTap: () => onChanged(_CaseworkFocus.referrals),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.handshake_outlined,
             label: 'Social Support',
+            statusFocuses: const [_CaseworkFocus.safety],
             selected: current == _CaseworkFocus.safety,
             onTap: () => onChanged(_CaseworkFocus.safety),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           _RailItem(
             icon: Icons.menu_book_outlined,
             label: 'Diary + Objections',
+            statusFocuses: const [_CaseworkFocus.probation],
             selected: current == _CaseworkFocus.probation,
             onTap: () => onChanged(_CaseworkFocus.probation),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
           const Divider(height: 28, color: _caseworkLine),
           const _RailHeader('Output'),
           _RailItem(
             icon: Icons.description_outlined,
             label: 'Build Note',
+            statusFocuses: const [_CaseworkFocus.file],
             selected: current == _CaseworkFocus.file,
             onTap: () => onChanged(_CaseworkFocus.file),
+            updatedFocuses: updatedFocuses,
+            completedFocuses: completedFocuses,
+            onUpdatedToggle: onUpdatedToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
         ],
       ),
@@ -2859,17 +3145,29 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.icon,
     required this.label,
+    required this.statusFocuses,
     required this.selected,
     required this.onTap,
+    required this.updatedFocuses,
+    required this.completedFocuses,
+    required this.onUpdatedToggle,
+    required this.onCompletedToggle,
   });
 
   final IconData icon;
   final String label;
+  final List<_CaseworkFocus> statusFocuses;
   final bool selected;
   final VoidCallback onTap;
+  final Set<_CaseworkFocus> updatedFocuses;
+  final Set<_CaseworkFocus> completedFocuses;
+  final ValueChanged<Iterable<_CaseworkFocus>> onUpdatedToggle;
+  final ValueChanged<Iterable<_CaseworkFocus>> onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
+    final updated = statusFocuses.every(updatedFocuses.contains);
+    final completed = statusFocuses.every(completedFocuses.contains);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -2900,6 +3198,22 @@ class _RailItem extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                 ),
               ),
+            ),
+            _FocusStatusButton(
+              label: label,
+              status: 'updated',
+              icon: Icons.update_rounded,
+              color: _caseworkUpdated,
+              active: updated,
+              onPressed: () => onUpdatedToggle(statusFocuses),
+            ),
+            _FocusStatusButton(
+              label: label,
+              status: 'completed',
+              icon: Icons.check_circle_rounded,
+              color: _caseworkCompleted,
+              active: completed,
+              onPressed: () => onCompletedToggle(statusFocuses),
             ),
           ],
         ),
@@ -3121,6 +3435,7 @@ class _DesktopDropdown extends StatelessWidget {
           ],
           DropdownButtonFormField<String>(
             initialValue: value,
+            isExpanded: true,
             dropdownColor: _caseworkInkSoft,
             iconEnabledColor: _caseworkMuted,
             style: const TextStyle(
@@ -3130,7 +3445,10 @@ class _DesktopDropdown extends StatelessWidget {
             decoration: _desktopInputDecoration(''),
             items: [
               for (final item in values)
-                DropdownMenuItem(value: item, child: Text(item)),
+                DropdownMenuItem(
+                  value: item,
+                  child: Text(item, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: (value) {
               if (value != null) onChanged(value);
