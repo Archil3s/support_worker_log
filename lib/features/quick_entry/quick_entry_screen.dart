@@ -13,6 +13,7 @@ import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
+import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../entries/local_support_note_button.dart';
 
 String _cleanHeaderText(String value) {
@@ -434,6 +435,22 @@ class _TextNoteCloseOut {
   final bool textReplyNeeded;
 }
 
+class _TextNoteDraft {
+  const _TextNoteDraft({
+    required this.summary,
+    required this.nextActions,
+    required this.direction,
+    required this.replyNeeded,
+    required this.importantText,
+  });
+
+  final String summary;
+  final String nextActions;
+  final TextContactDirection direction;
+  final bool replyNeeded;
+  final bool importantText;
+}
+
 enum _ReferralStatus { discussed, referred, engaged, declined, pending }
 
 class _ReferralSelection {
@@ -746,7 +763,34 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (sheetContext) {
-        return _TextNoteBreakdownSheet(activeVisit: activeVisit, notes: notes);
+        final draftDirection = TextContactDirection.values.firstWhere(
+          (item) => item.name == activeVisit.textContactDirectionDraft,
+          orElse: () => TextContactDirection.received,
+        );
+
+        return _TextNoteBreakdownSheet(
+          activeVisit: activeVisit,
+          notes: notes,
+          initialDraft: _TextNoteDraft(
+            summary: activeVisit.textSummaryDraft ?? '',
+            nextActions: activeVisit.textNextActionsDraft ?? '',
+            direction: draftDirection,
+            replyNeeded: activeVisit.textReplyNeededDraft ?? false,
+            importantText: activeVisit.textImportantDraft ?? false,
+          ),
+          onSaveDraft: (draft) {
+            context.read<AppState>().updateActiveVisit(
+              activeVisit.copyWith(
+                textSummaryDraft: draft.summary,
+                textNextActionsDraft: draft.nextActions,
+                textContactDirectionDraft: draft.direction.name,
+                textReplyNeededDraft: draft.replyNeeded,
+                textImportantDraft: draft.importantText,
+              ),
+            );
+            _snack('Text note draft saved. Reopen this visit to finish it.');
+          },
+        );
       },
     );
   }
@@ -1001,10 +1045,14 @@ class _TextNoteBreakdownSheet extends StatefulWidget {
   const _TextNoteBreakdownSheet({
     required this.activeVisit,
     required this.notes,
+    required this.initialDraft,
+    required this.onSaveDraft,
   });
 
   final ActiveVisit activeVisit;
   final List<String> notes;
+  final _TextNoteDraft initialDraft;
+  final ValueChanged<_TextNoteDraft> onSaveDraft;
 
   @override
   State<_TextNoteBreakdownSheet> createState() =>
@@ -1019,15 +1067,27 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
   bool replyNeeded = false;
   bool importantText = false;
   int stepIndex = 0;
+  Timer? draftAutosaveTimer;
 
   @override
   void initState() {
     super.initState();
-    summaryController.text = _joinLoggingLines(widget.notes);
+    final draft = widget.initialDraft;
+    final draftSummary = draft.summary.trim();
+    summaryController.text = draftSummary.isEmpty
+        ? _joinLoggingLines(widget.notes)
+        : draftSummary;
+    nextActionsController.text = draft.nextActions;
+    textContactDirection = draft.direction;
+    replyNeeded = draft.replyNeeded;
+    importantText = draft.importantText;
+    summaryController.addListener(_scheduleDraftAutosave);
+    nextActionsController.addListener(_scheduleDraftAutosave);
   }
 
   @override
   void dispose() {
+    draftAutosaveTimer?.cancel();
     summaryController.dispose();
     nextActionsController.dispose();
     super.dispose();
@@ -1073,6 +1133,29 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
         textReplyNeeded: replyNeeded,
       ),
     );
+  }
+
+  _TextNoteDraft _currentDraft() {
+    return _TextNoteDraft(
+      summary: _cleanSupportNoteSection(summaryController.text),
+      nextActions: _cleanSupportNoteSection(nextActionsController.text),
+      direction: textContactDirection,
+      replyNeeded: replyNeeded,
+      importantText: importantText,
+    );
+  }
+
+  void _scheduleDraftAutosave() {
+    draftAutosaveTimer?.cancel();
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 700), () {
+      widget.onSaveDraft(_currentDraft());
+    });
+  }
+
+  void _saveDraftAndClose() {
+    draftAutosaveTimer?.cancel();
+    widget.onSaveDraft(_currentDraft());
+    Navigator.of(context).pop();
   }
 
   void _nextStep() {
@@ -1132,13 +1215,17 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
                 selected: {textContactDirection},
                 onSelectionChanged: (values) {
                   setState(() => textContactDirection = values.first);
+                  _scheduleDraftAutosave();
                 },
               ),
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: importantText,
-                onChanged: (value) => setState(() => importantText = value),
+                onChanged: (value) {
+                  setState(() => importantText = value);
+                  _scheduleDraftAutosave();
+                },
                 title: const Text(
                   'Important contact',
                   style: TextStyle(fontWeight: FontWeight.w900),
@@ -1151,7 +1238,10 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: replyNeeded,
-                onChanged: (value) => setState(() => replyNeeded = value),
+                onChanged: (value) {
+                  setState(() => replyNeeded = value);
+                  _scheduleDraftAutosave();
+                },
                 title: const Text(
                   'Reply needed',
                   style: TextStyle(fontWeight: FontWeight.w900),
@@ -1218,8 +1308,21 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
               onClose: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 12),
+            GoogleDriveConnectionWarning(
+              scope: context.watch<AppState>().isPayeMode
+                  ? GoogleExportAccountScope.paye
+                  : GoogleExportAccountScope.work,
+              compact: true,
+            ),
+            const SizedBox(height: 12),
             Expanded(child: SingleChildScrollView(child: _stepBody())),
             const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: _saveDraftAndClose,
+              icon: const Icon(Icons.drafts_outlined),
+              label: const Text('Save Draft & Return'),
+            ),
+            const SizedBox(height: 8),
             _PromptNavButtons(
               isFirst: stepIndex == 0,
               isLast: stepIndex == 2,
@@ -1248,6 +1351,7 @@ class _SupportNoteBreakdownSheetState
   bool noNextAction = false;
   bool noSafetyConcerns = true;
   int stepIndex = 0;
+  Timer? draftAutosaveTimer;
 
   @override
   void initState() {
@@ -1274,10 +1378,17 @@ class _SupportNoteBreakdownSheetState
     mainTopicController.selection = TextSelection.collapsed(
       offset: mainTopicController.text.length,
     );
+    mainTopicController.addListener(_scheduleDraftAutosave);
+    outcomesController.addListener(_scheduleDraftAutosave);
+    nextActionsController.addListener(_scheduleDraftAutosave);
+    impressionController.addListener(_scheduleDraftAutosave);
+    referralNotesController.addListener(_scheduleDraftAutosave);
+    safetyConcernsController.addListener(_scheduleDraftAutosave);
   }
 
   @override
   void dispose() {
+    draftAutosaveTimer?.cancel();
     mainTopicController.dispose();
     outcomesController.dispose();
     nextActionsController.dispose();
@@ -1353,7 +1464,15 @@ class _SupportNoteBreakdownSheetState
     );
   }
 
+  void _scheduleDraftAutosave() {
+    draftAutosaveTimer?.cancel();
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 700), () {
+      widget.onSaveDraft(_currentBreakdown());
+    });
+  }
+
   void _saveDraftAndClose() {
+    draftAutosaveTimer?.cancel();
     widget.onSaveDraft(_currentBreakdown());
     Navigator.of(context).pop();
   }
@@ -1420,6 +1539,7 @@ class _SupportNoteBreakdownSheetState
 
       noReferrals = referrals.isEmpty;
     });
+    _scheduleDraftAutosave();
   }
 
   void _appendLine(TextEditingController controller, String text) {
@@ -1513,6 +1633,7 @@ class _SupportNoteBreakdownSheetState
                     noNextAction = value;
                     if (value) nextActionsController.clear();
                   });
+                  _scheduleDraftAutosave();
                 },
               ),
               const SizedBox(height: 8),
@@ -1612,6 +1733,7 @@ class _SupportNoteBreakdownSheetState
                   referralNotesController.clear();
                 }
               });
+              _scheduleDraftAutosave();
             },
           ),
           if (!noReferrals) ...[
@@ -1667,6 +1789,7 @@ class _SupportNoteBreakdownSheetState
                 noSafetyConcerns = value;
                 if (value) safetyConcernsController.clear();
               });
+              _scheduleDraftAutosave();
             },
           ),
           if (noSafetyConcerns)
@@ -1707,6 +1830,13 @@ class _SupportNoteBreakdownSheetState
               currentStep: stepIndex,
               stepCount: 7,
               onClose: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: 12),
+            GoogleDriveConnectionWarning(
+              scope: context.watch<AppState>().isPayeMode
+                  ? GoogleExportAccountScope.paye
+                  : GoogleExportAccountScope.work,
+              compact: true,
             ),
             const SizedBox(height: 12),
             Expanded(child: SingleChildScrollView(child: _stepBody())),

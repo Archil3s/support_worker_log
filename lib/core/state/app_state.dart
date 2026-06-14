@@ -100,7 +100,8 @@ class AppState extends ChangeNotifier {
   String? get payeGoogleAccountEmail =>
       _googleExportAccountService.emailFor(GoogleExportAccountScope.paye) ??
       _settings.googlePayeAccountEmail;
-  bool get workGoogleServicesConnected => _workGoogleDriveAccessToken != null;
+  bool get workGoogleServicesConnected =>
+      _workGoogleDriveAccessToken?.trim().isNotEmpty == true;
   bool get personalGoogleServicesConnected => _googleExportAccountService
       .isConnected(GoogleExportAccountScope.personal);
   bool get payeGoogleServicesConnected =>
@@ -112,6 +113,30 @@ class AppState extends ChangeNotifier {
   bool get payeGoogleAccountSignedIn => _googleExportAccountService
       .hasSignedInAccount(GoogleExportAccountScope.paye);
   bool get googleServicesConnected => workGoogleServicesConnected;
+
+  bool googleDriveConnectedForScope(GoogleExportAccountScope scope) {
+    return switch (scope) {
+      GoogleExportAccountScope.work => workGoogleServicesConnected,
+      GoogleExportAccountScope.personal => personalGoogleServicesConnected,
+      GoogleExportAccountScope.paye => payeGoogleServicesConnected,
+    };
+  }
+
+  bool googleAccountSignedInForScope(GoogleExportAccountScope scope) {
+    return switch (scope) {
+      GoogleExportAccountScope.work => workGoogleAccountSignedIn,
+      GoogleExportAccountScope.personal => personalGoogleAccountSignedIn,
+      GoogleExportAccountScope.paye => payeGoogleAccountSignedIn,
+    };
+  }
+
+  String? googleAccountEmailForScope(GoogleExportAccountScope scope) {
+    return switch (scope) {
+      GoogleExportAccountScope.work => workGoogleAccountEmail,
+      GoogleExportAccountScope.personal => personalGoogleAccountEmail,
+      GoogleExportAccountScope.paye => payeGoogleAccountEmail,
+    };
+  }
 
   String? get _workGoogleCalendarAccessToken {
     return _googleExportAccountService.accessTokenFor(

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/app_mode.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
+import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../casework/casework_screen.dart';
@@ -126,6 +128,16 @@ class _MainShellState extends State<MainShell> {
       case AppMode.work:
         return Icons.work_outline_rounded;
     }
+  }
+
+  GoogleExportAccountScope _driveScope(AppMode mode) {
+    return switch (mode) {
+      AppMode.personal ||
+      AppMode.massage ||
+      AppMode.mood => GoogleExportAccountScope.personal,
+      AppMode.paye => GoogleExportAccountScope.paye,
+      AppMode.work || AppMode.casework => GoogleExportAccountScope.work,
+    };
   }
 
   void _go(_Section next) {
@@ -359,16 +371,25 @@ class _MainShellState extends State<MainShell> {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: contentWidth),
-                      child: RepaintBoundary(
-                        child: personalMode
-                            ? const PersonalScreen()
-                            : massageMode
-                            ? const MassageScreen()
-                            : moodMode
-                            ? const MoodTrackerScreen()
-                            : caseworkMode
-                            ? const CaseworkScreen()
-                            : _screen(),
+                      child: Column(
+                        children: [
+                          GoogleDriveConnectionWarning(
+                            scope: _driveScope(appMode),
+                          ),
+                          Expanded(
+                            child: RepaintBoundary(
+                              child: personalMode
+                                  ? const PersonalScreen()
+                                  : massageMode
+                                  ? const MassageScreen()
+                                  : moodMode
+                                  ? const MoodTrackerScreen()
+                                  : caseworkMode
+                                  ? const CaseworkScreen()
+                                  : _screen(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

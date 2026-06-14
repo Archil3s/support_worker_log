@@ -9,6 +9,7 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
+import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/home_screen_shortcut_button.dart';
 import '../../shared/widgets/section_card.dart';
 
@@ -3242,6 +3243,11 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
         children: [
           _SheetHeader(title: widget.split.name),
           const SizedBox(height: 8),
+          const GoogleDriveConnectionWarning(
+            scope: GoogleExportAccountScope.personal,
+            compact: true,
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -3378,7 +3384,7 @@ class _GuidedWorkoutSheetState extends State<_GuidedWorkoutSheet> {
           FilledButton.tonalIcon(
             onPressed: loggedSets.isEmpty ? null : _saveWorkout,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Workout'),
+            label: const Text('Save Local Workout'),
           ),
         ],
       ),
@@ -4084,6 +4090,11 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
             title: selectedExercise.name,
             subtitle: widget.split.name,
           ),
+          const SizedBox(height: 10),
+          const GoogleDriveConnectionWarning(
+            scope: GoogleExportAccountScope.personal,
+            compact: true,
+          ),
           if (widget.exercise.alternatives.isNotEmpty) ...[
             const SizedBox(height: 10),
             _SubstituteChips(
@@ -4190,7 +4201,7 @@ class _ExerciseLogSheetState extends State<_ExerciseLogSheet> {
           FilledButton.tonalIcon(
             onPressed: _save,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Exercise'),
+            label: const Text('Save Local Exercise'),
           ),
         ],
       ),
@@ -4324,6 +4335,11 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
         children: [
           const _SheetHeader(title: 'Personal Log'),
           const SizedBox(height: 14),
+          const GoogleDriveConnectionWarning(
+            scope: GoogleExportAccountScope.personal,
+            compact: true,
+          ),
+          const SizedBox(height: 12),
           SegmentedButton<PersonalLogCategory>(
             segments: const [
               ButtonSegment(
@@ -4403,7 +4419,7 @@ class _PersonalLogSheetState extends State<_PersonalLogSheet> {
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Save Log'),
+            label: const Text('Save Local Log'),
           ),
         ],
       ),

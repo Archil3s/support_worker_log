@@ -89,13 +89,13 @@ class _GoogleAccountConnectionCardState
       GoogleExportAccountScope.personal => appState.personalGoogleAccountEmail,
       GoogleExportAccountScope.paye => appState.payeGoogleAccountEmail,
     };
-    final statusColor = connected || signedIn
+    final statusColor = connected
         ? const Color(0xFF31E981)
         : const Color(0xFFFFC857);
     final statusText = connected
         ? email ?? 'Connected'
         : signedIn
-        ? email ?? 'Signed in'
+        ? '${email ?? 'Signed in'} - Drive permission missing'
         : 'Not connected';
 
     return SectionCard(
@@ -129,7 +129,9 @@ class _GoogleAccountConnectionCardState
           ),
           const SizedBox(height: 8),
           Text(
-            _serviceText,
+            connected
+                ? _serviceText
+                : 'Not ready for Drive uploads. In-app notes still save locally.',
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
           const SizedBox(height: 10),

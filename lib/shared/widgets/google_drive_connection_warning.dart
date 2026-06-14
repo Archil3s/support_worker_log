@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/models/google_export_account_scope.dart';
+import '../../core/state/app_state.dart';
+
+class GoogleDriveConnectionWarning extends StatefulWidget {
+  const GoogleDriveConnectionWarning({
+    super.key,
+    required this.scope,
+    this.compact = false,
+  });
+
+  final GoogleExportAccountScope scope;
+  final bool compact;
+
+  @override
+  State<GoogleDriveConnectionWarning> createState() =>
+      _GoogleDriveConnectionWarningState();
+}
+
+class _GoogleDriveConnectionWarningState
+    extends State<GoogleDriveConnectionWarning> {
+  bool connecting = false;
+  String? message;
+
+  Future<void> _connect() async {
+    setState(() {
+      connecting = true;
+      message = null;
+    });
+
+    try {
+      await context.read<AppState>().connectGoogleDrive(scope: widget.scope);
+
+      if (!mounted) return;
+
+      setState(() {
+        message = '${widget.scope.label} Google Drive connected.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = _friendlyError(error);
+      });
+    } finally {
+      if (mounted) {
+        setState(() => connecting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final connected = appState.googleDriveConnectedForScope(widget.scope);
+
+    if (connected) return const SizedBox.shrink();
+
+    final signedIn = appState.googleAccountSignedInForScope(widget.scope);
+    final email = appState.googleAccountEmailForScope(widget.scope);
+    final title = signedIn
+        ? 'Google Drive needs reconnecting'
+        : 'Google Drive is not connected';
+    final detail = signedIn
+        ? '${email ?? widget.scope.label} is known, but Drive permission is not active. '
+              'Notes still save on this phone/web app first.'
+        : 'Notes still save on this phone/web app first. Connect Drive before expecting files to upload.';
+
+    return Container(
+      margin: widget.compact
+          ? EdgeInsets.zero
+          : const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: EdgeInsets.all(widget.compact ? 12 : 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A2812),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFC857), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFC857)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Color(0xFFFFE7A3),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      detail,
+                      style: const TextStyle(
+                        color: Color(0xFFFFD98C),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: connecting ? null : _connect,
+            icon: connecting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_to_drive_outlined),
+            label: Text(
+              connecting
+                  ? 'Connecting ${widget.scope.label} Drive'
+                  : 'Connect ${widget.scope.label} Google Drive',
+            ),
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              message!,
+              style: TextStyle(
+                color:
+                    message!.startsWith('Could') ||
+                        message!.contains('cancelled') ||
+                        message!.contains('timed out')
+                    ? const Color(0xFFFF8A8A)
+                    : const Color(0xFF31E981),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _friendlyError(Object error) {
+    final text = error.toString().trim();
+    if (text.startsWith('Bad state: ')) {
+      return text.replaceFirst('Bad state: ', '').trim();
+    }
+    return text.isEmpty ? 'Could not connect Google Drive.' : text;
+  }
+}

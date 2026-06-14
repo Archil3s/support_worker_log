@@ -2,10 +2,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/models/google_export_account_scope.dart';
 import '../../../../core/services/speech_to_text_service.dart';
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/empty_state.dart';
+import '../../../../shared/widgets/google_drive_connection_warning.dart';
 import '../../../../shared/widgets/home_screen_shortcut_button.dart';
 import '../../../../shared/widgets/section_card.dart';
 import '../../data/models/mood_check_in_model.dart';
@@ -633,6 +635,11 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
             style: TextStyle(color: Color(0xFFCDD7F0)),
           ),
           const SizedBox(height: 16),
+          const GoogleDriveConnectionWarning(
+            scope: GoogleExportAccountScope.personal,
+            compact: true,
+          ),
+          const SizedBox(height: 12),
           for (final feeling in MoodFeeling.values)
             _FeelingCueGroup(
               feeling: feeling,
@@ -776,7 +783,7 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Save check-in'),
+            label: const Text('Save Local Check-in'),
           ),
         ],
       ),

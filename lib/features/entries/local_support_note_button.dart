@@ -10,6 +10,7 @@ import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
+import '../../shared/widgets/google_drive_connection_warning.dart';
 
 class LocalSupportNoteButton extends StatefulWidget {
   const LocalSupportNoteButton({super.key, required this.entry});
@@ -84,10 +85,14 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   EntryDriveSupportNoteMeta? driveMeta;
   bool busy = false;
   String? message;
+  bool draftAutosaveReady = false;
+  Timer? draftAutosaveTimer;
 
   @override
   void initState() {
     super.initState();
+    initialsController.addListener(_scheduleDraftAutosave);
+    noteController.addListener(_scheduleDraftAutosave);
     unawaited(_load());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmGoogleAccount();
@@ -96,6 +101,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   @override
   void dispose() {
+    draftAutosaveTimer?.cancel();
     initialsController.dispose();
     noteController.dispose();
     super.dispose();
@@ -135,6 +141,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         noteController.text = loaded.noteText;
         status = loaded.status;
       }
+      draftAutosaveReady = true;
     });
   }
 
@@ -221,7 +228,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
   }
 
-  Future<void> _saveDraftOnly(String nextMessage) async {
+  Future<void> _saveDraftOnly(
+    String nextMessage, {
+    bool showMessage = true,
+  }) async {
     final updated = await LocalSupportNoteService.saveDraftMeta(
       entry: widget.entry,
       initials: initialsController.text,
@@ -233,7 +243,20 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
     setState(() {
       meta = updated;
-      message = nextMessage;
+      if (showMessage) message = nextMessage;
+    });
+  }
+
+  void _scheduleDraftAutosave() {
+    if (!draftAutosaveReady || busy) return;
+
+    draftAutosaveTimer?.cancel();
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 900), () async {
+      try {
+        await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
+      } catch (_) {
+        // Explicit save buttons show errors.
+      }
     });
   }
 
@@ -374,6 +397,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     setState(() {
       status = next;
     });
+    _scheduleDraftAutosave();
 
     if (meta == null) {
       noteController.text = _defaultNoteText(
@@ -563,6 +587,11 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             style: const TextStyle(color: Color(0xFF8396C7)),
           ),
           const SizedBox(height: 16),
+          GoogleDriveConnectionWarning(
+            scope: _currentGoogleScope(context.watch<AppState>()),
+            compact: true,
+          ),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: busy ? null : _chooseFolder,
             icon: const Icon(Icons.folder_open_outlined),

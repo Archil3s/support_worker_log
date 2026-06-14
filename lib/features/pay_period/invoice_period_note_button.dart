@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/invoice_period_note_service.dart';
 import '../../core/utils/pay_period_utils.dart';
+import '../../shared/widgets/google_drive_connection_warning.dart';
 
 class InvoicePeriodNoteButton extends StatefulWidget {
   const InvoicePeriodNoteButton({
@@ -102,15 +104,20 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
   InvoicePeriodNoteMeta? meta;
   bool busy = false;
   String? message;
+  bool draftAutosaveReady = false;
+  Timer? draftAutosaveTimer;
 
   @override
   void initState() {
     super.initState();
+    initialsController.addListener(_scheduleDraftAutosave);
+    noteController.addListener(_scheduleDraftAutosave);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    draftAutosaveTimer?.cancel();
     initialsController.dispose();
     noteController.dispose();
     super.dispose();
@@ -129,6 +136,7 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
         noteController.text = loaded.noteText;
         status = loaded.status;
       }
+      draftAutosaveReady = true;
     });
   }
 
@@ -200,7 +208,10 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
     }
   }
 
-  Future<void> _saveDraftOnly(String nextMessage) async {
+  Future<void> _saveDraftOnly(
+    String nextMessage, {
+    bool showMessage = true,
+  }) async {
     final updated = await InvoicePeriodNoteService.saveDraftMeta(
       invoiceNumber: widget.invoiceNumber,
       range: widget.range,
@@ -213,7 +224,20 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
 
     setState(() {
       meta = updated;
-      message = nextMessage;
+      if (showMessage) message = nextMessage;
+    });
+  }
+
+  void _scheduleDraftAutosave() {
+    if (!draftAutosaveReady || busy) return;
+
+    draftAutosaveTimer?.cancel();
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 900), () async {
+      try {
+        await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
+      } catch (_) {
+        // Explicit save buttons show errors.
+      }
     });
   }
 
@@ -250,6 +274,7 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
     setState(() {
       status = next;
     });
+    _scheduleDraftAutosave();
 
     if (meta != null && initialsController.text.trim().isNotEmpty) {
       await _save();
@@ -329,6 +354,11 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
           const SizedBox(height: 8),
           Text(periodText, style: const TextStyle(color: Color(0xFF8396C7))),
           const SizedBox(height: 16),
+          const GoogleDriveConnectionWarning(
+            scope: GoogleExportAccountScope.work,
+            compact: true,
+          ),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: busy ? null : _chooseFolder,
             icon: const Icon(Icons.folder_open_outlined),

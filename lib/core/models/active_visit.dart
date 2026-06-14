@@ -11,6 +11,11 @@ class ActiveVisit {
     this.odometerStart,
     this.notes = const [],
     this.supportNoteDraft,
+    this.textSummaryDraft,
+    this.textNextActionsDraft,
+    this.textContactDirectionDraft,
+    this.textReplyNeededDraft,
+    this.textImportantDraft,
   });
 
   final String id;
@@ -20,6 +25,11 @@ class ActiveVisit {
   final double? odometerStart;
   final List<String> notes;
   final String? supportNoteDraft;
+  final String? textSummaryDraft;
+  final String? textNextActionsDraft;
+  final String? textContactDirectionDraft;
+  final bool? textReplyNeededDraft;
+  final bool? textImportantDraft;
 
   ActiveVisit copyWith({
     String? id,
@@ -29,6 +39,11 @@ class ActiveVisit {
     double? odometerStart,
     List<String>? notes,
     String? supportNoteDraft,
+    String? textSummaryDraft,
+    String? textNextActionsDraft,
+    String? textContactDirectionDraft,
+    bool? textReplyNeededDraft,
+    bool? textImportantDraft,
   }) {
     return ActiveVisit(
       id: id ?? this.id,
@@ -38,6 +53,12 @@ class ActiveVisit {
       odometerStart: odometerStart ?? this.odometerStart,
       notes: notes ?? this.notes,
       supportNoteDraft: supportNoteDraft ?? this.supportNoteDraft,
+      textSummaryDraft: textSummaryDraft ?? this.textSummaryDraft,
+      textNextActionsDraft: textNextActionsDraft ?? this.textNextActionsDraft,
+      textContactDirectionDraft:
+          textContactDirectionDraft ?? this.textContactDirectionDraft,
+      textReplyNeededDraft: textReplyNeededDraft ?? this.textReplyNeededDraft,
+      textImportantDraft: textImportantDraft ?? this.textImportantDraft,
     );
   }
 
@@ -50,6 +71,11 @@ class ActiveVisit {
       'odometerStart': odometerStart,
       'notes': notes,
       'supportNoteDraft': supportNoteDraft,
+      'textSummaryDraft': textSummaryDraft,
+      'textNextActionsDraft': textNextActionsDraft,
+      'textContactDirectionDraft': textContactDirectionDraft,
+      'textReplyNeededDraft': textReplyNeededDraft,
+      'textImportantDraft': textImportantDraft,
     };
   }
 
@@ -84,6 +110,11 @@ class ActiveVisit {
       odometerStart: readNullableDouble('odometerStart'),
       notes: notes,
       supportNoteDraft: json['supportNoteDraft'] as String?,
+      textSummaryDraft: json['textSummaryDraft'] as String?,
+      textNextActionsDraft: json['textNextActionsDraft'] as String?,
+      textContactDirectionDraft: json['textContactDirectionDraft'] as String?,
+      textReplyNeededDraft: json['textReplyNeededDraft'] as bool?,
+      textImportantDraft: json['textImportantDraft'] as bool?,
     );
   }
 
