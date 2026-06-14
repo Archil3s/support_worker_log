@@ -78,4 +78,63 @@ void main() {
     expect(find.byTooltip('Clear Walk-in completed'), findsAtLeastNWidgets(1));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('every desktop section has independent status controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const sections = [
+      'walkIn',
+      'situation',
+      'safety',
+      'documents',
+      'msd',
+      'housing',
+      'accommodation',
+      'probation',
+      'referrals',
+      'file',
+    ];
+
+    for (final section in sections) {
+      expect(find.byKey(ValueKey('casework-$section-updated')), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('casework-$section-completed')),
+        findsOneWidget,
+      );
+    }
+
+    await tester.tap(
+      find.byKey(const ValueKey('casework-situation-completed')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Clear Situation updated'), findsOneWidget);
+    expect(find.byTooltip('Clear Situation completed'), findsOneWidget);
+    expect(find.byTooltip('Mark Walk-in completed'), findsOneWidget);
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+
+    expect(caseData['updatedFocuses'], contains('situation'));
+    expect(caseData['completedFocuses'], contains('situation'));
+    expect(caseData['completedFocuses'], isNot(contains('walkIn')));
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -2708,13 +2708,17 @@ class _CompactFocusTab extends StatelessWidget {
                       color: selected ? _caseworkBlue : _caseworkMuted,
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        color: _caseworkInk,
-                        fontWeight: selected
-                            ? FontWeight.w900
-                            : FontWeight.w700,
+                    Expanded(
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _caseworkInk,
+                          fontWeight: selected
+                              ? FontWeight.w900
+                              : FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -3013,106 +3017,21 @@ class _DesktopWorkflowRail extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(14, 2, 14, 8),
             child: _StatusLegend(),
           ),
-          _RailItem(
-            icon: Icons.sync_alt_outlined,
-            label: 'Case Flow',
-            statusFocuses: const [
-              _CaseworkFocus.walkIn,
-              _CaseworkFocus.situation,
+          for (final item in _focusItems) ...[
+            if (item.focus == _CaseworkFocus.file) ...[
+              const Divider(height: 28, color: _caseworkLine),
+              const _RailHeader('Output'),
             ],
-            selected:
-                current == _CaseworkFocus.walkIn ||
-                current == _CaseworkFocus.situation,
-            onTap: () => onChanged(_CaseworkFocus.walkIn),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.apartment_outlined,
-            label: 'Housing + MSD',
-            statusFocuses: const [_CaseworkFocus.msd],
-            selected: current == _CaseworkFocus.msd,
-            onTap: () => onChanged(_CaseworkFocus.msd),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.check_box_outlined,
-            label: 'Evidence Gathered',
-            statusFocuses: const [_CaseworkFocus.documents],
-            selected: current == _CaseworkFocus.documents,
-            onTap: () => onChanged(_CaseworkFocus.documents),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.explore_outlined,
-            label: 'CMM Housing',
-            statusFocuses: const [
-              _CaseworkFocus.housing,
-              _CaseworkFocus.accommodation,
-            ],
-            selected:
-                current == _CaseworkFocus.housing ||
-                current == _CaseworkFocus.accommodation,
-            onTap: () => onChanged(_CaseworkFocus.housing),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.phone_forwarded_outlined,
-            label: 'Programmes + Referrals',
-            statusFocuses: const [_CaseworkFocus.referrals],
-            selected: current == _CaseworkFocus.referrals,
-            onTap: () => onChanged(_CaseworkFocus.referrals),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.handshake_outlined,
-            label: 'Social Support',
-            statusFocuses: const [_CaseworkFocus.safety],
-            selected: current == _CaseworkFocus.safety,
-            onTap: () => onChanged(_CaseworkFocus.safety),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          _RailItem(
-            icon: Icons.menu_book_outlined,
-            label: 'Diary + Objections',
-            statusFocuses: const [_CaseworkFocus.probation],
-            selected: current == _CaseworkFocus.probation,
-            onTap: () => onChanged(_CaseworkFocus.probation),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
-          const Divider(height: 28, color: _caseworkLine),
-          const _RailHeader('Output'),
-          _RailItem(
-            icon: Icons.description_outlined,
-            label: 'Build Note',
-            statusFocuses: const [_CaseworkFocus.file],
-            selected: current == _CaseworkFocus.file,
-            onTap: () => onChanged(_CaseworkFocus.file),
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
-            onUpdatedToggle: onUpdatedToggle,
-            onCompletedToggle: onCompletedToggle,
-          ),
+            _RailItem(
+              item: item,
+              selected: current == item.focus,
+              updated: updatedFocuses.contains(item.focus),
+              completed: completedFocuses.contains(item.focus),
+              onTap: () => onChanged(item.focus),
+              onUpdatedToggle: () => onUpdatedToggle([item.focus]),
+              onCompletedToggle: () => onCompletedToggle([item.focus]),
+            ),
+          ],
         ],
       ),
     );
@@ -3143,31 +3062,25 @@ class _RailHeader extends StatelessWidget {
 
 class _RailItem extends StatelessWidget {
   const _RailItem({
-    required this.icon,
-    required this.label,
-    required this.statusFocuses,
+    required this.item,
     required this.selected,
+    required this.updated,
+    required this.completed,
     required this.onTap,
-    required this.updatedFocuses,
-    required this.completedFocuses,
     required this.onUpdatedToggle,
     required this.onCompletedToggle,
   });
 
-  final IconData icon;
-  final String label;
-  final List<_CaseworkFocus> statusFocuses;
+  final _FocusItem item;
   final bool selected;
+  final bool updated;
+  final bool completed;
   final VoidCallback onTap;
-  final Set<_CaseworkFocus> updatedFocuses;
-  final Set<_CaseworkFocus> completedFocuses;
-  final ValueChanged<Iterable<_CaseworkFocus>> onUpdatedToggle;
-  final ValueChanged<Iterable<_CaseworkFocus>> onCompletedToggle;
+  final VoidCallback onUpdatedToggle;
+  final VoidCallback onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
-    final updated = statusFocuses.every(updatedFocuses.contains);
-    final completed = statusFocuses.every(completedFocuses.contains);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -3185,14 +3098,16 @@ class _RailItem extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              icon,
+              item.icon,
               size: 18,
               color: selected ? _caseworkBlue : _caseworkMuted,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                label,
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: selected ? Colors.white : _caseworkInk,
                   fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
@@ -3200,20 +3115,22 @@ class _RailItem extends StatelessWidget {
               ),
             ),
             _FocusStatusButton(
-              label: label,
+              key: ValueKey('casework-${item.focus.name}-updated'),
+              label: item.label,
               status: 'updated',
               icon: Icons.update_rounded,
               color: _caseworkUpdated,
               active: updated,
-              onPressed: () => onUpdatedToggle(statusFocuses),
+              onPressed: onUpdatedToggle,
             ),
             _FocusStatusButton(
-              label: label,
+              key: ValueKey('casework-${item.focus.name}-completed'),
+              label: item.label,
               status: 'completed',
               icon: Icons.check_circle_rounded,
               color: _caseworkCompleted,
               active: completed,
-              onPressed: () => onCompletedToggle(statusFocuses),
+              onPressed: onCompletedToggle,
             ),
           ],
         ),
@@ -5426,17 +5343,21 @@ const _focusItems = [
     Icons.psychology_alt_outlined,
   ),
   _FocusItem(_CaseworkFocus.safety, 'Safety', Icons.health_and_safety_outlined),
-  _FocusItem(_CaseworkFocus.documents, 'Docs', Icons.badge_outlined),
+  _FocusItem(_CaseworkFocus.documents, 'Documents', Icons.badge_outlined),
   _FocusItem(_CaseworkFocus.msd, 'MSD', Icons.fact_check_outlined),
-  _FocusItem(_CaseworkFocus.housing, 'Rating', Icons.home_work_outlined),
-  _FocusItem(_CaseworkFocus.accommodation, 'Accom', Icons.bed_outlined),
+  _FocusItem(
+    _CaseworkFocus.housing,
+    'Housing rating',
+    Icons.home_work_outlined,
+  ),
+  _FocusItem(_CaseworkFocus.accommodation, 'Accommodation', Icons.bed_outlined),
   _FocusItem(_CaseworkFocus.probation, 'Probation', Icons.gavel_outlined),
   _FocusItem(
     _CaseworkFocus.referrals,
     'Referrals',
     Icons.support_agent_outlined,
   ),
-  _FocusItem(_CaseworkFocus.file, 'File', Icons.description_outlined),
+  _FocusItem(_CaseworkFocus.file, 'Build note', Icons.description_outlined),
 ];
 
 const _quickLogActions = [
