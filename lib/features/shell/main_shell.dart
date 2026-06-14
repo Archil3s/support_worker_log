@@ -9,6 +9,7 @@ import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../casework/casework_screen.dart';
 import '../charts/charts_screen.dart';
+import '../cleaning/cleaning_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
@@ -107,6 +108,7 @@ class _MainShellState extends State<MainShell> {
     if (mode == AppMode.personal) return 'Personal Mode';
     if (mode == AppMode.massage) return 'Massage';
     if (mode == AppMode.mood) return 'Mood Tracker';
+    if (mode == AppMode.cleaning) return 'House Cleaning';
     if (mode == AppMode.casework) return 'Casework';
     if (mode == AppMode.paye) return 'PAYE job - $title';
 
@@ -121,6 +123,8 @@ class _MainShellState extends State<MainShell> {
         return Icons.spa_outlined;
       case AppMode.mood:
         return Icons.monitor_heart_outlined;
+      case AppMode.cleaning:
+        return Icons.cleaning_services_outlined;
       case AppMode.casework:
         return Icons.home_work_outlined;
       case AppMode.paye:
@@ -134,7 +138,8 @@ class _MainShellState extends State<MainShell> {
     return switch (mode) {
       AppMode.personal ||
       AppMode.massage ||
-      AppMode.mood => GoogleExportAccountScope.personal,
+      AppMode.mood ||
+      AppMode.cleaning => GoogleExportAccountScope.personal,
       AppMode.paye => GoogleExportAccountScope.paye,
       AppMode.work || AppMode.casework => GoogleExportAccountScope.work,
     };
@@ -258,9 +263,14 @@ class _MainShellState extends State<MainShell> {
         final personalMode = appMode == AppMode.personal;
         final massageMode = appMode == AppMode.massage;
         final moodMode = appMode == AppMode.mood;
+        final cleaningMode = appMode == AppMode.cleaning;
         final caseworkMode = appMode == AppMode.casework;
         final standaloneMode =
-            personalMode || massageMode || moodMode || caseworkMode;
+            personalMode ||
+            massageMode ||
+            moodMode ||
+            cleaningMode ||
+            caseworkMode;
         final contentWidth = caseworkMode && wide ? 1680.0 : maxContentWidth;
 
         return Scaffold(
@@ -308,6 +318,13 @@ class _MainShellState extends State<MainShell> {
                       child: ListTile(
                         leading: Icon(Icons.monitor_heart_outlined),
                         title: Text('Mood Tracker'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: AppMode.cleaning,
+                      child: ListTile(
+                        leading: Icon(Icons.cleaning_services_outlined),
+                        title: Text('House Cleaning'),
                       ),
                     ),
                     PopupMenuItem(
@@ -373,9 +390,10 @@ class _MainShellState extends State<MainShell> {
                       constraints: BoxConstraints(maxWidth: contentWidth),
                       child: Column(
                         children: [
-                          GoogleDriveConnectionWarning(
-                            scope: _driveScope(appMode),
-                          ),
+                          if (!cleaningMode)
+                            GoogleDriveConnectionWarning(
+                              scope: _driveScope(appMode),
+                            ),
                           Expanded(
                             child: RepaintBoundary(
                               child: personalMode
@@ -384,6 +402,8 @@ class _MainShellState extends State<MainShell> {
                                   ? const MassageScreen()
                                   : moodMode
                                   ? const MoodTrackerScreen()
+                                  : cleaningMode
+                                  ? const CleaningScreen()
                                   : caseworkMode
                                   ? const CaseworkScreen()
                                   : _screen(),

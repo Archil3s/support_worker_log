@@ -1300,6 +1300,10 @@ class AppState extends ChangeNotifier {
     return switch (value) {
       'mood' || 'mood-tracker' || 'mood_tracker' => AppMode.mood,
       'gym' || 'personal' || 'workout' || 'workouts' => AppMode.personal,
+      'cleaning' ||
+      'clean' ||
+      'house-cleaning' ||
+      'house_cleaning' => AppMode.cleaning,
       'massage' => AppMode.massage,
       'casework' => AppMode.casework,
       'paye' => AppMode.paye,
