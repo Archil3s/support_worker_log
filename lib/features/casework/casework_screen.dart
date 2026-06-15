@@ -139,14 +139,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               children: [
                 _DesktopWorkflowRail(
                   current: focus,
-                  updatedFocuses: updatedFocuses,
-                  completedFocuses: completedFocuses,
                   onChanged: (value) {
                     setState(() => focus = value);
                     unawaited(_saveDraft());
                   },
-                  onUpdatedToggle: _toggleUpdated,
-                  onCompletedToggle: _toggleCompleted,
                 ),
                 _DesktopClientRail(
                   clientInitialsController: clientInitialsController,
@@ -318,14 +314,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           const SizedBox(height: 12),
           _CompactFocusBar(
             current: focus,
-            updatedFocuses: updatedFocuses,
-            completedFocuses: completedFocuses,
             onChanged: (value) {
               setState(() => focus = value);
               unawaited(_saveDraft());
             },
-            onUpdatedToggle: (value) => _toggleUpdated([value]),
-            onCompletedToggle: (value) => _toggleCompleted([value]),
           ),
           const SizedBox(height: 12),
           _desktopFocusedSection(),
@@ -387,6 +379,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _DesktopCard(
                 title: 'Main Issue/s',
                 icon: Icons.crisis_alert_outlined,
+                trailing: _sectionStatusActions(
+                  _CaseworkFocus.walkIn,
+                  'Main Issue/s',
+                ),
                 child: _ChipPicker(
                   options: _presentingNeedOptions,
                   selected: presentingNeeds,
@@ -401,6 +397,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _DesktopCard(
                 title: 'Housing Status',
                 icon: Icons.home_work_outlined,
+                trailing: _sectionStatusActions(
+                  _CaseworkFocus.situation,
+                  'Housing Status',
+                ),
                 child: _ChipPicker(
                   options: _housingStatusOptions,
                   selected: situationUnderstanding,
@@ -464,6 +464,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _DesktopCard(
                 title: 'Emergency Housing',
                 icon: Icons.apartment_outlined,
+                trailing: _sectionStatusActions(
+                  _CaseworkFocus.msd,
+                  'Emergency Housing',
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -562,14 +566,22 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 'Use this as a worker checklist. Requirements vary by MSD, Corrections, Court/MOJ, agency criteria and client situation.',
           ),
           const SizedBox(height: 14),
-          _ReadinessGrid(
-            items: _ehReadinessItems,
-            selected: msdCriteria,
-            onChanged: (item, selected) => _toggleLogged(
-              msdCriteria,
-              item.title,
-              selected,
-              'EH readiness',
+          _DesktopCard(
+            title: 'Evidence checklist',
+            icon: Icons.fact_check_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.documents,
+              'Evidence checklist',
+            ),
+            child: _ReadinessGrid(
+              items: _ehReadinessItems,
+              selected: msdCriteria,
+              onChanged: (item, selected) => _toggleLogged(
+                msdCriteria,
+                item.title,
+                selected,
+                'EH readiness',
+              ),
             ),
           ),
         ],
@@ -584,6 +596,63 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           'Pathways for emergency housing navigation, transitional housing, sustaining tenancies, Housing First, rapid rehousing and social housing.',
       child: Column(
         children: [
+          if (focus == _CaseworkFocus.housing) ...[
+            _DesktopCard(
+              title: 'Social Housing Rating',
+              icon: Icons.home_work_outlined,
+              trailing: _sectionStatusActions(
+                _CaseworkFocus.housing,
+                'Social Housing Rating',
+              ),
+              child: Column(
+                children: [
+                  _ChipPicker(
+                    options: _socialHousingOptions,
+                    selected: socialHousing,
+                    onChanged: (item, selected) => _toggleLogged(
+                      socialHousing,
+                      item,
+                      selected,
+                      'Social housing',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _ChipPicker(
+                    options: _housingApplicationOptions,
+                    selected: housingApplications,
+                    onChanged: (item, selected) => _toggleLogged(
+                      housingApplications,
+                      item,
+                      selected,
+                      'Housing application',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (focus == _CaseworkFocus.accommodation) ...[
+            _DesktopCard(
+              title: 'Accommodation Options',
+              icon: Icons.bed_outlined,
+              trailing: _sectionStatusActions(
+                _CaseworkFocus.accommodation,
+                'Accommodation Options',
+              ),
+              child: _ChipPicker(
+                options: _accommodationOptions,
+                selected: accommodationOptions,
+                onChanged: (item, selected) => _toggleLogged(
+                  accommodationOptions,
+                  item,
+                  selected,
+                  'Accommodation',
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           const _ResponsiveColumns(
             children: [
               _PathwayStep(
@@ -702,6 +771,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           _DesktopCard(
             title: 'Quick filters',
             icon: Icons.filter_alt_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.referrals,
+              'Quick filters',
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -819,6 +892,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           _DesktopCard(
             title: 'Needs / situation',
             icon: Icons.volunteer_activism_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.safety,
+              'Needs / situation',
+            ),
             child: _ChipPicker(
               options: _socialSupportOptions,
               selected: supportNeeds,
@@ -853,6 +930,39 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           'Record meaningful actions, contact attempts, responses and objections.',
       child: Column(
         children: [
+          _DesktopCard(
+            title: 'Probation / Bail Address',
+            icon: Icons.gavel_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.probation,
+              'Probation / Bail Address',
+            ),
+            child: Column(
+              children: [
+                _DesktopDropdown(
+                  label: 'Probation / bail status',
+                  value: probationStatus,
+                  values: _probationStatuses,
+                  onChanged: (value) {
+                    setState(() => probationStatus = value);
+                    unawaited(_saveDraft());
+                    _log('Probation/bail status set: $value', 'Probation');
+                  },
+                ),
+                _ChipPicker(
+                  options: _probationActionOptions,
+                  selected: probationActions,
+                  onChanged: (item, selected) => _toggleLogged(
+                    probationActions,
+                    item,
+                    selected,
+                    'Probation',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           _DesktopCard(
             title: 'Quick diary actions',
             icon: Icons.edit_note_outlined,
@@ -1289,8 +1399,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   }
 
   Widget _fileSection(String noteFile) {
-    return SectionCard(
+    return _DesktopCard(
       title: 'Live Note Output',
+      icon: Icons.description_outlined,
+      trailing: _sectionStatusActions(_CaseworkFocus.file, 'Live Note Output'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1941,6 +2053,17 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       }
     });
     unawaited(_saveDraft());
+  }
+
+  Widget _sectionStatusActions(_CaseworkFocus focus, String label) {
+    return _SectionStatusActions(
+      focus: focus,
+      label: label,
+      updated: updatedFocuses.contains(focus),
+      completed: completedFocuses.contains(focus),
+      onUpdatedToggle: () => _toggleUpdated([focus]),
+      onCompletedToggle: () => _toggleCompleted([focus]),
+    );
   }
 
   List<String> _readStringList(Object? value) {
@@ -2618,21 +2741,10 @@ class _CompactLiveCard extends StatelessWidget {
 }
 
 class _CompactFocusBar extends StatelessWidget {
-  const _CompactFocusBar({
-    required this.current,
-    required this.updatedFocuses,
-    required this.completedFocuses,
-    required this.onChanged,
-    required this.onUpdatedToggle,
-    required this.onCompletedToggle,
-  });
+  const _CompactFocusBar({required this.current, required this.onChanged});
 
   final _CaseworkFocus current;
-  final Set<_CaseworkFocus> updatedFocuses;
-  final Set<_CaseworkFocus> completedFocuses;
   final ValueChanged<_CaseworkFocus> onChanged;
-  final ValueChanged<_CaseworkFocus> onUpdatedToggle;
-  final ValueChanged<_CaseworkFocus> onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -2641,19 +2753,13 @@ class _CompactFocusBar extends StatelessWidget {
       icon: Icons.account_tree_outlined,
       child: Column(
         children: [
-          const _StatusLegend(),
-          const SizedBox(height: 10),
           for (final item in _focusItems)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: _CompactFocusTab(
                 item: item,
                 selected: current == item.focus,
-                updated: updatedFocuses.contains(item.focus),
-                completed: completedFocuses.contains(item.focus),
                 onTap: () => onChanged(item.focus),
-                onUpdatedToggle: () => onUpdatedToggle(item.focus),
-                onCompletedToggle: () => onCompletedToggle(item.focus),
               ),
             ),
         ],
@@ -2666,24 +2772,17 @@ class _CompactFocusTab extends StatelessWidget {
   const _CompactFocusTab({
     required this.item,
     required this.selected,
-    required this.updated,
-    required this.completed,
     required this.onTap,
-    required this.onUpdatedToggle,
-    required this.onCompletedToggle,
   });
 
   final _FocusItem item;
   final bool selected;
-  final bool updated;
-  final bool completed;
   final VoidCallback onTap;
-  final VoidCallback onUpdatedToggle;
-  final VoidCallback onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
     return Material(
+      key: ValueKey('casework-tab-${item.focus.name}'),
       color: selected ? _caseworkSelected : _caseworkInkSoft,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -2726,25 +2825,6 @@ class _CompactFocusTab extends StatelessWidget {
               ),
             ),
           ),
-          _FocusStatusButton(
-            key: ValueKey('casework-${item.focus.name}-updated'),
-            label: item.label,
-            status: 'updated',
-            icon: Icons.update_rounded,
-            color: _caseworkUpdated,
-            active: updated,
-            onPressed: onUpdatedToggle,
-          ),
-          _FocusStatusButton(
-            key: ValueKey('casework-${item.focus.name}-completed'),
-            label: item.label,
-            status: 'completed',
-            icon: Icons.check_circle_rounded,
-            color: _caseworkCompleted,
-            active: completed,
-            onPressed: onCompletedToggle,
-          ),
-          const SizedBox(width: 4),
         ],
       ),
     );
@@ -2788,39 +2868,6 @@ class _FocusStatusButton extends StatelessWidget {
         ),
         child: Icon(icon, size: 17, color: active ? color : _caseworkMuted),
       ),
-    );
-  }
-}
-
-class _StatusLegend extends StatelessWidget {
-  const _StatusLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Icon(Icons.update_rounded, size: 15, color: _caseworkUpdated),
-        SizedBox(width: 5),
-        Text(
-          'Updated',
-          style: TextStyle(
-            color: _caseworkUpdated,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        SizedBox(width: 14),
-        Icon(Icons.check_circle_rounded, size: 15, color: _caseworkCompleted),
-        SizedBox(width: 5),
-        Text(
-          'Completed',
-          style: TextStyle(
-            color: _caseworkCompleted,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -2986,21 +3033,10 @@ class _TopBarButton extends StatelessWidget {
 }
 
 class _DesktopWorkflowRail extends StatelessWidget {
-  const _DesktopWorkflowRail({
-    required this.current,
-    required this.updatedFocuses,
-    required this.completedFocuses,
-    required this.onChanged,
-    required this.onUpdatedToggle,
-    required this.onCompletedToggle,
-  });
+  const _DesktopWorkflowRail({required this.current, required this.onChanged});
 
   final _CaseworkFocus current;
-  final Set<_CaseworkFocus> updatedFocuses;
-  final Set<_CaseworkFocus> completedFocuses;
   final ValueChanged<_CaseworkFocus> onChanged;
-  final ValueChanged<Iterable<_CaseworkFocus>> onUpdatedToggle;
-  final ValueChanged<Iterable<_CaseworkFocus>> onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -3013,10 +3049,6 @@ class _DesktopWorkflowRail extends StatelessWidget {
       child: ListView(
         children: [
           const _RailHeader('Workflow'),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 2, 14, 8),
-            child: _StatusLegend(),
-          ),
           for (final item in _focusItems) ...[
             if (item.focus == _CaseworkFocus.file) ...[
               const Divider(height: 28, color: _caseworkLine),
@@ -3025,11 +3057,7 @@ class _DesktopWorkflowRail extends StatelessWidget {
             _RailItem(
               item: item,
               selected: current == item.focus,
-              updated: updatedFocuses.contains(item.focus),
-              completed: completedFocuses.contains(item.focus),
               onTap: () => onChanged(item.focus),
-              onUpdatedToggle: () => onUpdatedToggle([item.focus]),
-              onCompletedToggle: () => onCompletedToggle([item.focus]),
             ),
           ],
         ],
@@ -3064,24 +3092,17 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.item,
     required this.selected,
-    required this.updated,
-    required this.completed,
     required this.onTap,
-    required this.onUpdatedToggle,
-    required this.onCompletedToggle,
   });
 
   final _FocusItem item;
   final bool selected;
-  final bool updated;
-  final bool completed;
   final VoidCallback onTap;
-  final VoidCallback onUpdatedToggle;
-  final VoidCallback onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      key: ValueKey('casework-tab-${item.focus.name}'),
       onTap: onTap,
       child: Container(
         height: 40,
@@ -3113,24 +3134,6 @@ class _RailItem extends StatelessWidget {
                   fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                 ),
               ),
-            ),
-            _FocusStatusButton(
-              key: ValueKey('casework-${item.focus.name}-updated'),
-              label: item.label,
-              status: 'updated',
-              icon: Icons.update_rounded,
-              color: _caseworkUpdated,
-              active: updated,
-              onPressed: onUpdatedToggle,
-            ),
-            _FocusStatusButton(
-              key: ValueKey('casework-${item.focus.name}-completed'),
-              label: item.label,
-              status: 'completed',
-              icon: Icons.check_circle_rounded,
-              color: _caseworkCompleted,
-              active: completed,
-              onPressed: onCompletedToggle,
             ),
           ],
         ),
@@ -3606,11 +3609,13 @@ class _DesktopCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.child,
+    this.trailing,
   });
 
   final String title;
   final IconData icon;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -3654,12 +3659,58 @@ class _DesktopCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (trailing != null) ...[const SizedBox(width: 6), trailing!],
             ],
           ),
           const SizedBox(height: 12),
           child,
         ],
       ),
+    );
+  }
+}
+
+class _SectionStatusActions extends StatelessWidget {
+  const _SectionStatusActions({
+    required this.focus,
+    required this.label,
+    required this.updated,
+    required this.completed,
+    required this.onUpdatedToggle,
+    required this.onCompletedToggle,
+  });
+
+  final _CaseworkFocus focus;
+  final String label;
+  final bool updated;
+  final bool completed;
+  final VoidCallback onUpdatedToggle;
+  final VoidCallback onCompletedToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _FocusStatusButton(
+          key: ValueKey('casework-${focus.name}-updated'),
+          label: label,
+          status: 'updated',
+          icon: Icons.update_rounded,
+          color: _caseworkUpdated,
+          active: updated,
+          onPressed: onUpdatedToggle,
+        ),
+        _FocusStatusButton(
+          key: ValueKey('casework-${focus.name}-completed'),
+          label: label,
+          status: 'completed',
+          icon: Icons.check_circle_rounded,
+          color: _caseworkCompleted,
+          active: completed,
+          onPressed: onCompletedToggle,
+        ),
+      ],
     );
   }
 }
@@ -4464,10 +4515,14 @@ class _DropdownInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: value,
+      isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: [
         for (final item in values)
-          DropdownMenuItem(value: item, child: Text(item)),
+          DropdownMenuItem(
+            value: item,
+            child: Text(item, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: (value) {
         if (value != null) onChanged(value);

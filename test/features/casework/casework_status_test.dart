@@ -27,15 +27,19 @@ void main() {
       );
       await tester.pumpAndSettle();
       final list = find.byKey(const ValueKey('casework-compact-list')).at(0);
-      for (var index = 0; index < 3; index++) {
-        await tester.drag(list, const Offset(0, -600));
+      final completedButton = find.byKey(
+        const ValueKey('casework-walkIn-completed'),
+      );
+      for (
+        var index = 0;
+        index < 8 && completedButton.evaluate().isEmpty;
+        index++
+      ) {
+        await tester.drag(list, const Offset(0, -350));
         await tester.pumpAndSettle();
       }
-      final completedButton = find
-          .byKey(const ValueKey('casework-walkIn-completed'))
-          .at(0);
       await Scrollable.ensureVisible(
-        tester.element(completedButton),
+        tester.element(completedButton.at(0)),
         alignment: 0.5,
       );
       await tester.pumpAndSettle();
@@ -55,8 +59,14 @@ void main() {
     await tester.tap(completedButton);
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Clear Walk-in updated'), findsAtLeastNWidgets(1));
-    expect(find.byTooltip('Clear Walk-in completed'), findsAtLeastNWidgets(1));
+    expect(
+      find.byTooltip('Clear Main Issue/s updated'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.byTooltip('Clear Main Issue/s completed'),
+      findsAtLeastNWidgets(1),
+    );
 
     final prefs = await SharedPreferences.getInstance();
     final stored =
@@ -74,8 +84,14 @@ void main() {
     await tester.pumpAndSettle();
     await pumpCasework();
 
-    expect(find.byTooltip('Clear Walk-in updated'), findsAtLeastNWidgets(1));
-    expect(find.byTooltip('Clear Walk-in completed'), findsAtLeastNWidgets(1));
+    expect(
+      find.byTooltip('Clear Main Issue/s updated'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.byTooltip('Clear Main Issue/s completed'),
+      findsAtLeastNWidgets(1),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -93,35 +109,59 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    const sections = [
-      'walkIn',
-      'situation',
-      'safety',
-      'documents',
-      'msd',
-      'housing',
-      'accommodation',
-      'probation',
-      'referrals',
-      'file',
-    ];
+    const sections = {
+      'walkIn': 'Main Issue/s',
+      'situation': 'Housing Status',
+      'safety': 'Needs / situation',
+      'documents': 'Evidence checklist',
+      'msd': 'Emergency Housing',
+      'housing': 'Social Housing Rating',
+      'accommodation': 'Accommodation Options',
+      'probation': 'Probation / Bail Address',
+      'referrals': 'Quick filters',
+      'file': 'Live Note Output',
+    };
 
-    for (final section in sections) {
-      expect(find.byKey(ValueKey('casework-$section-updated')), findsOneWidget);
+    for (final entry in sections.entries) {
+      await tester.tap(find.byKey(ValueKey('casework-tab-${entry.key}')));
+      await tester.pumpAndSettle();
+
       expect(
-        find.byKey(ValueKey('casework-$section-completed')),
+        find.byKey(ValueKey('casework-${entry.key}-updated')),
         findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('casework-${entry.key}-completed')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Mark ${entry.value} updated'), findsOneWidget);
+      expect(find.byTooltip('Mark ${entry.value} completed'), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Overflow while showing ${entry.key}',
       );
     }
 
-    await tester.tap(
-      find.byKey(const ValueKey('casework-situation-completed')),
+    await tester.tap(find.byKey(const ValueKey('casework-tab-situation')));
+    await tester.pumpAndSettle();
+    final situationCompleted = find.byKey(
+      const ValueKey('casework-situation-completed'),
+    );
+    await Scrollable.ensureVisible(
+      tester.element(situationCompleted),
+      alignment: 0.35,
     );
     await tester.pumpAndSettle();
+    await tester.tap(situationCompleted);
+    await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Clear Situation updated'), findsOneWidget);
-    expect(find.byTooltip('Clear Situation completed'), findsOneWidget);
-    expect(find.byTooltip('Mark Walk-in completed'), findsOneWidget);
+    expect(find.byTooltip('Clear Housing Status updated'), findsOneWidget);
+    expect(find.byTooltip('Clear Housing Status completed'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-walkIn')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Mark Main Issue/s completed'), findsOneWidget);
 
     final prefs = await SharedPreferences.getInstance();
     final stored =
