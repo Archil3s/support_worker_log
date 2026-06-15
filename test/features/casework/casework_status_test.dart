@@ -60,7 +60,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byTooltip('Clear Main Issue/s updated'),
+      find.byTooltip('Mark Main Issue/s in progress'),
       findsAtLeastNWidgets(1),
     );
     expect(
@@ -77,11 +77,11 @@ void main() {
         (profiles['CASE-001'] as Map<String, dynamic>)['data']
             as Map<String, dynamic>;
 
-    expect(caseData['updatedFocuses'], contains('walkIn'));
+    expect(caseData['updatedFocuses'], isNot(contains('walkIn')));
     expect(caseData['completedFocuses'], contains('walkIn'));
     expect(
       caseData['updatedAtByFocus'] as Map<String, dynamic>,
-      contains('walkIn'),
+      isNot(contains('walkIn')),
     );
     expect(
       caseData['completedAtByFocus'] as Map<String, dynamic>,
@@ -97,7 +97,7 @@ void main() {
     await pumpCasework();
 
     expect(
-      find.byTooltip('Clear Main Issue/s updated'),
+      find.byTooltip('Mark Main Issue/s in progress'),
       findsAtLeastNWidgets(1),
     );
     expect(
@@ -123,7 +123,7 @@ void main() {
 
     const sections = {
       'walkIn': 'Main Issue/s',
-      'situation': 'Housing Status',
+      'situation': 'Person Situation',
       'safety': 'Needs / situation',
       'documents': 'Evidence checklist',
       'msd': 'Emergency Housing',
@@ -148,7 +148,7 @@ void main() {
         find.byKey(ValueKey('casework-${entry.key}-completed')),
         findsOneWidget,
       );
-      expect(find.byTooltip('Mark ${entry.value} updated'), findsOneWidget);
+      expect(find.byTooltip('Mark ${entry.value} in progress'), findsOneWidget);
       expect(find.byTooltip('Mark ${entry.value} completed'), findsOneWidget);
       expect(
         tester.takeException(),
@@ -170,8 +170,8 @@ void main() {
     await tester.tap(situationCompleted);
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Clear Housing Status updated'), findsOneWidget);
-    expect(find.byTooltip('Clear Housing Status completed'), findsOneWidget);
+    expect(find.byTooltip('Mark Person Situation in progress'), findsOneWidget);
+    expect(find.byTooltip('Clear Person Situation completed'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('casework-situation-date-stamp')),
       findsOneWidget,
@@ -190,7 +190,7 @@ void main() {
         (profiles['CASE-001'] as Map<String, dynamic>)['data']
             as Map<String, dynamic>;
 
-    expect(caseData['updatedFocuses'], contains('situation'));
+    expect(caseData['updatedFocuses'], isNot(contains('situation')));
     expect(caseData['completedFocuses'], contains('situation'));
     expect(caseData['completedFocuses'], isNot(contains('walkIn')));
     expect(
@@ -208,7 +208,190 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('casework-tab-file')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Section Date Stamps'), findsAtLeastNWidgets(1));
+    expect(
+      find.textContaining('Progress / Completed Status'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.textContaining('Casework Checklist'), findsNothing);
+    expect(find.textContaining('Next Actions'), findsNothing);
+    expect(find.textContaining('Still To Check'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('main issue selections show checkbox state and stamp progress', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Main Issue/s'), findsOneWidget);
+    expect(find.byIcon(Icons.check_box_outline_blank), findsWidgets);
+
+    await tester.tap(find.text('No safe place tonight').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check_box_rounded), findsWidgets);
+    await tester.tap(
+      find.byTooltip('Set No safe place tonight in progress').first,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byTooltip('Set No safe place tonight completed').first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Progress / Completed Status'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.textContaining('Walk-in: No safe place tonight | Completed'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.textContaining('Casework Checklist'), findsNothing);
+    expect(find.textContaining('Still To Check'), findsNothing);
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+
+    expect(caseData['presentingNeeds'], contains('No safe place tonight'));
+    expect(caseData['updatedFocuses'], isNot(contains('walkIn')));
+    expect(caseData['completedFocuses'], isNot(contains('walkIn')));
+    expect(
+      caseData['itemCompletedAt'] as Map<String, dynamic>,
+      contains('walkIn::No safe place tonight'),
+    );
+    expect(
+      caseData['itemInProgressAt'] as Map<String, dynamic>,
+      isNot(contains('walkIn::No safe place tonight')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('situation scope checkbox selections persist', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-situation')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Housing Position'), findsOneWidget);
+    expect(find.text('Main Trigger'), findsOneWidget);
+    expect(find.byType(Checkbox), findsWidgets);
+
+    const selectedScope = 'Can stay one night only';
+    final selectedScopeFinder = find.text(selectedScope);
+    await Scrollable.ensureVisible(
+      tester.element(selectedScopeFinder),
+      alignment: 0.4,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(selectedScopeFinder);
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+
+    expect(caseData['situationUnderstanding'], contains(selectedScope));
+    expect(caseData['updatedFocuses'], isNot(contains('situation')));
+    expect(find.text('Set: 1'), findsAtLeastNWidgets(1));
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Overflow after selecting situation scope',
+    );
+  });
+
+  testWidgets('outcome fields and phrase chips feed the live note', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final requestedField = find.byKey(
+      const ValueKey('casework-outcome-walkIn-requested'),
+    );
+    await Scrollable.ensureVisible(
+      tester.element(requestedField),
+      alignment: 0.45,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(requestedField, 'Emergency housing assessment');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('casework-outcome-walkIn-outcome')),
+      'Assessment booked',
+    );
+    await tester.pumpAndSettle();
+    final phraseChip = find.byKey(
+      const ValueKey('casework-phrase-Worker supported with'),
+    );
+    await Scrollable.ensureVisible(tester.element(phraseChip), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(phraseChip);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Section Outcomes / Next Steps'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.textContaining('Walk-in | Requested: Emergency housing assessment'),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.textContaining('Outcome: Assessment booked'), findsWidgets);
+    expect(find.textContaining('Worker supported with'), findsWidgets);
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+    final outcomes = caseData['sectionOutcomes'] as Map<String, dynamic>;
+
+    expect(outcomes['walkIn::requested'], 'Emergency housing assessment');
+    expect(outcomes['walkIn::outcome'], 'Assessment booked');
+    expect(caseData['additionalContext'], contains('Worker supported with'));
     expect(tester.takeException(), isNull);
   });
 

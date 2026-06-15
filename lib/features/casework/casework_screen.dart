@@ -79,6 +79,9 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   final completedFocuses = <_CaseworkFocus>{};
   final updatedAtByFocus = <_CaseworkFocus, DateTime>{};
   final completedAtByFocus = <_CaseworkFocus, DateTime>{};
+  final itemInProgressAt = <String, DateTime>{};
+  final itemCompletedAt = <String, DateTime>{};
+  final sectionOutcomes = <String, String>{};
   final actionLog = <_ActionLogEntry>[];
   final requestHistory = <_RequestHistoryEntry>[];
   final profiles = <String, _CaseProfileRecord>{};
@@ -206,6 +209,9 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                       completedFocuses.clear();
                       updatedAtByFocus.clear();
                       completedAtByFocus.clear();
+                      itemInProgressAt.clear();
+                      itemCompletedAt.clear();
+                      sectionOutcomes.clear();
                       actionLog.clear();
                       additionalContextController.clear();
                     });
@@ -375,6 +381,70 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     }
   }
 
+  Widget _statusChipPicker({
+    required List<String> options,
+    required Set<String> selected,
+    required String category,
+    _CaseworkFocus? statusFocus,
+  }) {
+    final resolvedFocus = statusFocus ?? focus;
+
+    return _ChipPicker(
+      options: options,
+      selected: selected,
+      onChanged: (item, isSelected) =>
+          _toggleLogged(selected, item, isSelected, category, resolvedFocus),
+      inProgressAtFor: (item) => _itemInProgressAt(resolvedFocus, item),
+      completedAtFor: (item) => _itemCompletedAt(resolvedFocus, item),
+      onInProgressToggle: (item) =>
+          _toggleItemInProgress(resolvedFocus, selected, item),
+      onCompletedToggle: (item) =>
+          _toggleItemCompleted(resolvedFocus, selected, item),
+    );
+  }
+
+  Widget _statusChecklistGroup({
+    required List<String> options,
+    required Set<String> selected,
+    required String category,
+    _CaseworkFocus? statusFocus,
+  }) {
+    final resolvedFocus = statusFocus ?? focus;
+
+    return _ChecklistGroup(
+      options: options,
+      selected: selected,
+      onChanged: (item, isSelected) =>
+          _toggleLogged(selected, item, isSelected, category, resolvedFocus),
+      inProgressAtFor: (item) => _itemInProgressAt(resolvedFocus, item),
+      completedAtFor: (item) => _itemCompletedAt(resolvedFocus, item),
+      onInProgressToggle: (item) =>
+          _toggleItemInProgress(resolvedFocus, selected, item),
+      onCompletedToggle: (item) =>
+          _toggleItemCompleted(resolvedFocus, selected, item),
+    );
+  }
+
+  Widget _sectionOutcomeCard(_CaseworkFocus statusFocus, String title) {
+    return _SectionOutcomeCard(
+      id: statusFocus.name,
+      title: title,
+      values: {
+        for (final field in _outcomeFields)
+          field.key: _outcomeValue(statusFocus, field.key),
+      },
+      onChanged: (field, value) => _setOutcomeValue(statusFocus, field, value),
+    );
+  }
+
+  Widget _phraseChipCard() {
+    return _DesktopCard(
+      title: 'Reusable note phrases',
+      icon: Icons.format_quote_outlined,
+      child: _PhraseChipWrap(phrases: _notePhrases, onSelected: _insertPhrase),
+    );
+  }
+
   Widget _desktopCaseFlowSection() {
     return _DesktopPage(
       title: 'Case Flow',
@@ -407,24 +477,54 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                     item,
                     selected,
                     'Presenting need',
+                    _CaseworkFocus.walkIn,
+                  ),
+                  inProgressAtFor: (item) =>
+                      _itemInProgressAt(_CaseworkFocus.walkIn, item),
+                  completedAtFor: (item) =>
+                      _itemCompletedAt(_CaseworkFocus.walkIn, item),
+                  onInProgressToggle: (item) => _toggleItemInProgress(
+                    _CaseworkFocus.walkIn,
+                    presentingNeeds,
+                    item,
+                  ),
+                  onCompletedToggle: (item) => _toggleItemCompleted(
+                    _CaseworkFocus.walkIn,
+                    presentingNeeds,
+                    item,
                   ),
                 ),
               ),
               _DesktopCard(
-                title: 'Housing Status',
+                title: 'Person Situation',
                 icon: Icons.home_work_outlined,
                 trailing: _sectionStatusActions(
                   _CaseworkFocus.situation,
-                  'Housing Status',
+                  'Person Situation',
                 ),
-                child: _ChipPicker(
-                  options: _housingStatusOptions,
+                child: _ScopeGroupList(
+                  groups: _situationScopeGroups,
                   selected: situationUnderstanding,
                   onChanged: (item, selected) => _toggleLogged(
                     situationUnderstanding,
                     item,
                     selected,
-                    'Housing status',
+                    'Scope',
+                    _CaseworkFocus.situation,
+                  ),
+                  inProgressAtFor: (item) =>
+                      _itemInProgressAt(_CaseworkFocus.situation, item),
+                  completedAtFor: (item) =>
+                      _itemCompletedAt(_CaseworkFocus.situation, item),
+                  onInProgressToggle: (item) => _toggleItemInProgress(
+                    _CaseworkFocus.situation,
+                    situationUnderstanding,
+                    item,
+                  ),
+                  onCompletedToggle: (item) => _toggleItemCompleted(
+                    _CaseworkFocus.situation,
+                    situationUnderstanding,
+                    item,
                   ),
                 ),
               ),
@@ -434,11 +534,34 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           _DesktopCard(
             title: 'Evidence & Barriers',
             icon: Icons.fact_check_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.documents,
+              'Evidence & Barriers',
+            ),
             child: _ChipPicker(
               options: _evidenceBarrierOptions,
               selected: documents,
-              onChanged: (item, selected) =>
-                  _toggleLogged(documents, item, selected, 'Evidence'),
+              onChanged: (item, selected) => _toggleLogged(
+                documents,
+                item,
+                selected,
+                'Evidence',
+                _CaseworkFocus.documents,
+              ),
+              inProgressAtFor: (item) =>
+                  _itemInProgressAt(_CaseworkFocus.documents, item),
+              completedAtFor: (item) =>
+                  _itemCompletedAt(_CaseworkFocus.documents, item),
+              onInProgressToggle: (item) => _toggleItemInProgress(
+                _CaseworkFocus.documents,
+                documents,
+                item,
+              ),
+              onCompletedToggle: (item) => _toggleItemCompleted(
+                _CaseworkFocus.documents,
+                documents,
+                item,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -458,6 +581,15 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          _ResponsiveColumns(
+            children: [
+              _sectionOutcomeCard(_CaseworkFocus.walkIn, 'Main Issue/s'),
+              _sectionOutcomeCard(_CaseworkFocus.situation, 'Person Situation'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _phraseChipCard(),
         ],
       ),
     );
@@ -487,11 +619,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ChipPicker(
+                    _statusChipPicker(
                       options: _emergencyHousingOptions,
                       selected: msdAdvocacy,
-                      onChanged: (item, selected) =>
-                          _toggleLogged(msdAdvocacy, item, selected, 'MSD/EH'),
+                      category: 'MSD/EH',
+                      statusFocus: _CaseworkFocus.msd,
                     ),
                     const SizedBox(height: 14),
                     const _InfoBlock(
@@ -514,15 +646,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ChipPicker(
+                    _statusChipPicker(
                       options: _publicHousingOptions,
                       selected: socialHousing,
-                      onChanged: (item, selected) => _toggleLogged(
-                        socialHousing,
-                        item,
-                        selected,
-                        'Public housing',
-                      ),
+                      category: 'Public housing',
+                      statusFocus: _CaseworkFocus.housing,
                     ),
                     const SizedBox(height: 14),
                     const _InfoBlock(
@@ -541,15 +669,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _DesktopCard(
                 title: 'Financial Support',
                 icon: Icons.savings_outlined,
-                child: _ChipPicker(
+                child: _statusChipPicker(
                   options: _financialSupportOptions,
                   selected: msdAdvocacy,
-                  onChanged: (item, selected) => _toggleLogged(
-                    msdAdvocacy,
-                    item,
-                    selected,
-                    'Financial support',
-                  ),
+                  category: 'Financial support',
+                  statusFocus: _CaseworkFocus.msd,
                 ),
               ),
               _DesktopCard(
@@ -565,6 +689,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.msd, 'Emergency Housing / MSD'),
         ],
       ),
     );
@@ -597,9 +723,26 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 item.title,
                 selected,
                 'EH readiness',
+                _CaseworkFocus.documents,
+              ),
+              inProgressAtFor: (item) =>
+                  _itemInProgressAt(_CaseworkFocus.documents, item),
+              completedAtFor: (item) =>
+                  _itemCompletedAt(_CaseworkFocus.documents, item),
+              onInProgressToggle: (item) => _toggleItemInProgress(
+                _CaseworkFocus.documents,
+                msdCriteria,
+                item,
+              ),
+              onCompletedToggle: (item) => _toggleItemCompleted(
+                _CaseworkFocus.documents,
+                msdCriteria,
+                item,
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.documents, 'Evidence checklist'),
         ],
       ),
     );
@@ -622,26 +765,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               ),
               child: Column(
                 children: [
-                  _ChipPicker(
+                  _statusChipPicker(
                     options: _socialHousingOptions,
                     selected: socialHousing,
-                    onChanged: (item, selected) => _toggleLogged(
-                      socialHousing,
-                      item,
-                      selected,
-                      'Social housing',
-                    ),
+                    category: 'Social housing',
+                    statusFocus: _CaseworkFocus.housing,
                   ),
                   const SizedBox(height: 14),
-                  _ChipPicker(
+                  _statusChipPicker(
                     options: _housingApplicationOptions,
                     selected: housingApplications,
-                    onChanged: (item, selected) => _toggleLogged(
-                      housingApplications,
-                      item,
-                      selected,
-                      'Housing application',
-                    ),
+                    category: 'Housing application',
+                    statusFocus: _CaseworkFocus.housing,
                   ),
                 ],
               ),
@@ -656,15 +791,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 _CaseworkFocus.accommodation,
                 'Accommodation Options',
               ),
-              child: _ChipPicker(
+              child: _statusChipPicker(
                 options: _accommodationOptions,
                 selected: accommodationOptions,
-                onChanged: (item, selected) => _toggleLogged(
-                  accommodationOptions,
-                  item,
-                  selected,
-                  'Accommodation',
-                ),
+                category: 'Accommodation',
+                statusFocus: _CaseworkFocus.accommodation,
               ),
             ),
             const SizedBox(height: 16),
@@ -706,11 +837,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ChipPicker(
+                    _statusChipPicker(
                       options: _cmmPathwayOptions,
                       selected: msdAdvocacy,
-                      onChanged: (item, selected) =>
-                          _toggleLogged(msdAdvocacy, item, selected, 'CMM'),
+                      category: 'CMM',
+                      statusFocus: _CaseworkFocus.housing,
                     ),
                     const SizedBox(height: 14),
                     const _InfoBlock(
@@ -766,6 +897,15 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(
+            focus == _CaseworkFocus.accommodation
+                ? _CaseworkFocus.accommodation
+                : _CaseworkFocus.housing,
+            focus == _CaseworkFocus.accommodation
+                ? 'Accommodation Options'
+                : 'Social Housing / CMM',
+          ),
         ],
       ),
     );
@@ -799,15 +939,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 8),
-                _ChipPicker(
+                _statusChipPicker(
                   options: _socialSupportOptions,
                   selected: referralFilters,
-                  onChanged: (item, selected) => _toggleLogged(
-                    referralFilters,
-                    item,
-                    selected,
-                    'Referral filter',
-                  ),
+                  category: 'Referral filter',
+                  statusFocus: _CaseworkFocus.referrals,
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -815,15 +951,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 8),
-                _ChipPicker(
+                _statusChipPicker(
                   options: _referralFilterOptions,
                   selected: referralFilters,
-                  onChanged: (item, selected) => _toggleLogged(
-                    referralFilters,
-                    item,
-                    selected,
-                    'Referral filter',
-                  ),
+                  category: 'Referral filter',
+                  statusFocus: _CaseworkFocus.referrals,
                 ),
                 if (filtersSelected) ...[
                   const SizedBox(height: 10),
@@ -843,6 +975,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                       TextButton.icon(
                         onPressed: () {
                           setState(() {
+                            _clearItemStatusFor(
+                              _CaseworkFocus.referrals,
+                              referralFilters,
+                            );
                             referralFilters.clear();
                           });
                           unawaited(_saveDraft());
@@ -895,6 +1031,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                     ],
                   ),
           ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.referrals, 'Referrals'),
         ],
       ),
     );
@@ -917,19 +1055,43 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             ),
             child: _SupportNeedsGrid(
               selected: supportNeeds,
-              onChanged: (item, selected) =>
-                  _toggleLogged(supportNeeds, item, selected, 'Social support'),
+              onChanged: (item, selected) => _toggleLogged(
+                supportNeeds,
+                item,
+                selected,
+                'Social support',
+                _CaseworkFocus.safety,
+              ),
+              inProgressAtFor: (item) =>
+                  _itemInProgressAt(_CaseworkFocus.safety, item),
+              completedAtFor: (item) =>
+                  _itemCompletedAt(_CaseworkFocus.safety, item),
+              onInProgressToggle: (item) => _toggleItemInProgress(
+                _CaseworkFocus.safety,
+                supportNeeds,
+                item,
+              ),
+              onCompletedToggle: (item) => _toggleItemCompleted(
+                _CaseworkFocus.safety,
+                supportNeeds,
+                item,
+              ),
             ),
           ),
           const SizedBox(height: 16),
           _SupportPlanSummary(
             selectedCount: supportNeeds.length,
             onClear: () {
-              setState(supportNeeds.clear);
+              setState(() {
+                _clearItemStatusFor(_CaseworkFocus.safety, supportNeeds);
+                supportNeeds.clear();
+              });
               unawaited(_saveDraft());
             },
             onFindServices: _findServicesForSupportNeeds,
           ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.safety, 'Needs / situation'),
         ],
       ),
     );
@@ -961,15 +1123,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                     _log('Probation/bail status set: $value', 'Probation');
                   },
                 ),
-                _ChipPicker(
+                _statusChipPicker(
                   options: _probationActionOptions,
                   selected: probationActions,
-                  onChanged: (item, selected) => _toggleLogged(
-                    probationActions,
-                    item,
-                    selected,
-                    'Probation',
-                  ),
+                  category: 'Probation',
+                  statusFocus: _CaseworkFocus.probation,
                 ),
               ],
             ),
@@ -1008,14 +1166,19 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _DesktopCard(
                 title: 'Common Objections',
                 icon: Icons.record_voice_over_outlined,
-                child: _ChipPicker(
+                child: _statusChipPicker(
                   options: _commonObjections,
                   selected: roadblocks,
-                  onChanged: (item, selected) =>
-                      _toggleLogged(roadblocks, item, selected, 'Objection'),
+                  category: 'Objection',
+                  statusFocus: _CaseworkFocus.probation,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(
+            _CaseworkFocus.probation,
+            'Probation / Bail Address',
           ),
         ],
       ),
@@ -1027,19 +1190,25 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       title: 'Contacts + Communication',
       subtitle:
           'Track who was contacted, how contact occurred, and whether the client was updated.',
-      child: _DesktopCard(
-        title: 'Contact record',
-        icon: Icons.contact_phone_outlined,
-        trailing: _sectionStatusActions(
-          _CaseworkFocus.contacts,
-          'Contact record',
-        ),
-        child: _ChipPicker(
-          options: _contactActionOptions,
-          selected: contactActions,
-          onChanged: (item, selected) =>
-              _toggleLogged(contactActions, item, selected, 'Contact'),
-        ),
+      child: Column(
+        children: [
+          _DesktopCard(
+            title: 'Contact record',
+            icon: Icons.contact_phone_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.contacts,
+              'Contact record',
+            ),
+            child: _statusChipPicker(
+              options: _contactActionOptions,
+              selected: contactActions,
+              category: 'Contact',
+              statusFocus: _CaseworkFocus.contacts,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.contacts, 'Contact record'),
+        ],
       ),
     );
   }
@@ -1049,33 +1218,39 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       title: 'Follow-up + Deadlines',
       subtitle:
           'Record the next check-in, due dates, reminders, and escalation points.',
-      child: _DesktopCard(
-        title: 'Follow-up plan',
-        icon: Icons.event_repeat_outlined,
-        trailing: _sectionStatusActions(
-          _CaseworkFocus.followUp,
-          'Follow-up plan',
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _DesktopTextField(
-              controller: deadlineController,
-              label: 'Next deadline / check-in',
-              hint: 'Date, time, appointment, or response deadline',
-              onChanged: (_) {
-                setState(() {});
-                unawaited(_saveDraft());
-              },
+      child: Column(
+        children: [
+          _DesktopCard(
+            title: 'Follow-up plan',
+            icon: Icons.event_repeat_outlined,
+            trailing: _sectionStatusActions(
+              _CaseworkFocus.followUp,
+              'Follow-up plan',
             ),
-            _ChipPicker(
-              options: _followUpActionOptions,
-              selected: followUpActions,
-              onChanged: (item, selected) =>
-                  _toggleLogged(followUpActions, item, selected, 'Follow-up'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DesktopTextField(
+                  controller: deadlineController,
+                  label: 'Next deadline / check-in',
+                  hint: 'Date, time, appointment, or response deadline',
+                  onChanged: (_) {
+                    setState(() {});
+                    unawaited(_saveDraft());
+                  },
+                ),
+                _statusChipPicker(
+                  options: _followUpActionOptions,
+                  selected: followUpActions,
+                  category: 'Follow-up',
+                  statusFocus: _CaseworkFocus.followUp,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+          _sectionOutcomeCard(_CaseworkFocus.followUp, 'Follow-up plan'),
+        ],
       ),
     );
   }
@@ -1204,15 +1379,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         const SizedBox(height: 12),
         SectionCard(
           title: 'Presenting Need',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _presentingNeedOptions,
             selected: presentingNeeds,
-            onChanged: (item, selected) => _toggleLogged(
-              presentingNeeds,
-              item,
-              selected,
-              'Presenting need',
-            ),
+            category: 'Presenting need',
+            statusFocus: _CaseworkFocus.walkIn,
           ),
         ),
       ],
@@ -1222,20 +1393,30 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   Widget _situationSection() {
     return SectionCard(
       title: 'Identify Scope',
-      child: Column(
-        children: [
-          for (final group in _situationScopeGroups)
-            _ScopeGroupCard(
-              group: group,
-              selected: situationUnderstanding,
-              onChanged: (item, selected) => _toggleLogged(
-                situationUnderstanding,
-                item,
-                selected,
-                'Scope',
-              ),
-            ),
-        ],
+      child: _ScopeGroupList(
+        groups: _situationScopeGroups,
+        selected: situationUnderstanding,
+        onChanged: (item, selected) => _toggleLogged(
+          situationUnderstanding,
+          item,
+          selected,
+          'Scope',
+          _CaseworkFocus.situation,
+        ),
+        inProgressAtFor: (item) =>
+            _itemInProgressAt(_CaseworkFocus.situation, item),
+        completedAtFor: (item) =>
+            _itemCompletedAt(_CaseworkFocus.situation, item),
+        onInProgressToggle: (item) => _toggleItemInProgress(
+          _CaseworkFocus.situation,
+          situationUnderstanding,
+          item,
+        ),
+        onCompletedToggle: (item) => _toggleItemCompleted(
+          _CaseworkFocus.situation,
+          situationUnderstanding,
+          item,
+        ),
       ),
     );
   }
@@ -1252,8 +1433,24 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           ),
           child: _SupportNeedsGrid(
             selected: supportNeeds,
-            onChanged: (item, selected) =>
-                _toggleLogged(supportNeeds, item, selected, 'Social support'),
+            onChanged: (item, selected) => _toggleLogged(
+              supportNeeds,
+              item,
+              selected,
+              'Social support',
+              _CaseworkFocus.safety,
+            ),
+            inProgressAtFor: (item) =>
+                _itemInProgressAt(_CaseworkFocus.safety, item),
+            completedAtFor: (item) =>
+                _itemCompletedAt(_CaseworkFocus.safety, item),
+            onInProgressToggle: (item) => _toggleItemInProgress(
+              _CaseworkFocus.safety,
+              supportNeeds,
+              item,
+            ),
+            onCompletedToggle: (item) =>
+                _toggleItemCompleted(_CaseworkFocus.safety, supportNeeds, item),
           ),
         ),
         const SizedBox(height: 12),
@@ -1268,25 +1465,21 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         const SizedBox(height: 12),
         SectionCard(
           title: 'Immediate Safety Before Agencies',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _immediateSafetyOptions,
             selected: immediateSafety,
-            onChanged: (item, selected) => _toggleLogged(
-              immediateSafety,
-              item,
-              selected,
-              'Immediate safety',
-            ),
+            category: 'Immediate safety',
+            statusFocus: _CaseworkFocus.safety,
           ),
         ),
         const SizedBox(height: 12),
         SectionCard(
           title: 'Roadblock Prevention',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _roadblockOptions,
             selected: roadblocks,
-            onChanged: (item, selected) =>
-                _toggleLogged(roadblocks, item, selected, 'Roadblock check'),
+            category: 'Roadblock check',
+            statusFocus: _CaseworkFocus.safety,
           ),
         ),
       ],
@@ -1304,11 +1497,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   Widget _documentsSection() {
     return SectionCard(
       title: 'Documents And Proof Ready',
-      child: _ChecklistGroup(
+      child: _statusChecklistGroup(
         options: _documentOptions,
         selected: documents,
-        onChanged: (item, selected) =>
-            _toggleLogged(documents, item, selected, 'Documents'),
+        category: 'Documents',
+        statusFocus: _CaseworkFocus.documents,
       ),
     );
   }
@@ -1318,21 +1511,21 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       children: [
         SectionCard(
           title: 'MSD Emergency Housing Criteria',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _msdCriteriaOptions,
             selected: msdCriteria,
-            onChanged: (item, selected) =>
-                _toggleLogged(msdCriteria, item, selected, 'MSD criteria'),
+            category: 'MSD criteria',
+            statusFocus: _CaseworkFocus.msd,
           ),
         ),
         const SizedBox(height: 12),
         SectionCard(
           title: 'MSD / CMM Advocacy',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _msdAdvocacyOptions,
             selected: msdAdvocacy,
-            onChanged: (item, selected) =>
-                _toggleLogged(msdAdvocacy, item, selected, 'MSD/CMM'),
+            category: 'MSD/CMM',
+            statusFocus: _CaseworkFocus.msd,
           ),
         ),
       ],
@@ -1344,25 +1537,21 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       children: [
         SectionCard(
           title: 'Social Housing Rating',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _socialHousingOptions,
             selected: socialHousing,
-            onChanged: (item, selected) =>
-                _toggleLogged(socialHousing, item, selected, 'Social housing'),
+            category: 'Social housing',
+            statusFocus: _CaseworkFocus.housing,
           ),
         ),
         const SizedBox(height: 12),
         SectionCard(
           title: 'Housing Applications',
-          child: _ChecklistGroup(
+          child: _statusChecklistGroup(
             options: _housingApplicationOptions,
             selected: housingApplications,
-            onChanged: (item, selected) => _toggleLogged(
-              housingApplications,
-              item,
-              selected,
-              'Housing application',
-            ),
+            category: 'Housing application',
+            statusFocus: _CaseworkFocus.housing,
           ),
         ),
       ],
@@ -1372,15 +1561,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   Widget _accommodationSection() {
     return SectionCard(
       title: 'Accommodation Options',
-      child: _ChecklistGroup(
+      child: _statusChecklistGroup(
         options: _accommodationOptions,
         selected: accommodationOptions,
-        onChanged: (item, selected) => _toggleLogged(
-          accommodationOptions,
-          item,
-          selected,
-          'Accommodation',
-        ),
+        category: 'Accommodation',
+        statusFocus: _CaseworkFocus.accommodation,
       ),
     );
   }
@@ -1402,11 +1587,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             },
           ),
           const SizedBox(height: 12),
-          _ChecklistGroup(
+          _statusChecklistGroup(
             options: _probationActionOptions,
             selected: probationActions,
-            onChanged: (item, selected) =>
-                _toggleLogged(probationActions, item, selected, 'Probation'),
+            category: 'Probation',
+            statusFocus: _CaseworkFocus.probation,
           ),
         ],
       ),
@@ -1432,26 +1617,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          _ChipPicker(
+          _statusChipPicker(
             options: _socialSupportOptions,
             selected: referralFilters,
-            onChanged: (item, selected) => _toggleLogged(
-              referralFilters,
-              item,
-              selected,
-              'Referral filter',
-            ),
+            category: 'Referral filter',
+            statusFocus: _CaseworkFocus.referrals,
           ),
           const SizedBox(height: 10),
-          _ChipPicker(
+          _statusChipPicker(
             options: _referralFilterOptions,
             selected: referralFilters,
-            onChanged: (item, selected) => _toggleLogged(
-              referralFilters,
-              item,
-              selected,
-              'Referral filter',
-            ),
+            category: 'Referral filter',
+            statusFocus: _CaseworkFocus.referrals,
           ),
           const SizedBox(height: 14),
           if (!filtersSelected)
@@ -1476,6 +1653,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 TextButton.icon(
                   onPressed: () {
                     setState(() {
+                      _clearItemStatusFor(
+                        _CaseworkFocus.referrals,
+                        referralFilters,
+                      );
                       referralFilters.clear();
                     });
                     unawaited(_saveDraft());
@@ -1560,11 +1741,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         _CaseworkFocus.contacts,
         'Contact record',
       ),
-      child: _ChecklistGroup(
+      child: _statusChecklistGroup(
         options: _contactActionOptions,
         selected: contactActions,
-        onChanged: (item, selected) =>
-            _toggleLogged(contactActions, item, selected, 'Contact'),
+        category: 'Contact',
+        statusFocus: _CaseworkFocus.contacts,
       ),
     );
   }
@@ -1590,11 +1771,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             },
           ),
           const SizedBox(height: 12),
-          _ChecklistGroup(
+          _statusChecklistGroup(
             options: _followUpActionOptions,
             selected: followUpActions,
-            onChanged: (item, selected) =>
-                _toggleLogged(followUpActions, item, selected, 'Follow-up'),
+            category: 'Follow-up',
+            statusFocus: _CaseworkFocus.followUp,
           ),
         ],
       ),
@@ -1634,13 +1815,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     Set<String> selected,
     String item,
     bool shouldSelect,
-    String category,
-  ) {
+    String category, [
+    _CaseworkFocus? statusFocus,
+  ]) {
+    final resolvedFocus = statusFocus ?? focus;
+    final key = _itemStatusKey(resolvedFocus, item);
     setState(() {
       if (shouldSelect) {
         selected.add(item);
       } else {
         selected.remove(item);
+        itemInProgressAt.remove(key);
+        itemCompletedAt.remove(key);
       }
     });
 
@@ -2085,6 +2271,15 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         for (final entry in completedAtByFocus.entries)
           entry.key.name: entry.value.toIso8601String(),
       },
+      'itemInProgressAt': {
+        for (final entry in itemInProgressAt.entries)
+          entry.key: entry.value.toIso8601String(),
+      },
+      'itemCompletedAt': {
+        for (final entry in itemCompletedAt.entries)
+          entry.key: entry.value.toIso8601String(),
+      },
+      'sectionOutcomes': Map<String, String>.from(sectionOutcomes),
       'actionLog': [
         for (final entry in actionLog)
           {
@@ -2139,6 +2334,9 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     _replaceFocusSet(completedFocuses, data['completedFocuses']);
     _replaceFocusDateMap(updatedAtByFocus, data['updatedAtByFocus']);
     _replaceFocusDateMap(completedAtByFocus, data['completedAtByFocus']);
+    _replaceDateMap(itemInProgressAt, data['itemInProgressAt']);
+    _replaceDateMap(itemCompletedAt, data['itemCompletedAt']);
+    _replaceStringMap(sectionOutcomes, data['sectionOutcomes']);
     actionLog
       ..clear()
       ..addAll(_readActionLog(data['actionLog']));
@@ -2180,6 +2378,9 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     completedFocuses.clear();
     updatedAtByFocus.clear();
     completedAtByFocus.clear();
+    itemInProgressAt.clear();
+    itemCompletedAt.clear();
+    sectionOutcomes.clear();
     actionLog.clear();
     requestHistory.clear();
   }
@@ -2214,11 +2415,149 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     }
   }
 
+  void _replaceDateMap(Map<String, DateTime> target, Object? value) {
+    target.clear();
+    if (value is! Map<String, Object?>) return;
+
+    for (final entry in value.entries) {
+      final date = DateTime.tryParse(entry.value as String? ?? '');
+      if (date != null) {
+        target[entry.key] = date;
+      }
+    }
+  }
+
+  void _replaceStringMap(Map<String, String> target, Object? value) {
+    target.clear();
+    if (value is! Map<String, Object?>) return;
+
+    for (final entry in value.entries) {
+      final text = entry.value as String?;
+      if (text != null && text.trim().isNotEmpty) {
+        target[entry.key] = text;
+      }
+    }
+  }
+
   _CaseworkFocus? _focusFromName(String name) {
     for (final focus in _CaseworkFocus.values) {
       if (focus.name == name) return focus;
     }
     return null;
+  }
+
+  String _itemStatusKey(_CaseworkFocus statusFocus, String item) {
+    return '${statusFocus.name}::$item';
+  }
+
+  String _focusLabel(_CaseworkFocus statusFocus) {
+    return _focusItems
+        .firstWhere(
+          (item) => item.focus == statusFocus,
+          orElse: () => _FocusItem(statusFocus, statusFocus.name, Icons.info),
+        )
+        .label;
+  }
+
+  String _outcomeKey(_CaseworkFocus statusFocus, String field) {
+    return '${statusFocus.name}::$field';
+  }
+
+  String _outcomeValue(_CaseworkFocus statusFocus, String field) {
+    return sectionOutcomes[_outcomeKey(statusFocus, field)] ?? '';
+  }
+
+  void _setOutcomeValue(
+    _CaseworkFocus statusFocus,
+    String field,
+    String value,
+  ) {
+    final key = _outcomeKey(statusFocus, field);
+    setState(() {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) {
+        sectionOutcomes.remove(key);
+      } else {
+        sectionOutcomes[key] = value;
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _insertPhrase(String phrase) {
+    final existing = additionalContextController.text;
+    final selection = additionalContextController.selection;
+    final prefix = existing.isEmpty || existing.endsWith('\n') ? '' : '\n';
+    final insertion = '$prefix$phrase';
+    final start = selection.isValid ? selection.start : existing.length;
+    final end = selection.isValid ? selection.end : existing.length;
+    final next = existing.replaceRange(start, end, insertion);
+    final cursor = start + insertion.length;
+
+    setState(() {
+      additionalContextController.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: cursor),
+      );
+    });
+    unawaited(_saveDraft());
+  }
+
+  DateTime? _itemInProgressAt(_CaseworkFocus statusFocus, String item) {
+    return itemInProgressAt[_itemStatusKey(statusFocus, item)];
+  }
+
+  DateTime? _itemCompletedAt(_CaseworkFocus statusFocus, String item) {
+    return itemCompletedAt[_itemStatusKey(statusFocus, item)];
+  }
+
+  void _toggleItemInProgress(
+    _CaseworkFocus statusFocus,
+    Set<String> selected,
+    String item,
+  ) {
+    final key = _itemStatusKey(statusFocus, item);
+    final now = DateTime.now();
+
+    setState(() {
+      selected.add(item);
+      if (itemInProgressAt.containsKey(key) &&
+          !itemCompletedAt.containsKey(key)) {
+        itemInProgressAt.remove(key);
+      } else {
+        itemInProgressAt[key] = now;
+        itemCompletedAt.remove(key);
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _toggleItemCompleted(
+    _CaseworkFocus statusFocus,
+    Set<String> selected,
+    String item,
+  ) {
+    final key = _itemStatusKey(statusFocus, item);
+    final now = DateTime.now();
+
+    setState(() {
+      selected.add(item);
+      if (itemCompletedAt.containsKey(key)) {
+        itemCompletedAt.remove(key);
+      } else {
+        itemInProgressAt.remove(key);
+        itemCompletedAt[key] = now;
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _clearItemStatusFor(_CaseworkFocus statusFocus, Iterable<String> items) {
+    for (final item in items) {
+      final key = _itemStatusKey(statusFocus, item);
+      itemInProgressAt.remove(key);
+      itemCompletedAt.remove(key);
+    }
   }
 
   void _toggleUpdated(Iterable<_CaseworkFocus> focuses) {
@@ -2232,8 +2571,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         }
       } else {
         updatedFocuses.addAll(values);
+        completedFocuses.removeAll(values);
         for (final focus in values) {
           updatedAtByFocus[focus] = now;
+          completedAtByFocus.remove(focus);
         }
       }
     });
@@ -2251,10 +2592,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         }
       } else {
         completedFocuses.addAll(values);
-        updatedFocuses.addAll(values);
+        updatedFocuses.removeAll(values);
         for (final focus in values) {
           completedAtByFocus[focus] = now;
-          updatedAtByFocus[focus] = now;
+          updatedAtByFocus.remove(focus);
         }
       }
     });
@@ -2319,7 +2660,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     final client = _valueOr(clientInitialsController.text, '[initials]');
     final worker = _valueOr(workerInitialsController.text, '[worker initials]');
     final deadline = _valueOr(deadlineController.text, '[next deadline]');
-    final openSteps = _openNextSteps();
     final logLines = _noteActionLogLines();
     final mainNotes = additionalContextController.text.trim();
     final keyActions = [
@@ -2352,6 +2692,14 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       ..writeln('Urgency: ${urgency.toUpperCase()}')
       ..writeln('Next check-in: $deadline');
 
+    _addNoteSection(buffer, 'Progress / Completed Status', [
+      ..._sectionDateStampLines(),
+      ..._itemDateStampLines(),
+    ]);
+    _addNoteSection(buffer, 'Section Outcomes / Next Steps', [
+      ..._sectionOutcomeLines(),
+    ]);
+
     switch (noteType) {
       case 'MSD call support note':
         _addNoteSection(buffer, 'Reason For MSD Contact', presentingNeeds);
@@ -2364,7 +2712,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         _addNoteSection(buffer, 'Request / Advocacy Made', msdAdvocacy);
         _addNoteSection(buffer, 'Safety Or Access Factors', immediateSafety);
         _addNoteSection(buffer, 'MSD Outcome / Actions', logLines);
-        _addNoteSection(buffer, 'Follow-Up Required', openSteps.take(6));
         break;
       case 'CMM / MSD handover note':
         _addNoteSection(buffer, 'Reason For Handover', presentingNeeds);
@@ -2383,10 +2730,7 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         ]);
         _addNoteSection(buffer, 'Evidence Available', documents);
         _addNoteSection(buffer, 'Requested Services / Programmes', referrals);
-        _addNoteSection(buffer, 'Actions And Next Steps', [
-          ...logLines,
-          ...openSteps.take(5),
-        ]);
+        _addNoteSection(buffer, 'Actions Completed', logLines);
         break;
       case 'Housing application support note':
         _addNoteSection(buffer, 'Housing Goal / Current Position', [
@@ -2401,7 +2745,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         ]);
         _addNoteSection(buffer, 'Agencies / Programmes', referrals);
         _addNoteSection(buffer, 'Actions Completed', logLines);
-        _addNoteSection(buffer, 'Application Follow-Up', openSteps.take(6));
         break;
       case 'Referral and next-steps note':
         _addNoteSection(buffer, 'Reason Support Is Needed', [
@@ -2415,7 +2758,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         _addNoteSection(buffer, 'Selected Services / Programmes', referrals);
         _addNoteSection(buffer, 'Information / Evidence Shared', documents);
         _addNoteSection(buffer, 'Contact / Actions Taken', logLines);
-        _addNoteSection(buffer, 'Agreed Next Steps', openSteps.take(6));
         break;
       default:
         _addNoteSection(buffer, 'Presenting Situation', presentingNeeds);
@@ -2440,13 +2782,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         if (keyActions.isNotEmpty && logLines.isEmpty) {
           _addNoteSection(buffer, 'Practical Actions Identified', keyActions);
         }
-        _addNoteSection(buffer, 'Still To Check', openSteps.take(6));
         break;
     }
 
     _addNoteSection(buffer, 'Contacts / Communication', contactActions);
     _addNoteSection(buffer, 'Planned Follow-Up', followUpActions);
-    _addNoteSection(buffer, 'Section Date Stamps', _sectionDateStampLines());
     _addNoteSection(buffer, 'Main Notes', [mainNotes]);
     return buffer.toString().trim();
   }
@@ -2458,12 +2798,61 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             completedAtByFocus[item.focus] != null)
           [
             item.label,
-            if (updatedAtByFocus[item.focus] case final updated?)
-              'updated ${_dateTime(updated)}',
-            if (completedAtByFocus[item.focus] case final completed?)
-              'completed ${_dateTime(completed)}',
+            if (completedAtByFocus[item.focus] != null)
+              'Completed'
+            else if (updatedAtByFocus[item.focus] != null)
+              'In progress',
           ].join(' | '),
     ];
+  }
+
+  List<String> _itemDateStampLines() {
+    final keys = {...itemInProgressAt.keys, ...itemCompletedAt.keys}.toList()
+      ..sort();
+
+    return [
+      for (final key in keys)
+        if (_itemStatusLabel(key) case final label?)
+          [
+            label,
+            if (itemCompletedAt[key] != null)
+              'Completed'
+            else if (itemInProgressAt[key] != null)
+              'In progress',
+          ].join(' | '),
+    ];
+  }
+
+  String? _itemStatusLabel(String key) {
+    final separator = key.indexOf('::');
+    if (separator <= 0 || separator == key.length - 2) return null;
+
+    final focus = _focusFromName(key.substring(0, separator));
+    final item = key.substring(separator + 2);
+    if (focus == null || item.isEmpty) return null;
+
+    return '${_focusLabel(focus)}: $item';
+  }
+
+  List<String> _sectionOutcomeLines() {
+    return _CaseworkFocus.values
+        .where((focus) => focus != _CaseworkFocus.file)
+        .map(_sectionOutcomeLine)
+        .whereType<String>()
+        .toList();
+  }
+
+  String? _sectionOutcomeLine(_CaseworkFocus focus) {
+    final parts = [
+      for (final field in _outcomeFields)
+        if (_outcomeValue(focus, field.key).trim() case final value
+            when value.isNotEmpty)
+          '${field.noteLabel}: $value',
+    ];
+
+    if (parts.isEmpty) return null;
+
+    return '${_focusLabel(focus)} | ${parts.join(' | ')}';
   }
 
   void _addNoteSection(
@@ -3951,7 +4340,7 @@ class _SectionStatusActions extends StatelessWidget {
             _FocusStatusButton(
               key: ValueKey('casework-${focus.name}-updated'),
               label: label,
-              status: 'updated',
+              status: 'in progress',
               icon: Icons.update_rounded,
               color: _caseworkUpdated,
               active: updated,
@@ -3970,10 +4359,7 @@ class _SectionStatusActions extends StatelessWidget {
         ),
         if (updatedAt != null || completedAt != null)
           Text(
-            [
-              if (updatedAt != null) 'Updated ${_shortStamp(updatedAt!)}',
-              if (completedAt != null) 'Completed ${_shortStamp(completedAt!)}',
-            ].join(' | '),
+            completedAt != null ? 'Completed' : 'In progress',
             key: ValueKey('casework-${focus.name}-date-stamp'),
             textAlign: TextAlign.end,
             style: const TextStyle(
@@ -3984,27 +4370,6 @@ class _SectionStatusActions extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  String _shortStamp(DateTime value) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '${value.day} ${months[value.month - 1]} ${value.year} '
-        '$hour:$minute';
   }
 }
 
@@ -4095,11 +4460,19 @@ class _ChipPicker extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final List<String> options;
   final Set<String> selected;
   final void Function(String item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -4112,31 +4485,278 @@ class _ChipPicker extends StatelessWidget {
             builder: (context) {
               final isSelected = selected.contains(option);
 
-              return FilterChip(
-                label: Text(option),
+              return _SelectableStatusPill(
+                label: option,
                 selected: isSelected,
+                inProgressAt: inProgressAtFor?.call(option),
+                completedAt: completedAtFor?.call(option),
                 onSelected: (value) => onChanged(option, value),
-                visualDensity: VisualDensity.compact,
-                backgroundColor: _caseworkInkSoft,
-                selectedColor: _caseworkSelected,
-                checkmarkColor: _caseworkBlue,
-                labelStyle: TextStyle(
-                  color: _caseworkInk,
-                  fontWeight: FontWeight.w800,
-                ),
-                side: BorderSide(
-                  color: isSelected ? _caseworkBlue : _caseworkLine,
-                ),
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
+                onInProgressToggle: onInProgressToggle == null
+                    ? null
+                    : () => onInProgressToggle!(option),
+                onCompletedToggle: onCompletedToggle == null
+                    ? null
+                    : () => onCompletedToggle!(option),
               );
             },
           ),
         ],
       ],
+    );
+  }
+}
+
+class _SectionOutcomeCard extends StatelessWidget {
+  const _SectionOutcomeCard({
+    required this.id,
+    required this.title,
+    required this.values,
+    required this.onChanged,
+  });
+
+  final String id;
+  final String title;
+  final Map<String, String> values;
+  final void Function(String field, String value) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopCard(
+      title: '$title outcome',
+      icon: Icons.task_alt_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < _outcomeFields.length; index++) ...[
+            _OutcomeTextField(
+              id: id,
+              field: _outcomeFields[index],
+              value: values[_outcomeFields[index].key] ?? '',
+              onChanged: (value) => onChanged(_outcomeFields[index].key, value),
+            ),
+            if (index != _outcomeFields.length - 1) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OutcomeTextField extends StatefulWidget {
+  const _OutcomeTextField({
+    required this.id,
+    required this.field,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String id;
+  final _OutcomeFieldSpec field;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_OutcomeTextField> createState() => _OutcomeTextFieldState();
+}
+
+class _OutcomeTextFieldState extends State<_OutcomeTextField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _OutcomeTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: ValueKey('casework-outcome-${widget.id}-${widget.field.key}'),
+      controller: _controller,
+      minLines: 1,
+      maxLines: 2,
+      onChanged: widget.onChanged,
+      style: const TextStyle(color: _caseworkInk, fontSize: 13),
+      decoration: InputDecoration(
+        labelText: widget.field.label,
+        hintText: widget.field.hint,
+        isDense: true,
+        filled: true,
+        fillColor: _caseworkPanel,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+}
+
+class _PhraseChipWrap extends StatelessWidget {
+  const _PhraseChipWrap({required this.phrases, required this.onSelected});
+
+  final List<String> phrases;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final phrase in phrases)
+          ActionChip(
+            key: ValueKey('casework-phrase-$phrase'),
+            avatar: const Icon(Icons.add_comment_outlined, size: 15),
+            label: Text(phrase),
+            onPressed: () => onSelected(phrase),
+            visualDensity: VisualDensity.compact,
+            backgroundColor: _caseworkInkSoft,
+            side: const BorderSide(color: _caseworkLine),
+            labelStyle: const TextStyle(
+              color: _caseworkInk,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SelectableStatusPill extends StatelessWidget {
+  const _SelectableStatusPill({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    this.inProgressAt,
+    this.completedAt,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
+  });
+
+  final String label;
+  final bool selected;
+  final DateTime? inProgressAt;
+  final DateTime? completedAt;
+  final ValueChanged<bool> onSelected;
+  final VoidCallback? onInProgressToggle;
+  final VoidCallback? onCompletedToggle;
+
+  bool get _inProgress => inProgressAt != null && completedAt == null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? _caseworkSelected : _caseworkInkSoft,
+      shape: StadiumBorder(
+        side: BorderSide(color: selected ? _caseworkBlue : _caseworkLine),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => onSelected(!selected),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _SelectionBoxIcon(selected: selected),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _caseworkInk,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+              if (onInProgressToggle != null || onCompletedToggle != null) ...[
+                const SizedBox(width: 6),
+                _ItemStatusButton(
+                  tooltip: 'Set $label in progress',
+                  icon: Icons.update_rounded,
+                  color: _caseworkUpdated,
+                  active: _inProgress,
+                  onPressed: onInProgressToggle,
+                ),
+                _ItemStatusButton(
+                  tooltip: 'Set $label completed',
+                  icon: Icons.check_circle_rounded,
+                  color: _caseworkCompleted,
+                  active: completedAt != null,
+                  onPressed: onCompletedToggle,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectionBoxIcon extends StatelessWidget {
+  const _SelectionBoxIcon({required this.selected, this.size = 17});
+
+  final bool selected;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      selected ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+      size: size,
+      color: selected ? _caseworkCompleted : _caseworkMuted,
+    );
+  }
+}
+
+class _ItemStatusButton extends StatelessWidget {
+  const _ItemStatusButton({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.active,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final bool active;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+      padding: EdgeInsets.zero,
+      icon: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: active ? color.withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: active ? color : _caseworkLine),
+        ),
+        child: Icon(icon, size: 13, color: active ? color : _caseworkMuted),
+      ),
     );
   }
 }
@@ -4244,11 +4864,19 @@ class _ReadinessGrid extends StatelessWidget {
     required this.items,
     required this.selected,
     required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final List<_ReadinessItem> items;
   final Set<String> selected;
   final void Function(_ReadinessItem item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -4277,7 +4905,15 @@ class _ReadinessGrid extends StatelessWidget {
               _ReadinessTile(
                 item: item,
                 selected: selected.contains(item.title),
+                inProgressAt: inProgressAtFor?.call(item.title),
+                completedAt: completedAtFor?.call(item.title),
                 onChanged: (value) => onChanged(item, value),
+                onInProgressToggle: onInProgressToggle == null
+                    ? null
+                    : () => onInProgressToggle!(item.title),
+                onCompletedToggle: onCompletedToggle == null
+                    ? null
+                    : () => onCompletedToggle!(item.title),
               ),
           ],
         );
@@ -4291,11 +4927,21 @@ class _ReadinessTile extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.onChanged,
+    this.inProgressAt,
+    this.completedAt,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final _ReadinessItem item;
   final bool selected;
+  final DateTime? inProgressAt;
+  final DateTime? completedAt;
   final ValueChanged<bool> onChanged;
+  final VoidCallback? onInProgressToggle;
+  final VoidCallback? onCompletedToggle;
+
+  bool get _inProgress => inProgressAt != null && completedAt == null;
 
   @override
   Widget build(BuildContext context) {
@@ -4330,6 +4976,20 @@ class _ReadinessTile extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                ),
+                _ItemStatusButton(
+                  tooltip: 'Set ${item.title} in progress',
+                  icon: Icons.update_rounded,
+                  color: _caseworkUpdated,
+                  active: _inProgress,
+                  onPressed: onInProgressToggle,
+                ),
+                _ItemStatusButton(
+                  tooltip: 'Set ${item.title} completed',
+                  icon: Icons.check_circle_rounded,
+                  color: _caseworkCompleted,
+                  active: completedAt != null,
+                  onPressed: onCompletedToggle,
                 ),
               ],
             ),
@@ -4673,24 +5333,29 @@ class _ReferralProgrammePicker extends StatelessWidget {
           runSpacing: 6,
           children: [
             for (final programme in programmes)
-              FilterChip(
-                label: Text(programme),
-                selected: selected.contains(programme),
-                onSelected: (value) => onChanged(programme, value),
-                visualDensity: VisualDensity.compact,
-                backgroundColor: _caseworkInkSoft,
-                selectedColor: _caseworkSelected,
-                checkmarkColor: _caseworkBlue,
-                side: BorderSide(
-                  color: selected.contains(programme)
-                      ? _caseworkBlue
-                      : _caseworkLine,
-                ),
-                labelStyle: const TextStyle(
-                  color: _caseworkInk,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
+              Builder(
+                builder: (context) {
+                  final isSelected = selected.contains(programme);
+
+                  return FilterChip(
+                    avatar: _SelectionBoxIcon(selected: isSelected, size: 15),
+                    label: Text(programme),
+                    selected: isSelected,
+                    showCheckmark: false,
+                    onSelected: (value) => onChanged(programme, value),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: _caseworkInkSoft,
+                    selectedColor: _caseworkSelected,
+                    side: BorderSide(
+                      color: isSelected ? _caseworkBlue : _caseworkLine,
+                    ),
+                    labelStyle: const TextStyle(
+                      color: _caseworkInk,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  );
+                },
               ),
           ],
         ),
@@ -4855,11 +5520,19 @@ class _ChecklistGroup extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final List<String> options;
   final Set<String> selected;
   final void Function(String item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -4869,7 +5542,53 @@ class _ChecklistGroup extends StatelessWidget {
           _ChecklistTile(
             label: option,
             selected: selected.contains(option),
+            inProgressAt: inProgressAtFor?.call(option),
+            completedAt: completedAtFor?.call(option),
             onChanged: (value) => onChanged(option, value),
+            onInProgressToggle: onInProgressToggle == null
+                ? null
+                : () => onInProgressToggle!(option),
+            onCompletedToggle: onCompletedToggle == null
+                ? null
+                : () => onCompletedToggle!(option),
+          ),
+      ],
+    );
+  }
+}
+
+class _ScopeGroupList extends StatelessWidget {
+  const _ScopeGroupList({
+    required this.groups,
+    required this.selected,
+    required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
+  });
+
+  final List<_ScopeGroup> groups;
+  final Set<String> selected;
+  final void Function(String item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final group in groups)
+          _ScopeGroupCard(
+            group: group,
+            selected: selected,
+            onChanged: onChanged,
+            inProgressAtFor: inProgressAtFor,
+            completedAtFor: completedAtFor,
+            onInProgressToggle: onInProgressToggle,
+            onCompletedToggle: onCompletedToggle,
           ),
       ],
     );
@@ -4881,11 +5600,19 @@ class _ScopeGroupCard extends StatelessWidget {
     required this.group,
     required this.selected,
     required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final _ScopeGroup group;
   final Set<String> selected;
   final void Function(String item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -4946,10 +5673,18 @@ class _ScopeGroupCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           for (final option in group.options)
-            _ChecklistTile(
+            _ScopeCheckboxTile(
               label: option,
               selected: selected.contains(option),
+              inProgressAt: inProgressAtFor?.call(option),
+              completedAt: completedAtFor?.call(option),
               onChanged: (value) => onChanged(option, value),
+              onInProgressToggle: onInProgressToggle == null
+                  ? null
+                  : () => onInProgressToggle!(option),
+              onCompletedToggle: onCompletedToggle == null
+                  ? null
+                  : () => onCompletedToggle!(option),
             ),
         ],
       ),
@@ -4958,10 +5693,21 @@ class _ScopeGroupCard extends StatelessWidget {
 }
 
 class _SupportNeedsGrid extends StatelessWidget {
-  const _SupportNeedsGrid({required this.selected, required this.onChanged});
+  const _SupportNeedsGrid({
+    required this.selected,
+    required this.onChanged,
+    this.inProgressAtFor,
+    this.completedAtFor,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
+  });
 
   final Set<String> selected;
   final void Function(String item, bool selected) onChanged;
+  final DateTime? Function(String item)? inProgressAtFor;
+  final DateTime? Function(String item)? completedAtFor;
+  final ValueChanged<String>? onInProgressToggle;
+  final ValueChanged<String>? onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -4983,6 +5729,10 @@ class _SupportNeedsGrid extends StatelessWidget {
                   group: group,
                   selected: selected,
                   onChanged: onChanged,
+                  inProgressAtFor: inProgressAtFor,
+                  completedAtFor: completedAtFor,
+                  onInProgressToggle: onInProgressToggle,
+                  onCompletedToggle: onCompletedToggle,
                 ),
               ),
           ],
@@ -5035,11 +5785,21 @@ class _ChecklistTile extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onChanged,
+    this.inProgressAt,
+    this.completedAt,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
   });
 
   final String label;
   final bool selected;
+  final DateTime? inProgressAt;
+  final DateTime? completedAt;
   final ValueChanged<bool> onChanged;
+  final VoidCallback? onInProgressToggle;
+  final VoidCallback? onCompletedToggle;
+
+  bool get _inProgress => inProgressAt != null && completedAt == null;
 
   @override
   Widget build(BuildContext context) {
@@ -5055,15 +5815,121 @@ class _ChecklistTile extends StatelessWidget {
       child: CheckboxListTile(
         value: selected,
         onChanged: (value) => onChanged(value ?? false),
-        title: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            _ItemStatusButton(
+              tooltip: 'Set $label in progress',
+              icon: Icons.update_rounded,
+              color: _caseworkUpdated,
+              active: _inProgress,
+              onPressed: onInProgressToggle,
+            ),
+            _ItemStatusButton(
+              tooltip: 'Set $label completed',
+              icon: Icons.check_circle_rounded,
+              color: _caseworkCompleted,
+              active: completedAt != null,
+              onPressed: onCompletedToggle,
+            ),
+          ],
         ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      ),
+    );
+  }
+}
+
+class _ScopeCheckboxTile extends StatelessWidget {
+  const _ScopeCheckboxTile({
+    required this.label,
+    required this.selected,
+    required this.onChanged,
+    this.inProgressAt,
+    this.completedAt,
+    this.onInProgressToggle,
+    this.onCompletedToggle,
+  });
+
+  final String label;
+  final bool selected;
+  final DateTime? inProgressAt;
+  final DateTime? completedAt;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback? onInProgressToggle;
+  final VoidCallback? onCompletedToggle;
+
+  bool get _inProgress => inProgressAt != null && completedAt == null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      checked: selected,
+      label: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => onChanged(!selected),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? _caseworkSelected : _caseworkPanel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? _caseworkBlue : _caseworkLine,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: selected,
+                onChanged: (value) => onChanged(value ?? false),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                activeColor: _caseworkBlue,
+                checkColor: Colors.white,
+                side: const BorderSide(color: _caseworkMuted, width: 1.4),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: _caseworkInk,
+                    fontWeight: FontWeight.w900,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              _ItemStatusButton(
+                tooltip: 'Set $label in progress',
+                icon: Icons.update_rounded,
+                color: _caseworkUpdated,
+                active: _inProgress,
+                onPressed: onInProgressToggle,
+              ),
+              _ItemStatusButton(
+                tooltip: 'Set $label completed',
+                icon: Icons.check_circle_rounded,
+                color: _caseworkCompleted,
+                active: completedAt != null,
+                onPressed: onCompletedToggle,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -5239,6 +6105,20 @@ class _FocusItem {
   final IconData icon;
 }
 
+class _OutcomeFieldSpec {
+  const _OutcomeFieldSpec({
+    required this.key,
+    required this.label,
+    required this.noteLabel,
+    required this.hint,
+  });
+
+  final String key;
+  final String label;
+  final String noteLabel;
+  final String hint;
+}
+
 class _ScopeGroup {
   const _ScopeGroup({
     required this.title,
@@ -5318,17 +6198,6 @@ class _CaseProfileRecord {
   final Map<String, Object?> data;
 }
 
-const _housingStatusOptions = [
-  'Sleeping rough / car / unsafe',
-  'Temporary / couch-surfing',
-  'Emergency housing / motel',
-  'Asked to leave current place',
-  'Private rental at risk',
-  'On Public Housing Register',
-  'Trying to secure private rental',
-  'Housed but unstable',
-];
-
 const _evidenceBarrierOptions = [
   'No photo ID',
   'No fixed address',
@@ -5405,6 +6274,50 @@ const _referralFilterOptions = [
   'Social connection',
   'Rainbow / identity',
   'Migrant / language',
+];
+
+const _outcomeFields = [
+  _OutcomeFieldSpec(
+    key: 'requested',
+    label: 'What was requested',
+    noteLabel: 'Requested',
+    hint: 'e.g. EH assessment, referral, document, appointment',
+  ),
+  _OutcomeFieldSpec(
+    key: 'happened',
+    label: 'What happened',
+    noteLabel: 'What happened',
+    hint: 'Short factual summary of the contact or action',
+  ),
+  _OutcomeFieldSpec(
+    key: 'outcome',
+    label: 'Outcome',
+    noteLabel: 'Outcome',
+    hint: 'Approved, declined, pending, booked, referred, resolved',
+  ),
+  _OutcomeFieldSpec(
+    key: 'barrier',
+    label: 'Barrier',
+    noteLabel: 'Barrier',
+    hint: 'What blocked progress or needs follow-up',
+  ),
+  _OutcomeFieldSpec(
+    key: 'nextStep',
+    label: 'Manual next step',
+    noteLabel: 'Next step',
+    hint: 'Only write this if you want it in the note',
+  ),
+];
+
+const _notePhrases = [
+  'Person reported',
+  'Worker supported with',
+  'Consent was confirmed for',
+  'Referral discussed and consent given',
+  'Person declined at this time',
+  'Outcome pending from',
+  'Barrier identified',
+  'Follow-up agreed for',
 ];
 
 const _essentialSupportOptions = [
