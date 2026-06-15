@@ -30,6 +30,8 @@ enum _CaseworkFocus {
   accommodation,
   probation,
   referrals,
+  contacts,
+  followUp,
   file,
 }
 
@@ -71,8 +73,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   final supportNeeds = <String>{};
   final referralFilters = <String>{};
   final roadblocks = <String>{};
+  final contactActions = <String>{};
+  final followUpActions = <String>{};
   final updatedFocuses = <_CaseworkFocus>{};
   final completedFocuses = <_CaseworkFocus>{};
+  final updatedAtByFocus = <_CaseworkFocus, DateTime>{};
+  final completedAtByFocus = <_CaseworkFocus, DateTime>{};
   final actionLog = <_ActionLogEntry>[];
   final requestHistory = <_RequestHistoryEntry>[];
   final profiles = <String, _CaseProfileRecord>{};
@@ -194,6 +200,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                       supportNeeds.clear();
                       referralFilters.clear();
                       roadblocks.clear();
+                      contactActions.clear();
+                      followUpActions.clear();
+                      updatedFocuses.clear();
+                      completedFocuses.clear();
+                      updatedAtByFocus.clear();
+                      completedAtByFocus.clear();
                       actionLog.clear();
                       additionalContextController.clear();
                     });
@@ -354,6 +366,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         return _desktopDiarySection();
       case _CaseworkFocus.referrals:
         return _desktopReferralDirectory();
+      case _CaseworkFocus.contacts:
+        return _desktopContactsSection();
+      case _CaseworkFocus.followUp:
+        return _desktopFollowUpSection();
       case _CaseworkFocus.file:
         return _focusedSection(_buildNoteFile());
     }
@@ -1010,6 +1026,64 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     );
   }
 
+  Widget _desktopContactsSection() {
+    return _DesktopPage(
+      title: 'Contacts + Communication',
+      subtitle:
+          'Track who was contacted, how contact occurred, and whether the client was updated.',
+      child: _DesktopCard(
+        title: 'Contact record',
+        icon: Icons.contact_phone_outlined,
+        trailing: _sectionStatusActions(
+          _CaseworkFocus.contacts,
+          'Contact record',
+        ),
+        child: _ChipPicker(
+          options: _contactActionOptions,
+          selected: contactActions,
+          onChanged: (item, selected) =>
+              _toggleLogged(contactActions, item, selected, 'Contact'),
+        ),
+      ),
+    );
+  }
+
+  Widget _desktopFollowUpSection() {
+    return _DesktopPage(
+      title: 'Follow-up + Deadlines',
+      subtitle:
+          'Record the next check-in, due dates, reminders, and escalation points.',
+      child: _DesktopCard(
+        title: 'Follow-up plan',
+        icon: Icons.event_repeat_outlined,
+        trailing: _sectionStatusActions(
+          _CaseworkFocus.followUp,
+          'Follow-up plan',
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _DesktopTextField(
+              controller: deadlineController,
+              label: 'Next deadline / check-in',
+              hint: 'Date, time, appointment, or response deadline',
+              onChanged: (_) {
+                setState(() {});
+                unawaited(_saveDraft());
+              },
+            ),
+            _ChipPicker(
+              options: _followUpActionOptions,
+              selected: followUpActions,
+              onChanged: (item, selected) =>
+                  _toggleLogged(followUpActions, item, selected, 'Follow-up'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _focusedSection(String noteFile) {
     switch (focus) {
       case _CaseworkFocus.walkIn:
@@ -1030,6 +1104,10 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         return _probationSection();
       case _CaseworkFocus.referrals:
         return _referralsSection();
+      case _CaseworkFocus.contacts:
+        return _contactsSection();
+      case _CaseworkFocus.followUp:
+        return _followUpSection();
       case _CaseworkFocus.file:
         return _fileSection(noteFile);
     }
@@ -1438,6 +1516,55 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             onPressed: () => _copyNote(noteFile),
             icon: const Icon(Icons.copy_outlined),
             label: const Text('Copy Note File'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contactsSection() {
+    return _DesktopCard(
+      title: 'Contact record',
+      icon: Icons.contact_phone_outlined,
+      trailing: _sectionStatusActions(
+        _CaseworkFocus.contacts,
+        'Contact record',
+      ),
+      child: _ChecklistGroup(
+        options: _contactActionOptions,
+        selected: contactActions,
+        onChanged: (item, selected) =>
+            _toggleLogged(contactActions, item, selected, 'Contact'),
+      ),
+    );
+  }
+
+  Widget _followUpSection() {
+    return _DesktopCard(
+      title: 'Follow-up plan',
+      icon: Icons.event_repeat_outlined,
+      trailing: _sectionStatusActions(
+        _CaseworkFocus.followUp,
+        'Follow-up plan',
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TextInput(
+            controller: deadlineController,
+            label: 'Next deadline / check-in',
+            hint: 'Date, time, appointment, or response deadline',
+            onChanged: (_) {
+              setState(() {});
+              unawaited(_saveDraft());
+            },
+          ),
+          const SizedBox(height: 12),
+          _ChecklistGroup(
+            options: _followUpActionOptions,
+            selected: followUpActions,
+            onChanged: (item, selected) =>
+                _toggleLogged(followUpActions, item, selected, 'Follow-up'),
           ),
         ],
       ),
@@ -1916,8 +2043,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       'supportNeeds': supportNeeds.toList(),
       'referralFilters': referralFilters.toList(),
       'roadblocks': roadblocks.toList(),
+      'contactActions': contactActions.toList(),
+      'followUpActions': followUpActions.toList(),
       'updatedFocuses': updatedFocuses.map((focus) => focus.name).toList(),
       'completedFocuses': completedFocuses.map((focus) => focus.name).toList(),
+      'updatedAtByFocus': {
+        for (final entry in updatedAtByFocus.entries)
+          entry.key.name: entry.value.toIso8601String(),
+      },
+      'completedAtByFocus': {
+        for (final entry in completedAtByFocus.entries)
+          entry.key.name: entry.value.toIso8601String(),
+      },
       'actionLog': [
         for (final entry in actionLog)
           {
@@ -1966,8 +2103,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     _replaceSet(supportNeeds, data['supportNeeds']);
     _replaceSet(referralFilters, data['referralFilters']);
     _replaceSet(roadblocks, data['roadblocks']);
+    _replaceSet(contactActions, data['contactActions']);
+    _replaceSet(followUpActions, data['followUpActions']);
     _replaceFocusSet(updatedFocuses, data['updatedFocuses']);
     _replaceFocusSet(completedFocuses, data['completedFocuses']);
+    _replaceFocusDateMap(updatedAtByFocus, data['updatedAtByFocus']);
+    _replaceFocusDateMap(completedAtByFocus, data['completedAtByFocus']);
     actionLog
       ..clear()
       ..addAll(_readActionLog(data['actionLog']));
@@ -2003,8 +2144,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     supportNeeds.clear();
     referralFilters.clear();
     roadblocks.clear();
+    contactActions.clear();
+    followUpActions.clear();
     updatedFocuses.clear();
     completedFocuses.clear();
+    updatedAtByFocus.clear();
+    completedAtByFocus.clear();
     actionLog.clear();
     requestHistory.clear();
   }
@@ -2023,6 +2168,22 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       );
   }
 
+  void _replaceFocusDateMap(
+    Map<_CaseworkFocus, DateTime> target,
+    Object? value,
+  ) {
+    target.clear();
+    if (value is! Map<String, Object?>) return;
+
+    for (final entry in value.entries) {
+      final focus = _focusFromName(entry.key);
+      final date = DateTime.tryParse(entry.value as String? ?? '');
+      if (focus != null && date != null) {
+        target[focus] = date;
+      }
+    }
+  }
+
   _CaseworkFocus? _focusFromName(String name) {
     for (final focus in _CaseworkFocus.values) {
       if (focus.name == name) return focus;
@@ -2032,11 +2193,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
 
   void _toggleUpdated(Iterable<_CaseworkFocus> focuses) {
     final values = focuses.toSet();
+    final now = DateTime.now();
     setState(() {
       if (values.every(updatedFocuses.contains)) {
         updatedFocuses.removeAll(values);
+        for (final focus in values) {
+          updatedAtByFocus.remove(focus);
+        }
       } else {
         updatedFocuses.addAll(values);
+        for (final focus in values) {
+          updatedAtByFocus[focus] = now;
+        }
       }
     });
     unawaited(_saveDraft());
@@ -2044,12 +2212,20 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
 
   void _toggleCompleted(Iterable<_CaseworkFocus> focuses) {
     final values = focuses.toSet();
+    final now = DateTime.now();
     setState(() {
       if (values.every(completedFocuses.contains)) {
         completedFocuses.removeAll(values);
+        for (final focus in values) {
+          completedAtByFocus.remove(focus);
+        }
       } else {
         completedFocuses.addAll(values);
         updatedFocuses.addAll(values);
+        for (final focus in values) {
+          completedAtByFocus[focus] = now;
+          updatedAtByFocus[focus] = now;
+        }
       }
     });
     unawaited(_saveDraft());
@@ -2061,6 +2237,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       label: label,
       updated: updatedFocuses.contains(focus),
       completed: completedFocuses.contains(focus),
+      updatedAt: updatedAtByFocus[focus],
+      completedAt: completedAtByFocus[focus],
       onUpdatedToggle: () => _toggleUpdated([focus]),
       onCompletedToggle: () => _toggleCompleted([focus]),
     );
@@ -2119,6 +2297,8 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       ...housingApplications,
       ...accommodationOptions,
       ...probationActions,
+      ...contactActions,
+      ...followUpActions,
     ];
     final housingLines = [
       if (socialHousingRating != 'Not checked')
@@ -2234,8 +2414,26 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         break;
     }
 
+    _addNoteSection(buffer, 'Contacts / Communication', contactActions);
+    _addNoteSection(buffer, 'Planned Follow-Up', followUpActions);
+    _addNoteSection(buffer, 'Section Date Stamps', _sectionDateStampLines());
     _addNoteSection(buffer, 'Main Notes', [mainNotes]);
     return buffer.toString().trim();
+  }
+
+  List<String> _sectionDateStampLines() {
+    return [
+      for (final item in _focusItems)
+        if (updatedAtByFocus[item.focus] != null ||
+            completedAtByFocus[item.focus] != null)
+          [
+            item.label,
+            if (updatedAtByFocus[item.focus] case final updated?)
+              'updated ${_dateTime(updated)}',
+            if (completedAtByFocus[item.focus] case final completed?)
+              'completed ${_dateTime(completed)}',
+          ].join(' | '),
+    ];
   }
 
   void _addNoteSection(
@@ -3638,29 +3836,49 @@ class _DesktopCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: _caseworkSelected,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 18, color: _caseworkBlue),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: _caseworkInk,
-                    fontWeight: FontWeight.w900,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stackStatus =
+                  trailing != null && constraints.maxWidth < 560;
+              final heading = Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: _caseworkSelected,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, size: 18, color: _caseworkBlue),
                   ),
-                ),
-              ),
-              if (trailing != null) ...[const SizedBox(width: 6), trailing!],
-            ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: _caseworkInk,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (trailing != null && !stackStatus) ...[
+                    const SizedBox(width: 6),
+                    trailing!,
+                  ],
+                ],
+              );
+
+              if (!stackStatus) return heading;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  heading,
+                  const SizedBox(height: 6),
+                  Align(alignment: Alignment.centerRight, child: trailing),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           child,
@@ -3676,6 +3894,8 @@ class _SectionStatusActions extends StatelessWidget {
     required this.label,
     required this.updated,
     required this.completed,
+    required this.updatedAt,
+    required this.completedAt,
     required this.onUpdatedToggle,
     required this.onCompletedToggle,
   });
@@ -3684,34 +3904,77 @@ class _SectionStatusActions extends StatelessWidget {
   final String label;
   final bool updated;
   final bool completed;
+  final DateTime? updatedAt;
+  final DateTime? completedAt;
   final VoidCallback onUpdatedToggle;
   final VoidCallback onCompletedToggle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _FocusStatusButton(
-          key: ValueKey('casework-${focus.name}-updated'),
-          label: label,
-          status: 'updated',
-          icon: Icons.update_rounded,
-          color: _caseworkUpdated,
-          active: updated,
-          onPressed: onUpdatedToggle,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _FocusStatusButton(
+              key: ValueKey('casework-${focus.name}-updated'),
+              label: label,
+              status: 'updated',
+              icon: Icons.update_rounded,
+              color: _caseworkUpdated,
+              active: updated,
+              onPressed: onUpdatedToggle,
+            ),
+            _FocusStatusButton(
+              key: ValueKey('casework-${focus.name}-completed'),
+              label: label,
+              status: 'completed',
+              icon: Icons.check_circle_rounded,
+              color: _caseworkCompleted,
+              active: completed,
+              onPressed: onCompletedToggle,
+            ),
+          ],
         ),
-        _FocusStatusButton(
-          key: ValueKey('casework-${focus.name}-completed'),
-          label: label,
-          status: 'completed',
-          icon: Icons.check_circle_rounded,
-          color: _caseworkCompleted,
-          active: completed,
-          onPressed: onCompletedToggle,
-        ),
+        if (updatedAt != null || completedAt != null)
+          Text(
+            [
+              if (updatedAt != null) 'Updated ${_shortStamp(updatedAt!)}',
+              if (completedAt != null) 'Completed ${_shortStamp(completedAt!)}',
+            ].join(' | '),
+            key: ValueKey('casework-${focus.name}-date-stamp'),
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              color: _caseworkMuted,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
       ],
     );
+  }
+
+  String _shortStamp(DateTime value) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '${value.day} ${months[value.month - 1]} ${value.year} '
+        '$hour:$minute';
   }
 }
 
@@ -5412,7 +5675,31 @@ const _focusItems = [
     'Referrals',
     Icons.support_agent_outlined,
   ),
+  _FocusItem(_CaseworkFocus.contacts, 'Contacts', Icons.contact_phone_outlined),
+  _FocusItem(_CaseworkFocus.followUp, 'Follow-up', Icons.event_repeat_outlined),
   _FocusItem(_CaseworkFocus.file, 'Build note', Icons.description_outlined),
+];
+
+const _contactActionOptions = [
+  'Client contact method and availability confirmed',
+  'MSD / Work and Income contacted',
+  'CMM housing navigation contacted',
+  'Probation / Corrections contacted',
+  'Housing provider or landlord contacted',
+  'Whanau / natural support contacted with consent',
+  'Referral agency contacted',
+  'Contact outcome recorded and client updated',
+];
+
+const _followUpActionOptions = [
+  'Next client check-in confirmed',
+  'Agency follow-up date confirmed',
+  'Appointment booked',
+  'Documents due date recorded',
+  'Referral response date recorded',
+  'Housing search / re-grant review scheduled',
+  'Transport or reminder arranged',
+  'Escalation date set if no response',
 ];
 
 const _quickLogActions = [

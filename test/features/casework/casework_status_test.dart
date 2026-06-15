@@ -79,6 +79,18 @@ void main() {
 
     expect(caseData['updatedFocuses'], contains('walkIn'));
     expect(caseData['completedFocuses'], contains('walkIn'));
+    expect(
+      caseData['updatedAtByFocus'] as Map<String, dynamic>,
+      contains('walkIn'),
+    );
+    expect(
+      caseData['completedAtByFocus'] as Map<String, dynamic>,
+      contains('walkIn'),
+    );
+    expect(
+      find.byKey(const ValueKey('casework-walkIn-date-stamp')),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -119,6 +131,8 @@ void main() {
       'accommodation': 'Accommodation Options',
       'probation': 'Probation / Bail Address',
       'referrals': 'Quick filters',
+      'contacts': 'Contact record',
+      'followUp': 'Follow-up plan',
       'file': 'Live Note Output',
     };
 
@@ -158,6 +172,10 @@ void main() {
 
     expect(find.byTooltip('Clear Housing Status updated'), findsOneWidget);
     expect(find.byTooltip('Clear Housing Status completed'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('casework-situation-date-stamp')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('casework-tab-walkIn')));
     await tester.pumpAndSettle();
@@ -175,6 +193,22 @@ void main() {
     expect(caseData['updatedFocuses'], contains('situation'));
     expect(caseData['completedFocuses'], contains('situation'));
     expect(caseData['completedFocuses'], isNot(contains('walkIn')));
+    expect(
+      caseData['completedAtByFocus'] as Map<String, dynamic>,
+      contains('situation'),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-contacts')));
+    await tester.pumpAndSettle();
+    expect(find.text('MSD / Work and Income contacted'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-followUp')));
+    await tester.pumpAndSettle();
+    expect(find.text('Next client check-in confirmed'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-file')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Section Date Stamps'), findsAtLeastNWidgets(1));
     expect(tester.takeException(), isNull);
   });
 }
