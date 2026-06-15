@@ -827,7 +827,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 ),
                 if (filtersSelected) ...[
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         '${filtered.length} services shown',
@@ -836,7 +840,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const Spacer(),
                       TextButton.icon(
                         onPressed: () {
                           setState(() {
@@ -912,27 +915,20 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               _CaseworkFocus.safety,
               'Needs / situation',
             ),
-            child: _ChipPicker(
-              options: _socialSupportOptions,
+            child: _SupportNeedsGrid(
               selected: supportNeeds,
               onChanged: (item, selected) =>
                   _toggleLogged(supportNeeds, item, selected, 'Social support'),
             ),
           ),
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: () {
-                setState(() {
-                  referralFilters.addAll(supportNeeds);
-                  focus = _CaseworkFocus.referrals;
-                });
-                unawaited(_saveDraft());
-              },
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Find matching services'),
-            ),
+          _SupportPlanSummary(
+            selectedCount: supportNeeds.length,
+            onClear: () {
+              setState(supportNeeds.clear);
+              unawaited(_saveDraft());
+            },
+            onFindServices: _findServicesForSupportNeeds,
           ),
         ],
       ),
@@ -1247,6 +1243,29 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   Widget _safetySection() {
     return Column(
       children: [
+        _DesktopCard(
+          title: 'Social support needs',
+          icon: Icons.volunteer_activism_outlined,
+          trailing: _sectionStatusActions(
+            _CaseworkFocus.safety,
+            'Social support needs',
+          ),
+          child: _SupportNeedsGrid(
+            selected: supportNeeds,
+            onChanged: (item, selected) =>
+                _toggleLogged(supportNeeds, item, selected, 'Social support'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SupportPlanSummary(
+          selectedCount: supportNeeds.length,
+          onClear: () {
+            setState(supportNeeds.clear);
+            unawaited(_saveDraft());
+          },
+          onFindServices: _findServicesForSupportNeeds,
+        ),
+        const SizedBox(height: 12),
         SectionCard(
           title: 'Immediate Safety Before Agencies',
           child: _ChecklistGroup(
@@ -1272,6 +1291,14 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         ),
       ],
     );
+  }
+
+  void _findServicesForSupportNeeds() {
+    setState(() {
+      referralFilters.addAll(supportNeeds);
+      focus = _CaseworkFocus.referrals;
+    });
+    unawaited(_saveDraft());
   }
 
   Widget _documentsSection() {
@@ -1433,7 +1460,11 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
               style: TextStyle(color: _caseworkMuted),
             )
           else ...[
-            Row(
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
                   '${filtered.length} services shown',
@@ -1442,7 +1473,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const Spacer(),
                 TextButton.icon(
                   onPressed: () {
                     setState(() {
@@ -4927,6 +4957,79 @@ class _ScopeGroupCard extends StatelessWidget {
   }
 }
 
+class _SupportNeedsGrid extends StatelessWidget {
+  const _SupportNeedsGrid({required this.selected, required this.onChanged});
+
+  final Set<String> selected;
+  final void Function(String item, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 760 ? 2 : 1;
+        final width = columns == 2
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final group in _socialSupportGroups)
+              SizedBox(
+                width: width,
+                child: _ScopeGroupCard(
+                  group: group,
+                  selected: selected,
+                  onChanged: onChanged,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SupportPlanSummary extends StatelessWidget {
+  const _SupportPlanSummary({
+    required this.selectedCount,
+    required this.onClear,
+    required this.onFindServices,
+  });
+
+  final int selectedCount;
+  final VoidCallback onClear;
+  final VoidCallback onFindServices;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopCard(
+      title: 'Support plan',
+      icon: Icons.playlist_add_check_circle_outlined,
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _LightStatusPill(label: 'Needs selected', value: '$selectedCount'),
+          FilledButton.icon(
+            onPressed: selectedCount == 0 ? null : onFindServices,
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('Find matching services'),
+          ),
+          OutlinedButton.icon(
+            onPressed: selectedCount == 0 ? null : onClear,
+            icon: const Icon(Icons.clear_all_rounded),
+            label: const Text('Clear support needs'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChecklistTile extends StatelessWidget {
   const _ChecklistTile({
     required this.label,
@@ -5291,24 +5394,122 @@ const _referralFilterOptions = [
   'FV / safety',
   'Tenancy legal',
   'Kai / essentials',
+  'Health / GP',
   'Mental health',
   'Addiction',
+  'Parenting / children',
   'Youth / whanau',
   'Disability / older',
+  'Financial / debt',
+  'Employment / learning',
+  'Social connection',
+  'Rainbow / identity',
   'Migrant / language',
 ];
 
+const _essentialSupportOptions = [
+  'Kai, meals, or food parcel',
+  'Clothing, shoes, or warm bedding',
+  'Shower, hygiene, or laundry access',
+  'Phone, data, charging, or email access',
+  'Transport to appointments or accommodation',
+  'Furniture or basic household items',
+];
+
+const _healthSupportOptions = [
+  'GP or primary health support',
+  'Medication, prescription, or pharmacy support',
+  'Mental health or counselling support',
+  'Alcohol or other drug support',
+  'Disability, mobility, or access support',
+  'Older person, dementia, or carer support',
+  'Pregnancy, baby, or child health support',
+  'Sexual harm, trauma, or victim support',
+];
+
+const _whanauSupportOptions = [
+  'Parenting or childcare support',
+  'Youth mentoring or youth development',
+  'Family violence or personal safety support',
+  'Whanau contact or natural support planning',
+  'Social connection, loneliness, or community activity',
+  'Grief, bereavement, or palliative support',
+];
+
+const _moneyLegalSupportOptions = [
+  'Benefit, income, or MSD entitlement support',
+  'Budgeting, debt, or financial mentoring',
+  'ID, bank account, or document replacement',
+  'Tenancy rights or legal advice',
+  'Employment, CV, or work-readiness support',
+  'Education, literacy, digital skills, or driver learning',
+];
+
+const _cultureCommunitySupportOptions = [
+  'Whanau Ora support',
+  'Iwi or kaupapa Maori support',
+  'Migrant, refugee, settlement, or language support',
+  'Rainbow / LGBTQIA+ affirming support',
+  'Faith, cultural, or community connection',
+  '501 returnee or reintegration support',
+];
+
+const _housingDailyLivingSupportOptions = [
+  'Emergency or temporary accommodation support',
+  'Housing advocacy or navigation',
+  'Tenancy sustainment or rent arrears support',
+  'Household setup after moving',
+  'Pet, belongings, or storage support',
+  'Daily routine, appointment, or reminder support',
+];
+
+const _socialSupportGroups = [
+  _ScopeGroup(
+    title: 'Essentials + Access',
+    subtitle: 'Immediate practical needs that can block every other plan.',
+    icon: Icons.shopping_bag_outlined,
+    options: _essentialSupportOptions,
+  ),
+  _ScopeGroup(
+    title: 'Health + Wellbeing',
+    subtitle:
+        'Physical health, mental health, addiction, disability, and care.',
+    icon: Icons.health_and_safety_outlined,
+    options: _healthSupportOptions,
+  ),
+  _ScopeGroup(
+    title: 'Whanau + Relationships',
+    subtitle: 'Parenting, youth, safety, natural supports, and connection.',
+    icon: Icons.groups_2_outlined,
+    options: _whanauSupportOptions,
+  ),
+  _ScopeGroup(
+    title: 'Money + Legal + Learning',
+    subtitle: 'Income, debt, identity, tenancy rights, work, and education.',
+    icon: Icons.account_balance_outlined,
+    options: _moneyLegalSupportOptions,
+  ),
+  _ScopeGroup(
+    title: 'Culture + Community',
+    subtitle: 'Culturally safe, identity-affirming, and reintegration support.',
+    icon: Icons.diversity_3_outlined,
+    options: _cultureCommunitySupportOptions,
+  ),
+  _ScopeGroup(
+    title: 'Housing + Daily Living',
+    subtitle: 'Housing pathways and practical support to sustain the plan.',
+    icon: Icons.home_work_outlined,
+    options: _housingDailyLivingSupportOptions,
+  ),
+];
+
 const _socialSupportOptions = [
-  'Kai / meals',
-  'Whanau Ora',
-  'Youth',
-  'Iwi / kaupapa Maori',
-  'Kaumatua / disability',
-  'Housing support',
-  'Education / mahi',
-  'Mental health',
-  'Budgeting',
-  'Legal / tenancy',
+  ..._essentialSupportOptions,
+  ..._healthSupportOptions,
+  ..._whanauSupportOptions,
+  ..._moneyLegalSupportOptions,
+  ..._cultureCommunitySupportOptions,
+  ..._housingDailyLivingSupportOptions,
 ];
 
 const _referralFilterKeywords = <String, List<String>>{
@@ -5358,6 +5559,48 @@ const _referralFilterKeywords = <String, List<String>>{
     'translation',
     'esol',
   ],
+  'Health / GP': [
+    'health',
+    'medical',
+    'gp',
+    'pharmacy',
+    'prescription',
+    'palliative',
+  ],
+  'Parenting / children': [
+    'parent',
+    'parenting',
+    'child',
+    'tamariki',
+    'pepi',
+    'plunket',
+    'oranga tamariki',
+  ],
+  'Financial / debt': [
+    'budget',
+    'financial',
+    'debt',
+    'arrears',
+    'hardship',
+    'income',
+  ],
+  'Employment / learning': [
+    'employment',
+    'jobseeker',
+    'work readiness',
+    'education',
+    'literacy',
+    'digital',
+    'driver',
+  ],
+  'Social connection': [
+    'community',
+    'social connection',
+    'volunteer',
+    'support group',
+    'loneliness',
+  ],
+  'Rainbow / identity': ['lgbtq', 'rainbow', 'all genders', 'identity'],
   'Kai / meals': ['food', 'kai', 'meal', 'food parcel', 'kitchen', 'cafe'],
   'Whanau Ora': ['whanau ora', 'whanau', 'hauora'],
   'Youth': ['youth', 'child', 'tamariki', 'adolescent', 'young'],
@@ -5391,6 +5634,252 @@ const _referralFilterKeywords = <String, List<String>>{
   ],
   'Budgeting': ['budget', 'financial', 'debt', 'arrears', 'hardship'],
   'Legal / tenancy': ['legal', 'tenancy', 'rights', 'law', 'cab'],
+  'Kai, meals, or food parcel': [
+    'food',
+    'kai',
+    'meal',
+    'food parcel',
+    'kitchen',
+  ],
+  'Clothing, shoes, or warm bedding': [
+    'clothing',
+    'shoes',
+    'bedding',
+    'practical support',
+    'charitable support',
+  ],
+  'Shower, hygiene, or laundry access': [
+    'hygiene',
+    'shower',
+    'laundry',
+    'community hub',
+    'practical support',
+  ],
+  'Phone, data, charging, or email access': [
+    'digital',
+    'phone',
+    'email',
+    'community hub',
+    'practical support',
+  ],
+  'Transport to appointments or accommodation': [
+    'transport',
+    'mobility',
+    'access',
+    'practical support',
+  ],
+  'Furniture or basic household items': [
+    'household',
+    'furniture',
+    'charitable support',
+    'practical support',
+  ],
+  'GP or primary health support': ['health', 'gp', 'medical', 'clinic'],
+  'Medication, prescription, or pharmacy support': [
+    'health',
+    'medication',
+    'prescription',
+    'pharmacy',
+  ],
+  'Mental health or counselling support': [
+    'mental health',
+    'mental-health',
+    'counselling',
+    'camhs',
+    'psychiatric',
+  ],
+  'Alcohol or other drug support': [
+    'addiction',
+    'drug',
+    'alcohol',
+    'detox',
+    'opioid',
+  ],
+  'Disability, mobility, or access support': [
+    'disability',
+    'mobility',
+    'access',
+    'needs assessment',
+  ],
+  'Older person, dementia, or carer support': [
+    'older',
+    'dementia',
+    'carer',
+    'over-65',
+    'palliative',
+  ],
+  'Pregnancy, baby, or child health support': [
+    'pregnancy',
+    'baby',
+    'pepi',
+    'child health',
+    'plunket',
+  ],
+  'Sexual harm, trauma, or victim support': [
+    'sexual harm',
+    'sexual violence',
+    'trauma',
+    'victim',
+    'crisis support',
+  ],
+  'Parenting or childcare support': [
+    'parenting',
+    'parent',
+    'child',
+    'tamariki',
+    'family',
+  ],
+  'Youth mentoring or youth development': [
+    'youth',
+    'young',
+    'adolescent',
+    'mentoring',
+    'youth development',
+  ],
+  'Family violence or personal safety support': [
+    'family violence',
+    'safety',
+    'victim',
+    'refuge',
+    'protection',
+  ],
+  'Whanau contact or natural support planning': [
+    'whanau',
+    'family',
+    'advocacy',
+    'support',
+  ],
+  'Social connection, loneliness, or community activity': [
+    'social connection',
+    'community',
+    'volunteer',
+    'support group',
+    'activity',
+  ],
+  'Grief, bereavement, or palliative support': [
+    'grief',
+    'bereavement',
+    'palliative',
+    'hospice',
+  ],
+  'Benefit, income, or MSD entitlement support': [
+    'income',
+    'benefit',
+    'msd',
+    'work and income',
+    'financial',
+  ],
+  'Budgeting, debt, or financial mentoring': [
+    'budget',
+    'debt',
+    'financial',
+    'arrears',
+    'mentoring',
+  ],
+  'ID, bank account, or document replacement': [
+    'identity',
+    'document',
+    'bank',
+    'advocacy',
+    'practical support',
+  ],
+  'Tenancy rights or legal advice': [
+    'tenancy',
+    'legal',
+    'rights',
+    'community law',
+    'cab',
+  ],
+  'Employment, CV, or work-readiness support': [
+    'employment',
+    'cv',
+    'work readiness',
+    'jobseeker',
+    'workbridge',
+  ],
+  'Education, literacy, digital skills, or driver learning': [
+    'education',
+    'literacy',
+    'digital',
+    'driver',
+    'learning',
+  ],
+  'Whanau Ora support': ['whanau ora', 'whanau', 'hauora'],
+  'Iwi or kaupapa Maori support': [
+    'maori',
+    'kaupapa',
+    'iwi',
+    'rangitane',
+    'ngati rarua',
+  ],
+  'Migrant, refugee, settlement, or language support': [
+    'migrant',
+    'refugee',
+    'settlement',
+    'language',
+    'esol',
+  ],
+  'Rainbow / LGBTQIA+ affirming support': [
+    'lgbtq',
+    'rainbow',
+    'all genders',
+    'identity',
+    'affirming',
+  ],
+  'Faith, cultural, or community connection': [
+    'faith',
+    'cultural',
+    'community',
+    'iwi',
+    'social connection',
+  ],
+  '501 returnee or reintegration support': [
+    '501',
+    'returnee',
+    'reintegration',
+    'corrections',
+    'transition',
+  ],
+  'Emergency or temporary accommodation support': [
+    'emergency housing',
+    'temporary accommodation',
+    'homeless',
+    'refuge',
+    'housing',
+  ],
+  'Housing advocacy or navigation': [
+    'housing advocacy',
+    'housing navigation',
+    'cmm',
+    'housing',
+  ],
+  'Tenancy sustainment or rent arrears support': [
+    'sustaining tenancies',
+    'tenancy',
+    'rent arrears',
+    'legal',
+    'housing',
+  ],
+  'Household setup after moving': [
+    'household',
+    'housing',
+    'practical support',
+    'charitable support',
+  ],
+  'Pet, belongings, or storage support': [
+    'pet',
+    'belongings',
+    'storage',
+    'practical support',
+    'housing',
+  ],
+  'Daily routine, appointment, or reminder support': [
+    'daily living',
+    'appointment',
+    'support',
+    'community',
+    'care coordination',
+  ],
 };
 
 const _commonObjections = [

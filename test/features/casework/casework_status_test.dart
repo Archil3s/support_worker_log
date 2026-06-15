@@ -211,4 +211,88 @@ void main() {
     expect(find.textContaining('Section Date Stamps'), findsAtLeastNWidgets(1));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('social support assessment feeds matching services', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-safety')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Essentials + Access'), findsOneWidget);
+    expect(find.text('Health + Wellbeing'), findsOneWidget);
+    expect(find.text('Whanau + Relationships'), findsOneWidget);
+    expect(find.text('Money + Legal + Learning'), findsOneWidget);
+    expect(find.text('Culture + Community'), findsOneWidget);
+    expect(find.text('Housing + Daily Living'), findsOneWidget);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Overflow in support assessment',
+    );
+
+    final mentalHealth = find.text('Mental health or counselling support');
+    await Scrollable.ensureVisible(
+      tester.element(mentalHealth),
+      alignment: 0.4,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(mentalHealth);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Needs selected: 1'), findsOneWidget);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Overflow after selecting a support need',
+    );
+
+    final findServices = find.widgetWithText(
+      FilledButton,
+      'Find matching services',
+    );
+    await Scrollable.ensureVisible(
+      tester.element(findServices),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(findServices);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Programmes + Referrals'), findsOneWidget);
+    expect(find.textContaining('services shown'), findsOneWidget);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Overflow in matching services',
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+
+    expect(
+      caseData['supportNeeds'],
+      contains('Mental health or counselling support'),
+    );
+    expect(
+      caseData['referralFilters'],
+      contains('Mental health or counselling support'),
+    );
+  });
 }
