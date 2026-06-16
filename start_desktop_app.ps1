@@ -7,6 +7,8 @@ $Port = 51239
 $WebPort = 51243
 $ServerPath = "C:\Users\Danie\support_worker_log\desktop_static_server.js"
 $ServerVersion = "2026-06-02-drive-proxy-v1"
+$RentalScraperScript = "C:\Users\Danie\support_worker_log\tools\rental_scraper\rental_scraper_server.js"
+$RentalScraperPort = 51247
 $BuildStamp = "C:\Users\Danie\support_worker_log\build\web\.desktop_build_stamp"
 $ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 $ChromeProfile = "C:\Users\Danie\support_worker_log\.desktop_chrome_profile"
@@ -34,6 +36,20 @@ function Test-WebServer {
             -TimeoutSec 2
 
         return $Response.ok -eq $true -and $Response.version -eq $ServerVersion
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-RentalScraper {
+    try {
+        $Result = Invoke-RestMethod `
+            -Method Get `
+            -Uri "http://127.0.0.1:$RentalScraperPort/ping" `
+            -TimeoutSec 3
+
+        return $Result.ok -eq $true
     }
     catch {
         return $false
@@ -108,6 +124,26 @@ if (-not (Test-Writer)) {
 
 Write-Host "Local notes writer is running."
 Write-Host "Notes folder: C:\Users\Danie\MR NOTES FOLDER"
+Write-Host ""
+
+if (-not (Test-RentalScraper)) {
+    Write-Host "Starting rental scraper..."
+
+    Start-Process `
+        -FilePath "node" `
+        -ArgumentList "`"$RentalScraperScript`"" `
+        -WorkingDirectory "C:\Users\Danie\support_worker_log" `
+        -WindowStyle Hidden
+
+    Start-Sleep -Seconds 2
+}
+
+if (Test-RentalScraper) {
+    Write-Host "Rental scraper is running."
+}
+else {
+    Write-Host "Rental scraper is not running. Run setup_rental_scraper.cmd once."
+}
 Write-Host ""
 
 if (-not (Test-Path ".dart_tool\package_config.json")) {

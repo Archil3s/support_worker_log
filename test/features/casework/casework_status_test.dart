@@ -129,6 +129,9 @@ void main() {
       'msd': 'Emergency Housing',
       'housing': 'Social Housing Rating',
       'accommodation': 'Accommodation Options',
+      'rentals': 'Rental search',
+      'groceries': 'Grocery price check',
+      'jobs': 'Work search',
       'probation': 'Probation / Bail Address',
       'referrals': 'Quick filters',
       'contacts': 'Contact record',
@@ -215,6 +218,71 @@ void main() {
     expect(find.textContaining('Casework Checklist'), findsNothing);
     expect(find.textContaining('Next Actions'), findsNothing);
     expect(find.textContaining('Still To Check'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('grocery price checks import and persist per case', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('casework-tab-groceries')));
+    await tester.pumpAndSettle();
+
+    final importField = find.byWidgetPredicate((widget) {
+      if (widget is! TextField) return false;
+      return widget.decoration?.hintText?.contains('product, brand') ?? false;
+    });
+    expect(importField, findsOneWidget);
+
+    await tester.enterText(
+      importField,
+      'Anchor Blue Milk 2L\n'
+      'Woolworths Blenheim\n'
+      '\$5.49\n'
+      '\$2.75/L\n'
+      'https://www.woolworths.co.nz/shop/productdetails/123',
+    );
+    await tester.pumpAndSettle();
+
+    final extractButton = find.widgetWithText(FilledButton, 'Extract price');
+    await Scrollable.ensureVisible(
+      tester.element(extractButton),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(extractButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Anchor Blue Milk 2L'), findsOneWidget);
+    expect(find.text('Woolworths Blenheim'), findsWidgets);
+    expect(find.text('Milk'), findsWidgets);
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        jsonDecode(prefs.getString('casework_code_profiles_v1')!)
+            as Map<String, dynamic>;
+    final profiles = stored['profiles'] as Map<String, dynamic>;
+    final caseData =
+        (profiles['CASE-001'] as Map<String, dynamic>)['data']
+            as Map<String, dynamic>;
+    final groceryLeads = caseData['groceryLeads'] as List<dynamic>;
+    final savedLead = groceryLeads.single as Map<String, dynamic>;
+
+    expect(savedLead['product'], 'Anchor Blue Milk 2L');
+    expect(savedLead['store'], 'Woolworths Blenheim');
+    expect(savedLead['price'], '\$5.49');
+    expect(savedLead['unitPrice'], '\$2.75/L');
+    expect(savedLead['category'], 'Milk');
     expect(tester.takeException(), isNull);
   });
 

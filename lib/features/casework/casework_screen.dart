@@ -4,8 +4,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/services/housing_diary_pdf_service.dart';
 import '../../shared/widgets/section_card.dart';
+import 'rental_scraper.dart';
 
 const _caseworkInk = Color(0xFFE7ECFA);
 const _caseworkInkSoft = Color(0xFF20283B);
@@ -28,6 +31,9 @@ enum _CaseworkFocus {
   msd,
   housing,
   accommodation,
+  rentals,
+  groceries,
+  jobs,
   probation,
   referrals,
   contacts,
@@ -50,6 +56,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   final workerInitialsController = TextEditingController();
   final deadlineController = TextEditingController(text: 'Today');
   final additionalContextController = TextEditingController();
+  final rentalImportController = TextEditingController();
+  final rentalMinPriceController = TextEditingController();
+  final rentalMaxPriceController = TextEditingController();
+  final rentalMinRoomsController = TextEditingController();
+  final groceryImportController = TextEditingController();
+  final jobImportController = TextEditingController();
 
   _CaseworkFocus focus = _CaseworkFocus.walkIn;
   String urgency = 'high';
@@ -84,14 +96,61 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   final sectionOutcomes = <String, String>{};
   final actionLog = <_ActionLogEntry>[];
   final requestHistory = <_RequestHistoryEntry>[];
+  final rentalLeads = <_RentalLead>[];
+  final rentalDiaryLeadKeys = <String>{};
+  final groceryLeads = <_GroceryLead>[];
+  final groceryCategoryFilters = <String>{};
+  final jobLeads = <_JobLead>[];
+  final jobTypeFilters = <String>{};
+  final rentalScrapeMessages = <String>[];
+  final jobScrapeMessages = <String>[];
   final profiles = <String, _CaseProfileRecord>{};
 
+  bool rentalScrapeInProgress = false;
+  bool jobScrapeInProgress = false;
   String activeProfileCode = 'CASE-001';
 
   List<String> get _sortedProfileCodes {
     final codes = profiles.keys.toList()..sort();
     if (codes.isEmpty) return [activeProfileCode];
     return codes;
+  }
+
+  List<_RentalLead> get _filteredRentalLeads {
+    return ([
+      for (final lead in rentalLeads)
+        if (_matchesRentalFilters(lead)) lead,
+    ]..sort(_compareRentalLeadsByArea));
+  }
+
+  List<_RentalLead> get _housingDiaryLeads {
+    final selected = ([
+      for (final lead in rentalLeads)
+        if (rentalDiaryLeadKeys.contains(lead.diaryKey) &&
+            _matchesRentalFilters(lead))
+          lead,
+    ]..sort(_compareRentalLeadsByArea));
+    return selected.isEmpty ? _filteredRentalLeads : selected;
+  }
+
+  int? get _minRentalPrice => _controllerInt(rentalMinPriceController);
+
+  int? get _maxRentalPrice => _controllerInt(rentalMaxPriceController);
+
+  int? get _minRentalRooms => _controllerInt(rentalMinRoomsController);
+
+  List<_GroceryLead> get _filteredGroceryLeads {
+    return [
+      for (final lead in groceryLeads)
+        if (_matchesGroceryFilters(lead)) lead,
+    ]..sort(_compareGroceryLeads);
+  }
+
+  List<_JobLead> get _filteredJobLeads {
+    return [
+      for (final lead in jobLeads)
+        if (_matchesJobFilters(lead)) lead,
+    ]..sort(_compareJobLeads);
   }
 
   @override
@@ -106,6 +165,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     workerInitialsController.dispose();
     deadlineController.dispose();
     additionalContextController.dispose();
+    rentalImportController.dispose();
+    rentalMinPriceController.dispose();
+    rentalMaxPriceController.dispose();
+    rentalMinRoomsController.dispose();
+    groceryImportController.dispose();
+    jobImportController.dispose();
     super.dispose();
   }
 
@@ -205,6 +270,15 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                       roadblocks.clear();
                       contactActions.clear();
                       followUpActions.clear();
+                      rentalLeads.clear();
+                      rentalDiaryLeadKeys.clear();
+                      rentalImportController.clear();
+                      groceryLeads.clear();
+                      groceryImportController.clear();
+                      groceryCategoryFilters.clear();
+                      jobLeads.clear();
+                      jobImportController.clear();
+                      jobTypeFilters.clear();
                       updatedFocuses.clear();
                       completedFocuses.clear();
                       updatedAtByFocus.clear();
@@ -322,7 +396,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           const SizedBox(height: 12),
           _CompactLiveCard(
             urgency: urgency,
-            openStepCount: _openNextSteps().length,
             actionCount: actionLog.length,
             latestAction: actionLog.isEmpty ? null : actionLog.first,
             requestHistory: requestHistory,
@@ -368,6 +441,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       case _CaseworkFocus.housing:
       case _CaseworkFocus.accommodation:
         return _desktopCmmSection();
+      case _CaseworkFocus.rentals:
+        return _desktopRentalSearchSection();
+      case _CaseworkFocus.groceries:
+        return _desktopGroceryPriceSection();
+      case _CaseworkFocus.jobs:
+        return _desktopJobSearchSection();
       case _CaseworkFocus.probation:
         return _desktopDiarySection();
       case _CaseworkFocus.referrals:
@@ -455,7 +534,6 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           _LivingPathwayFlow(
             profileCode: activeProfileCode,
             history: requestHistory,
-            openStepCount: _openNextSteps().length,
           ),
           const SizedBox(height: 16),
           _DesktopStepBar(current: 0),
@@ -911,6 +989,213 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     );
   }
 
+  Widget _desktopRentalSearchSection() {
+    return _DesktopPage(
+      title: 'Rental Search - Blenheim / Marlborough',
+      subtitle:
+          'Open local rental sources, import listing text, and keep address, price, size, agency and contact details with the case file.',
+      child: _rentalSearchSection(),
+    );
+  }
+
+  Widget _desktopJobSearchSection() {
+    return _DesktopPage(
+      title: 'Work Search - Blenheim / Renwick / Picton',
+      subtitle:
+          'Open local job sources, import actual Blenheim, Renwick or Picton listings, filter by work type, and keep applications with the case file.',
+      child: _jobSearchSection(),
+    );
+  }
+
+  Widget _desktopGroceryPriceSection() {
+    return _DesktopPage(
+      title: 'Grocery Prices - Blenheim',
+      subtitle:
+          'Compare local supermarket prices, import product prices, and keep price checks with the case file.',
+      child: _groceryPriceSection(),
+    );
+  }
+
+  Widget _groceryPriceSection() {
+    final filtered = _filteredGroceryLeads;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ResponsiveColumns(
+          children: [
+            _DesktopCard(
+              title: 'Blenheim supermarket links',
+              icon: Icons.local_grocery_store_outlined,
+              trailing: _sectionStatusActions(
+                _CaseworkFocus.groceries,
+                'Grocery price check',
+              ),
+              child: _GrocerySourcePanel(
+                onOpen: _openGrocerySource,
+                onOpenAll: _openAllGrocerySources,
+                onCopyAll: _copyAllGrocerySourceLinks,
+              ),
+            ),
+            _DesktopCard(
+              title: 'Import product price',
+              icon: Icons.content_paste_search_outlined,
+              child: _GroceryImportPanel(
+                controller: groceryImportController,
+                onPaste: _pasteGroceryListing,
+                onParse: _parseGroceryListing,
+                onClear: () => setState(groceryImportController.clear),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DesktopCard(
+          title: 'Saved grocery prices',
+          icon: Icons.price_check_outlined,
+          child: _GroceryLeadList(
+            leads: filtered,
+            totalLeads: groceryLeads.length,
+            selectedCategories: groceryCategoryFilters,
+            onCategoryChanged: _toggleGroceryCategoryFilter,
+            onExportPdf: _exportFilteredGroceryPricePdf,
+            onOpen: _openGroceryLead,
+            onLog: _logGroceryLead,
+            onCopy: _copyGroceryLead,
+            onRemove: _removeGroceryLead,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionOutcomeCard(_CaseworkFocus.groceries, 'Grocery price check'),
+      ],
+    );
+  }
+
+  Widget _jobSearchSection() {
+    final filtered = _filteredJobLeads;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ResponsiveColumns(
+          children: [
+            _DesktopCard(
+              title: 'Blenheim / Renwick / Picton job search links',
+              icon: Icons.work_outline,
+              trailing: _sectionStatusActions(
+                _CaseworkFocus.jobs,
+                'Work search',
+              ),
+              child: _JobSourcePanel(
+                onOpen: _openJobSource,
+                onOpenAll: _openAllJobSources,
+                onCopyAll: _copyAllJobSourceLinks,
+                onScrape: _autoScrapeJobListings,
+                scraping: jobScrapeInProgress,
+                messages: jobScrapeMessages,
+              ),
+            ),
+            _DesktopCard(
+              title: 'Import job listing',
+              icon: Icons.content_paste_search_outlined,
+              child: _JobImportPanel(
+                controller: jobImportController,
+                onPaste: _pasteJobListing,
+                onParse: _parseJobListing,
+                onClear: () => setState(jobImportController.clear),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DesktopCard(
+          title: 'Saved job applications',
+          icon: Icons.fact_check_outlined,
+          child: _JobLeadList(
+            leads: filtered,
+            totalLeads: jobLeads.length,
+            selectedTypes: jobTypeFilters,
+            onTypeChanged: _toggleJobTypeFilter,
+            onExportPdf: _exportFilteredJobLeadPdf,
+            onOpen: _openJobLead,
+            onLog: _logJobLead,
+            onCopy: _copyJobLead,
+            onRemove: _removeJobLead,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionOutcomeCard(_CaseworkFocus.jobs, 'Work search'),
+      ],
+    );
+  }
+
+  Widget _rentalSearchSection() {
+    final filteredLeads = _filteredRentalLeads;
+    final diaryLeads = _housingDiaryLeads;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ResponsiveColumns(
+          children: [
+            _DesktopCard(
+              title: 'All rental search links',
+              icon: Icons.travel_explore_outlined,
+              trailing: _sectionStatusActions(
+                _CaseworkFocus.rentals,
+                'Rental search',
+              ),
+              child: _RentalSourceGrid(
+                onOpen: _openRentalSource,
+                onOpenAll: _openAllRentalSources,
+                onCopyAll: _copyAllRentalSourceLinks,
+                onScrape: _autoScrapeRentalListings,
+                scraping: rentalScrapeInProgress,
+                messages: rentalScrapeMessages,
+              ),
+            ),
+            _DesktopCard(
+              title: 'Import listing',
+              icon: Icons.content_paste_search_outlined,
+              child: _RentalImportPanel(
+                controller: rentalImportController,
+                onPaste: _pasteRentalListing,
+                onParse: _parseRentalListing,
+                onClear: () {
+                  setState(() => rentalImportController.clear());
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DesktopCard(
+          title: 'Saved rental leads',
+          icon: Icons.manage_search_outlined,
+          child: _RentalLeadList(
+            leads: filteredLeads,
+            totalLeads: rentalLeads.length,
+            diaryLeadCount: diaryLeads.length,
+            minPriceController: rentalMinPriceController,
+            maxPriceController: rentalMaxPriceController,
+            minRoomsController: rentalMinRoomsController,
+            selectedDiaryKeys: rentalDiaryLeadKeys,
+            onFilterChanged: _rentalFiltersChanged,
+            onExportPdf: _exportFilteredRentalLeadPdf,
+            onExportDiary: _exportHousingDiary,
+            onToggleDiary: _toggleRentalDiaryLead,
+            onOpen: _openRentalLead,
+            onLog: _logRentalLead,
+            onCopy: _copyRentalLead,
+            onRemove: _removeRentalLead,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _sectionOutcomeCard(_CaseworkFocus.rentals, 'Rental search'),
+      ],
+    );
+  }
+
   Widget _desktopReferralDirectory() {
     final filtersSelected = referralFilters.isNotEmpty;
     final filtered = filtersSelected
@@ -1271,6 +1556,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         return _housingSection();
       case _CaseworkFocus.accommodation:
         return _accommodationSection();
+      case _CaseworkFocus.rentals:
+        return _rentalSearchSection();
+      case _CaseworkFocus.groceries:
+        return _groceryPriceSection();
+      case _CaseworkFocus.jobs:
+        return _jobSearchSection();
       case _CaseworkFocus.probation:
         return _probationSection();
       case _CaseworkFocus.referrals:
@@ -1976,6 +2267,658 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       );
   }
 
+  Future<void> _openRentalSource(_RentalSource source) async {
+    final opened = await launchUrl(
+      Uri.parse(source.url),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened || !mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text('Opened ${source.name}')));
+  }
+
+  Future<void> _openAllRentalSources() async {
+    for (final source in _rentalSources) {
+      await launchUrl(
+        Uri.parse(source.url),
+        webOnlyWindowName: '_blank',
+        mode: LaunchMode.externalApplication,
+      );
+    }
+    _recordRequest(
+      category: 'Rental search',
+      request: 'Opened all Blenheim/Marlborough rental search links',
+      status: 'Search started',
+    );
+  }
+
+  Future<void> _copyAllRentalSourceLinks() async {
+    final links = _rentalSources
+        .map((source) => '${source.name}: ${source.url}')
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: links));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Rental links copied')));
+  }
+
+  Future<void> _openGrocerySource(_GrocerySource source) async {
+    final opened = await launchUrl(
+      Uri.parse(source.url),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened || !mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text('Opened ${source.name}')));
+  }
+
+  Future<void> _openAllGrocerySources() async {
+    for (final source in _grocerySources) {
+      await launchUrl(
+        Uri.parse(source.url),
+        webOnlyWindowName: '_blank',
+        mode: LaunchMode.externalApplication,
+      );
+    }
+    _recordRequest(
+      category: 'Grocery prices',
+      request: 'Opened all Blenheim supermarket price links',
+      status: 'Price check started',
+    );
+  }
+
+  Future<void> _copyAllGrocerySourceLinks() async {
+    final links = _grocerySources
+        .map((source) => '${source.name}: ${source.url}')
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: links));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Grocery links copied')));
+  }
+
+  Future<void> _openJobSource(_JobSource source) async {
+    final opened = await launchUrl(
+      Uri.parse(source.url),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened || !mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text('Opened ${source.name}')));
+  }
+
+  Future<void> _openAllJobSources() async {
+    for (final source in _jobSources) {
+      await launchUrl(
+        Uri.parse(source.url),
+        webOnlyWindowName: '_blank',
+        mode: LaunchMode.externalApplication,
+      );
+    }
+    _recordRequest(
+      category: 'Work search',
+      request: 'Opened all local job search links',
+      status: 'Search started',
+    );
+  }
+
+  Future<void> _copyAllJobSourceLinks() async {
+    final links = _jobSources
+        .map((source) => '${source.name}: ${source.url}')
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: links));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Job links copied')));
+  }
+
+  bool _matchesGroceryFilters(_GroceryLead lead) {
+    return groceryCategoryFilters.isEmpty ||
+        groceryCategoryFilters.contains(lead.category);
+  }
+
+  Future<void> _pasteGroceryListing() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return;
+
+    setState(() => groceryImportController.text = text);
+  }
+
+  void _parseGroceryListing() {
+    final lead = _GroceryLeadParser.parse(groceryImportController.text);
+    if (!lead.isBlenheimPriceCheck) {
+      _showCaseworkSnack('Only Blenheim supermarket price checks can be saved');
+      return;
+    }
+    setState(() {
+      groceryLeads.insert(0, lead);
+      groceryImportController.clear();
+    });
+    _recordRequest(
+      category: 'Grocery prices',
+      request: lead.summary,
+      status: 'Price saved',
+    );
+  }
+
+  Future<void> _copyGroceryLead(_GroceryLead lead) async {
+    await Clipboard.setData(ClipboardData(text: lead.noteLine));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Grocery price copied')));
+  }
+
+  Future<void> _openGroceryLead(_GroceryLead lead) async {
+    if (lead.source.isEmpty) return;
+    await launchUrl(
+      Uri.parse(lead.source),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  void _logGroceryLead(_GroceryLead lead) {
+    _recordRequest(
+      category: 'Grocery prices',
+      request: lead.summary,
+      status: 'Price checked',
+    );
+  }
+
+  void _removeGroceryLead(_GroceryLead lead) {
+    setState(() {
+      groceryLeads.remove(lead);
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _toggleGroceryCategoryFilter(String category, bool selected) {
+    setState(() {
+      if (selected) {
+        groceryCategoryFilters.add(category);
+      } else {
+        groceryCategoryFilters.remove(category);
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  Future<void> _exportFilteredGroceryPricePdf() async {
+    final leads = _filteredGroceryLeads;
+    if (leads.isEmpty) {
+      _showCaseworkSnack('No matching grocery prices to export');
+      return;
+    }
+
+    await HousingDiaryPdfService.exportLeadSearchPdf(
+      title: 'Blenheim Grocery Price Check',
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text.trim(),
+      filterSummary: _groceryFilterSummary(),
+      entries: [
+        for (final lead in leads)
+          LeadSearchPdfEntry(
+            title: lead.product,
+            subtitle: lead.store,
+            category: lead.category,
+            tags: [lead.price, lead.unitPrice, lead.checked],
+            contact: lead.brand,
+            source: lead.source,
+            notes: lead.notes,
+          ),
+      ],
+    );
+    _recordRequest(
+      category: 'Grocery prices',
+      request: 'Exported ${leads.length} grocery price check(s) to PDF',
+      status: 'PDF exported',
+    );
+  }
+
+  Future<void> _autoScrapeJobListings() async {
+    if (jobScrapeInProgress) return;
+    setState(() {
+      jobScrapeInProgress = true;
+      jobScrapeMessages
+        ..clear()
+        ..add('Scanning Blenheim, Renwick and Picton job sources...');
+    });
+
+    final results = await scrapeJobSources([
+      for (final source in _jobSources)
+        JobScrapeSource(name: source.name, url: source.url),
+    ]);
+
+    final nextLeads = <_JobLead>[];
+    final messages = <String>[];
+    for (final result in results) {
+      if (result.blocked) {
+        messages.add('${result.sourceName}: ${result.error}');
+        continue;
+      }
+
+      var accepted = 0;
+      for (final listing in result.listings) {
+        final lead = _JobLead.fromScraped(listing);
+        if (!_matchesJobFilters(lead)) continue;
+        final exists = jobLeads.any(
+          (current) =>
+              current.source == lead.source ||
+              current.summary.toLowerCase() == lead.summary.toLowerCase(),
+        );
+        if (!exists) {
+          nextLeads.add(lead);
+          accepted += 1;
+        }
+      }
+      messages.add('${result.sourceName}: $accepted saved');
+    }
+
+    setState(() {
+      jobLeads.insertAll(0, nextLeads);
+      jobLeads.sort(_compareJobLeads);
+      jobScrapeMessages
+        ..clear()
+        ..addAll(messages);
+      jobScrapeInProgress = false;
+    });
+    _recordRequest(
+      category: 'Work search',
+      request:
+          'Auto scraped ${nextLeads.length} Blenheim/Renwick/Picton job listing(s)',
+      status: 'Search completed',
+    );
+  }
+
+  bool _matchesJobFilters(_JobLead lead) {
+    if (!lead.isStrictLocalJob) return false;
+    return jobTypeFilters.isEmpty || jobTypeFilters.contains(lead.type);
+  }
+
+  Future<void> _pasteJobListing() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return;
+
+    setState(() => jobImportController.text = text);
+  }
+
+  void _parseJobListing() {
+    final lead = _JobLeadParser.parse(jobImportController.text);
+    if (!lead.isStrictLocalJob) {
+      _showCaseworkSnack(
+        'Only Blenheim, Renwick or Picton job listings can be saved',
+      );
+      return;
+    }
+    setState(() {
+      jobLeads.insert(0, lead);
+      jobImportController.clear();
+    });
+    _recordRequest(
+      category: 'Work search',
+      request: lead.summary,
+      status: 'Job lead saved',
+    );
+  }
+
+  Future<void> _copyJobLead(_JobLead lead) async {
+    await Clipboard.setData(ClipboardData(text: lead.noteLine));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Job lead copied')));
+  }
+
+  Future<void> _openJobLead(_JobLead lead) async {
+    if (lead.source.isEmpty) return;
+    await launchUrl(
+      Uri.parse(lead.source),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  void _logJobLead(_JobLead lead) {
+    _recordRequest(
+      category: 'Work search',
+      request: lead.summary,
+      status: 'Job lead checked',
+    );
+  }
+
+  void _removeJobLead(_JobLead lead) {
+    setState(() {
+      jobLeads.remove(lead);
+    });
+    unawaited(_saveDraft());
+  }
+
+  void _toggleJobTypeFilter(String type, bool selected) {
+    setState(() {
+      if (selected) {
+        jobTypeFilters.add(type);
+      } else {
+        jobTypeFilters.remove(type);
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  Future<void> _exportFilteredJobLeadPdf() async {
+    final leads = _filteredJobLeads;
+    if (leads.isEmpty) {
+      _showCaseworkSnack('No matching job leads to export');
+      return;
+    }
+
+    await HousingDiaryPdfService.exportLeadSearchPdf(
+      title: 'Blenheim Renwick Picton Job Listings',
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text.trim(),
+      filterSummary: _jobFilterSummary(),
+      entries: [
+        for (final lead in leads)
+          LeadSearchPdfEntry(
+            title: lead.title,
+            subtitle: lead.employer,
+            category: lead.type,
+            tags: [
+              lead.type,
+              lead.area,
+              lead.posted,
+              lead.quickApply ? 'Quick apply' : 'Standard apply',
+              'Verified local',
+            ],
+            contact: lead.contact,
+            source: lead.source,
+            notes: lead.notes,
+          ),
+      ],
+    );
+
+    _recordRequest(
+      category: 'Work search',
+      request: 'Exported ${leads.length} filtered job listing(s) to PDF',
+      status: 'PDF generated',
+    );
+  }
+
+  bool _matchesRentalFilters(_RentalLead lead) {
+    final minPrice = _minRentalPrice;
+    final maxPrice = _maxRentalPrice;
+    final minRooms = _minRentalRooms;
+    final rent = lead.weeklyRent;
+    final rooms = lead.bedrooms;
+
+    if (!lead.isMarlboroughHousing) return false;
+    if (minPrice != null && (rent == null || rent < minPrice)) return false;
+    if (maxPrice != null && (rent == null || rent > maxPrice)) return false;
+    if (minRooms != null && (rooms == null || rooms < minRooms)) return false;
+    return true;
+  }
+
+  int? _controllerInt(TextEditingController controller) {
+    final match = RegExp(r'\d+').firstMatch(controller.text);
+    if (match == null) return null;
+    return int.tryParse(match.group(0)!);
+  }
+
+  void _rentalFiltersChanged() {
+    setState(() {});
+    unawaited(_saveDraft());
+  }
+
+  Future<void> _exportFilteredRentalLeadPdf() async {
+    final leads = _filteredRentalLeads;
+    if (leads.isEmpty) {
+      _showCaseworkSnack('No matching rental leads to export');
+      return;
+    }
+
+    await HousingDiaryPdfService.exportLeadSearchPdf(
+      title: 'Marlborough Rental Listings',
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text.trim(),
+      filterSummary: _rentalFilterSummary(),
+      entries: [
+        for (final lead in leads)
+          LeadSearchPdfEntry(
+            title: lead.address,
+            subtitle: lead.agency,
+            tags: [lead.price, lead.size, lead.area],
+            contact: lead.landlordAndPhone,
+            source: lead.source,
+            notes: lead.notes,
+          ),
+      ],
+    );
+
+    _recordRequest(
+      category: 'Rental search',
+      request: 'Exported ${leads.length} filtered rental listing(s) to PDF',
+      status: 'PDF generated',
+    );
+  }
+
+  void _toggleRentalDiaryLead(_RentalLead lead, bool selected) {
+    setState(() {
+      if (selected) {
+        rentalDiaryLeadKeys.add(lead.diaryKey);
+      } else {
+        rentalDiaryLeadKeys.remove(lead.diaryKey);
+      }
+    });
+    unawaited(_saveDraft());
+  }
+
+  Future<void> _exportHousingDiary() async {
+    final leads = _housingDiaryLeads;
+    if (leads.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('No matching rental leads to export')),
+        );
+      return;
+    }
+
+    final properties = [
+      for (final lead in leads)
+        HousingDiaryPropertyEntry(
+          area: lead.area,
+          date: _shortDate(DateTime.now()),
+          address: lead.address,
+          details: '${lead.size}, ${lead.price}',
+          landlordAndPhone: lead.landlordAndPhone,
+          outcome: 'Found listing / to apply or follow up',
+          link: lead.source,
+        ),
+    ];
+    final actions = [
+      HousingDiaryActionEntry(
+        date: _shortDate(DateTime.now()),
+        action:
+            'Searched Blenheim/Marlborough rental listings and saved '
+            '${leads.length} matching option(s).',
+        outcome: 'Added matching listings to housing diary evidence.',
+      ),
+    ];
+
+    await HousingDiaryPdfService.exportHousingDiary(
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text.trim(),
+      properties: properties,
+      actions: actions,
+    );
+    await HousingDiaryPdfService.exportHousingDiaryDocx(
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text.trim(),
+      properties: properties,
+      actions: actions,
+    );
+
+    _recordRequest(
+      category: 'Housing diary',
+      request: 'Exported ${leads.length} rental listing(s) to housing diary',
+      status: 'Diary generated',
+    );
+  }
+
+  String _jobFilterSummary() {
+    if (jobTypeFilters.isEmpty) {
+      return 'All saved verified Blenheim, Renwick or Picton job listings';
+    }
+    final types = jobTypeFilters.toList()..sort();
+    return 'Type: ${types.join(', ')}';
+  }
+
+  String _groceryFilterSummary() {
+    if (groceryCategoryFilters.isEmpty) {
+      return 'All saved Blenheim supermarket price checks';
+    }
+    final categories = groceryCategoryFilters.toList()..sort();
+    return 'Category: ${categories.join(', ')}';
+  }
+
+  String _rentalFilterSummary() {
+    final filters = <String>[];
+    final minPrice = _minRentalPrice;
+    final maxPrice = _maxRentalPrice;
+    final minRooms = _minRentalRooms;
+    if (minPrice != null) filters.add('Min rent: \$$minPrice');
+    if (maxPrice != null) filters.add('Max rent: \$$maxPrice');
+    if (minRooms != null) filters.add('Min rooms: $minRooms');
+    return filters.isEmpty ? 'All saved rental listings' : filters.join(', ');
+  }
+
+  void _showCaseworkSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _autoScrapeRentalListings() async {
+    if (rentalScrapeInProgress) return;
+    setState(() {
+      rentalScrapeInProgress = true;
+      rentalScrapeMessages
+        ..clear()
+        ..add('Scanning rental sources...');
+    });
+
+    final results = await scrapeRentalSources([
+      for (final source in _rentalSources)
+        RentalScrapeSource(name: source.name, url: source.url),
+    ]);
+
+    final nextLeads = <_RentalLead>[];
+    final messages = <String>[];
+    for (final result in results) {
+      if (result.blocked) {
+        messages.add('${result.sourceName}: ${result.error}');
+        continue;
+      }
+      messages.add('${result.sourceName}: ${result.listings.length} found');
+      for (final listing in result.listings) {
+        final lead = _RentalLead.fromScraped(listing);
+        final exists = rentalLeads.any(
+          (current) =>
+              current.source == lead.source ||
+              current.summary.toLowerCase() == lead.summary.toLowerCase(),
+        );
+        if (!exists) nextLeads.add(lead);
+      }
+    }
+
+    setState(() {
+      rentalLeads.insertAll(0, nextLeads);
+      rentalScrapeMessages
+        ..clear()
+        ..addAll(messages);
+      rentalScrapeInProgress = false;
+    });
+    _recordRequest(
+      category: 'Rental search',
+      request: 'Auto scraped ${nextLeads.length} rental listing(s)',
+      status: 'Search completed',
+    );
+  }
+
+  Future<void> _pasteRentalListing() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return;
+
+    setState(() => rentalImportController.text = text);
+  }
+
+  void _parseRentalListing() {
+    final lead = _RentalLeadParser.parse(rentalImportController.text);
+    if (!lead.isMarlboroughHousing) {
+      _showCaseworkSnack('Only Marlborough NZ rental listings can be saved');
+      return;
+    }
+    setState(() {
+      rentalLeads.insert(0, lead);
+      rentalImportController.clear();
+    });
+    _recordRequest(
+      category: 'Rental search',
+      request: lead.summary,
+      status: 'Lead saved',
+    );
+  }
+
+  Future<void> _copyRentalLead(_RentalLead lead) async {
+    await Clipboard.setData(ClipboardData(text: lead.noteLine));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Rental lead copied')));
+  }
+
+  Future<void> _openRentalLead(_RentalLead lead) async {
+    if (lead.source.isEmpty) return;
+    await launchUrl(
+      Uri.parse(lead.source),
+      webOnlyWindowName: '_blank',
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  void _logRentalLead(_RentalLead lead) {
+    _recordRequest(
+      category: 'Rental search',
+      request: lead.summary,
+      status: 'Rental lead checked',
+    );
+  }
+
+  void _removeRentalLead(_RentalLead lead) {
+    setState(() {
+      rentalLeads.remove(lead);
+      rentalDiaryLeadKeys.remove(lead.diaryKey);
+    });
+    unawaited(_saveDraft());
+  }
+
   void _saveSnapshot() {
     _log('Casework file saved', 'File');
   }
@@ -2261,6 +3204,15 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       'roadblocks': roadblocks.toList(),
       'contactActions': contactActions.toList(),
       'followUpActions': followUpActions.toList(),
+      'rentalLeads': [for (final lead in rentalLeads) lead.toJson()],
+      'rentalDiaryLeadKeys': rentalDiaryLeadKeys.toList(),
+      'rentalMinPrice': rentalMinPriceController.text.trim(),
+      'rentalMaxPrice': rentalMaxPriceController.text.trim(),
+      'rentalMinRooms': rentalMinRoomsController.text.trim(),
+      'groceryLeads': [for (final lead in groceryLeads) lead.toJson()],
+      'groceryCategoryFilters': groceryCategoryFilters.toList(),
+      'jobLeads': [for (final lead in jobLeads) lead.toJson()],
+      'jobTypeFilters': jobTypeFilters.toList(),
       'updatedFocuses': updatedFocuses.map((focus) => focus.name).toList(),
       'completedFocuses': completedFocuses.map((focus) => focus.name).toList(),
       'updatedAtByFocus': {
@@ -2330,6 +3282,24 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     _replaceSet(roadblocks, data['roadblocks']);
     _replaceSet(contactActions, data['contactActions']);
     _replaceSet(followUpActions, data['followUpActions']);
+    rentalLeads
+      ..clear()
+      ..addAll(_readRentalLeads(data['rentalLeads']));
+    _replaceSet(rentalDiaryLeadKeys, data['rentalDiaryLeadKeys']);
+    rentalMinPriceController.text = (data['rentalMinPrice'] as String?) ?? '';
+    rentalMaxPriceController.text = (data['rentalMaxPrice'] as String?) ?? '';
+    rentalMinRoomsController.text = (data['rentalMinRooms'] as String?) ?? '';
+    rentalImportController.clear();
+    groceryLeads
+      ..clear()
+      ..addAll(_readGroceryLeads(data['groceryLeads']));
+    _replaceSet(groceryCategoryFilters, data['groceryCategoryFilters']);
+    groceryImportController.clear();
+    jobLeads
+      ..clear()
+      ..addAll(_readJobLeads(data['jobLeads']));
+    _replaceSet(jobTypeFilters, data['jobTypeFilters']);
+    jobImportController.clear();
     _replaceFocusSet(updatedFocuses, data['updatedFocuses']);
     _replaceFocusSet(completedFocuses, data['completedFocuses']);
     _replaceFocusDateMap(updatedAtByFocus, data['updatedAtByFocus']);
@@ -2374,6 +3344,18 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     roadblocks.clear();
     contactActions.clear();
     followUpActions.clear();
+    rentalLeads.clear();
+    rentalDiaryLeadKeys.clear();
+    rentalImportController.clear();
+    rentalMinPriceController.clear();
+    rentalMaxPriceController.clear();
+    rentalMinRoomsController.clear();
+    groceryLeads.clear();
+    groceryCategoryFilters.clear();
+    groceryImportController.clear();
+    jobLeads.clear();
+    jobTypeFilters.clear();
+    jobImportController.clear();
     updatedFocuses.clear();
     completedFocuses.clear();
     updatedAtByFocus.clear();
@@ -2656,6 +3638,33 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     ];
   }
 
+  List<_RentalLead> _readRentalLeads(Object? value) {
+    if (value is! List) return const [];
+
+    return [
+      for (final item in value)
+        if (item is Map<String, Object?>) _RentalLead.fromJson(item),
+    ];
+  }
+
+  List<_GroceryLead> _readGroceryLeads(Object? value) {
+    if (value is! List) return const [];
+
+    return [
+      for (final item in value)
+        if (item is Map<String, Object?>) _GroceryLead.fromJson(item),
+    ];
+  }
+
+  List<_JobLead> _readJobLeads(Object? value) {
+    if (value is! List) return const [];
+
+    return [
+      for (final item in value)
+        if (item is Map<String, Object?>) _JobLead.fromJson(item),
+    ];
+  }
+
   String _buildNoteFile() {
     final client = _valueOr(clientInitialsController.text, '[initials]');
     final worker = _valueOr(workerInitialsController.text, '[worker initials]');
@@ -2830,6 +3839,9 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     final focus = _focusFromName(key.substring(0, separator));
     final item = key.substring(separator + 2);
     if (focus == null || item.isEmpty) return null;
+    if (focus == _CaseworkFocus.rentals || focus == _CaseworkFocus.jobs) {
+      return null;
+    }
 
     return '${_focusLabel(focus)}: $item';
   }
@@ -2878,110 +3890,17 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
         .where((entry) {
           final action = entry.action.trim();
           return !action.startsWith('Completed:') &&
-              !action.startsWith('Reopened:');
+              !action.startsWith('Reopened:') &&
+              !action.startsWith('Job lead:') &&
+              !action.startsWith('Rental lead:') &&
+              entry.category != 'Work search' &&
+              entry.category != 'Rental search';
         })
         .map(
           (entry) =>
               '${_dateTime(entry.time)} | ${entry.category} | ${entry.action}',
         )
         .toList();
-  }
-
-  List<String> _openNextSteps() {
-    final steps = <String>[];
-
-    final selectedContext = [
-      ...presentingNeeds,
-      ...situationUnderstanding,
-    ].join(' ').toLowerCase();
-    final housingCrisis = [
-      'no safe place',
-      'asked to leave',
-      'cannot return',
-      'emergency housing',
-      'transitional housing',
-      'motel',
-      'couch-surfing',
-      'leaving custody',
-    ].any(selectedContext.contains);
-    final msdPathway =
-        housingCrisis ||
-        noteType == 'MSD call support note' ||
-        noteType == 'CMM / MSD handover note' ||
-        msdCriteria.isNotEmpty ||
-        msdAdvocacy.isNotEmpty;
-    final housingApplicationPathway =
-        noteType == 'Housing application support note' ||
-        housingApplications.isNotEmpty ||
-        socialHousing.isNotEmpty ||
-        selectedContext.contains('public housing') ||
-        selectedContext.contains('private rental') ||
-        selectedContext.contains('tenancy');
-    final safetyPathway =
-        urgency == 'critical' ||
-        selectedContext.contains('violence') ||
-        selectedContext.contains('safety') ||
-        immediateSafety.isNotEmpty;
-    final probationPathway =
-        selectedContext.contains('probation') ||
-        selectedContext.contains('bail') ||
-        probationStatus != 'Not applicable' ||
-        probationActions.isNotEmpty;
-    final referralPathway =
-        noteType == 'Referral and next-steps note' ||
-        supportNeeds.isNotEmpty ||
-        referrals.isNotEmpty;
-
-    if ((housingCrisis || housingApplicationPathway) &&
-        situationUnderstanding.isEmpty) {
-      steps.add('Confirm the current housing position');
-    }
-
-    if (housingCrisis || safetyPathway) {
-      for (final item in _minimumSafetyChecks) {
-        if (!immediateSafety.contains(item)) {
-          steps.add('Complete safety check: $item');
-        }
-      }
-    }
-
-    if (msdPathway) {
-      for (final item in _minimumMsdCriteriaChecks) {
-        if (!msdCriteria.contains(item)) {
-          steps.add('Check MSD criterion: $item');
-        }
-      }
-      for (final item in _minimumDocumentChecks) {
-        if (!documents.contains(item)) {
-          steps.add('Collect/check document: $item');
-        }
-      }
-      for (final item in _minimumMsdChecks) {
-        if (!msdAdvocacy.contains(item)) {
-          steps.add('Complete MSD/CMM action: $item');
-        }
-      }
-    } else if (housingApplicationPathway) {
-      for (final item in _minimumDocumentChecks) {
-        if (!documents.contains(item)) {
-          steps.add('Collect/check document: $item');
-        }
-      }
-    }
-
-    if (housingApplicationPathway && socialHousingRating == 'Not checked') {
-      steps.add('Check social housing rating/status');
-    }
-    if (housingCrisis && accommodationOptions.isEmpty) {
-      steps.add('Check a suitable accommodation option for tonight');
-    }
-    if (probationPathway && probationActions.isEmpty) {
-      steps.add('Complete probation/bail address actions');
-    }
-    if (referralPathway && referrals.isEmpty) {
-      steps.add('Select at least one referral/support pathway');
-    }
-    return steps;
   }
 
   String _lines(Iterable<String> values) {
@@ -3000,6 +3919,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$day/$month/${value.year} $hour:$minute';
+  }
+
+  String _shortDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
   }
 }
 
@@ -3278,7 +4203,6 @@ class _CompactClientCard extends StatelessWidget {
 class _CompactLiveCard extends StatelessWidget {
   const _CompactLiveCard({
     required this.urgency,
-    required this.openStepCount,
     required this.actionCount,
     required this.latestAction,
     required this.requestHistory,
@@ -3287,7 +4211,6 @@ class _CompactLiveCard extends StatelessWidget {
   });
 
   final String urgency;
-  final int openStepCount;
   final int actionCount;
   final _ActionLogEntry? latestAction;
   final List<_RequestHistoryEntry> requestHistory;
@@ -3307,7 +4230,6 @@ class _CompactLiveCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _LightStatusPill(label: 'Urgency', value: urgency.toUpperCase()),
-              _LightStatusPill(label: 'Open steps', value: '$openStepCount'),
               _LightStatusPill(label: 'Logged', value: '$actionCount'),
             ],
           ),
@@ -5020,15 +5942,10 @@ class _ReadinessTile extends StatelessWidget {
 }
 
 class _LivingPathwayFlow extends StatelessWidget {
-  const _LivingPathwayFlow({
-    required this.profileCode,
-    required this.history,
-    required this.openStepCount,
-  });
+  const _LivingPathwayFlow({required this.profileCode, required this.history});
 
   final String profileCode;
   final List<_RequestHistoryEntry> history;
-  final int openStepCount;
 
   @override
   Widget build(BuildContext context) {
@@ -5045,7 +5962,6 @@ class _LivingPathwayFlow extends StatelessWidget {
             runSpacing: 8,
             children: [
               _LightStatusPill(label: 'Case', value: profileCode),
-              _LightStatusPill(label: 'Open steps', value: '$openStepCount'),
               _LightStatusPill(label: 'Requests', value: '${history.length}'),
             ],
           ),
@@ -5162,6 +6078,1316 @@ class _ActionButtonWrap extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _RentalSourceGrid extends StatelessWidget {
+  const _RentalSourceGrid({
+    required this.onOpen,
+    required this.onOpenAll,
+    required this.onCopyAll,
+    required this.onScrape,
+    required this.scraping,
+    required this.messages,
+  });
+
+  final ValueChanged<_RentalSource> onOpen;
+  final VoidCallback onOpenAll;
+  final VoidCallback onCopyAll;
+  final VoidCallback onScrape;
+  final bool scraping;
+  final List<String> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _InfoBlock(
+          title: 'Use as a supervised search',
+          text:
+              'Search all current rental homes by opening the Blenheim/Marlborough result links. Copy a listing block or page text, then import it below.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: scraping ? null : onScrape,
+              icon: scraping
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.downloading_outlined, size: 16),
+              label: Text(scraping ? 'Scraping...' : 'Auto scrape listings'),
+            ),
+            FilledButton.icon(
+              onPressed: onOpenAll,
+              icon: const Icon(Icons.manage_search_outlined, size: 16),
+              label: const Text('Search all homes'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onCopyAll,
+              icon: const Icon(Icons.link_outlined, size: 16),
+              label: const Text('Copy all links'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+        if (messages.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _caseworkPanel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _caseworkLine),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final message in messages)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        color: _caseworkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final source in _rentalSources)
+              _RentalSourceLink(source: source, onOpen: () => onOpen(source)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RentalSourceLink extends StatelessWidget {
+  const _RentalSourceLink({required this.source, required this.onOpen});
+
+  final _RentalSource source;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: OutlinedButton(
+        onPressed: onOpen,
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          foregroundColor: _caseworkInk,
+          side: const BorderSide(color: _caseworkLine),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.all(12),
+        ),
+        child: Row(
+          children: [
+            Icon(source.icon, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    source.name,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    source.url,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _caseworkMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.open_in_new_rounded, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GrocerySourcePanel extends StatelessWidget {
+  const _GrocerySourcePanel({
+    required this.onOpen,
+    required this.onOpenAll,
+    required this.onCopyAll,
+  });
+
+  final ValueChanged<_GrocerySource> onOpen;
+  final VoidCallback onOpenAll;
+  final VoidCallback onCopyAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _InfoBlock(
+          title: 'Blenheim grocery price check',
+          text:
+              'Open local supermarket product searches, compare current prices, then paste product text or a product link to save it to the case.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: onOpenAll,
+              icon: const Icon(Icons.manage_search_outlined, size: 16),
+              label: const Text('Search all stores'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onCopyAll,
+              icon: const Icon(Icons.link_outlined, size: 16),
+              label: const Text('Copy all links'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final source in _grocerySources)
+              _GrocerySourceLink(source: source, onOpen: () => onOpen(source)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _GrocerySourceLink extends StatelessWidget {
+  const _GrocerySourceLink({required this.source, required this.onOpen});
+
+  final _GrocerySource source;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: OutlinedButton(
+        onPressed: onOpen,
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          foregroundColor: _caseworkInk,
+          side: const BorderSide(color: _caseworkLine),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.all(12),
+        ),
+        child: Row(
+          children: [
+            Icon(source.icon, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    source.name,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    source.store,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _caseworkMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.open_in_new_rounded, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JobSourcePanel extends StatelessWidget {
+  const _JobSourcePanel({
+    required this.onOpen,
+    required this.onOpenAll,
+    required this.onCopyAll,
+    required this.onScrape,
+    required this.scraping,
+    required this.messages,
+  });
+
+  final ValueChanged<_JobSource> onOpen;
+  final VoidCallback onOpenAll;
+  final VoidCallback onCopyAll;
+  final VoidCallback onScrape;
+  final bool scraping;
+  final List<String> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _InfoBlock(
+          title: 'Blenheim / Renwick / Picton work search',
+          text:
+              'Use these links for supervised job search evidence. Save actual Blenheim, Renwick or Picton listings below, then filter by work type.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: scraping ? null : onScrape,
+              icon: scraping
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.downloading_outlined, size: 16),
+              label: Text(scraping ? 'Scraping...' : 'Auto scrape jobs'),
+            ),
+            FilledButton.icon(
+              onPressed: onOpenAll,
+              icon: const Icon(Icons.manage_search_outlined, size: 16),
+              label: const Text('Search all jobs'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onCopyAll,
+              icon: const Icon(Icons.link_outlined, size: 16),
+              label: const Text('Copy all links'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+        if (messages.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _caseworkPanel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _caseworkLine),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final message in messages)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        color: _caseworkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final source in _jobSources)
+              _JobSourceLink(source: source, onOpen: () => onOpen(source)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _JobSourceLink extends StatelessWidget {
+  const _JobSourceLink({required this.source, required this.onOpen});
+
+  final _JobSource source;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: OutlinedButton.icon(
+        onPressed: onOpen,
+        icon: Icon(source.icon, size: 18),
+        label: Text(source.name),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          foregroundColor: _caseworkInk,
+          side: const BorderSide(color: _caseworkLine),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.all(12),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroceryImportPanel extends StatelessWidget {
+  const _GroceryImportPanel({
+    required this.controller,
+    required this.onPaste,
+    required this.onParse,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onPaste;
+  final VoidCallback onParse;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          minLines: 8,
+          maxLines: 12,
+          style: const TextStyle(color: _caseworkInk, height: 1.35),
+          decoration: _desktopInputDecoration(
+            'Paste product text or URL: product, brand, store, price, unit price',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: onParse,
+              icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
+              label: const Text('Extract price'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onPaste,
+              icon: const Icon(Icons.content_paste_outlined, size: 16),
+              label: const Text('Paste'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear_rounded, size: 16),
+              label: const Text('Clear'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkMuted,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _GroceryLeadList extends StatelessWidget {
+  const _GroceryLeadList({
+    required this.leads,
+    required this.totalLeads,
+    required this.selectedCategories,
+    required this.onCategoryChanged,
+    required this.onExportPdf,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final List<_GroceryLead> leads;
+  final int totalLeads;
+  final Set<String> selectedCategories;
+  final void Function(String category, bool selected) onCategoryChanged;
+  final VoidCallback onExportPdf;
+  final ValueChanged<_GroceryLead> onOpen;
+  final ValueChanged<_GroceryLead> onLog;
+  final ValueChanged<_GroceryLead> onCopy;
+  final ValueChanged<_GroceryLead> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final category in _groceryCategoryOptions)
+              FilterChip(
+                label: Text(category),
+                selected: selectedCategories.contains(category),
+                onSelected: (selected) => onCategoryChanged(category, selected),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _LightStatusPill(label: 'Saved', value: '$totalLeads'),
+            _LightStatusPill(label: 'Matched', value: '${leads.length}'),
+            FilledButton.icon(
+              onPressed: leads.isEmpty ? null : onExportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('Export filtered PDF'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (totalLeads == 0)
+          const _InfoBlock(
+            title: 'No grocery prices saved yet',
+            text:
+                'Paste a product result from Woolworths, New World, PAKnSAVE or a local Blenheim supermarket page.',
+          )
+        else if (leads.isEmpty)
+          const _InfoBlock(
+            title: 'No grocery prices match the filters',
+            text: 'Clear or change the category filters.',
+          ),
+        for (final lead in leads) ...[
+          _GroceryLeadCard(
+            lead: lead,
+            onOpen: () => onOpen(lead),
+            onLog: () => onLog(lead),
+            onCopy: () => onCopy(lead),
+            onRemove: () => onRemove(lead),
+          ),
+          if (lead != leads.last) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _GroceryLeadCard extends StatelessWidget {
+  const _GroceryLeadCard({
+    required this.lead,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final _GroceryLead lead;
+  final VoidCallback onOpen;
+  final VoidCallback onLog;
+  final VoidCallback onCopy;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  lead.product,
+                  style: const TextStyle(
+                    color: _caseworkInk,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove grocery price',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: _caseworkMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LightStatusPill(label: 'Store', value: lead.store),
+              _LightStatusPill(label: 'Price', value: lead.price),
+              _LightStatusPill(label: 'Unit', value: lead.unitPrice),
+              _LightStatusPill(label: 'Category', value: lead.category),
+              _LightStatusPill(label: 'Brand', value: lead.brand),
+              _LightStatusPill(label: 'Checked', value: lead.checked),
+            ],
+          ),
+          if (lead.notes.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              lead.notes,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _caseworkMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: onLog,
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Log to case'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                label: const Text('Copy'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _caseworkInk,
+                  side: const BorderSide(color: _caseworkLine),
+                ),
+              ),
+              if (lead.source.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('Open link'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _caseworkInk,
+                    side: const BorderSide(color: _caseworkLine),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _JobImportPanel extends StatelessWidget {
+  const _JobImportPanel({
+    required this.controller,
+    required this.onPaste,
+    required this.onParse,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onPaste;
+  final VoidCallback onParse;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: controller,
+          minLines: 6,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText:
+                'Paste job listing text or URL: title, employer, location, job type, phone/email',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: onParse,
+              icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
+              label: const Text('Extract job'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onPaste,
+              icon: const Icon(Icons.content_paste_outlined, size: 16),
+              label: const Text('Paste'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.close, size: 16),
+              label: const Text('Clear'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkMuted,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _JobLeadList extends StatelessWidget {
+  const _JobLeadList({
+    required this.leads,
+    required this.totalLeads,
+    required this.selectedTypes,
+    required this.onTypeChanged,
+    required this.onExportPdf,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final List<_JobLead> leads;
+  final int totalLeads;
+  final Set<String> selectedTypes;
+  final void Function(String type, bool selected) onTypeChanged;
+  final VoidCallback onExportPdf;
+  final ValueChanged<_JobLead> onOpen;
+  final ValueChanged<_JobLead> onLog;
+  final ValueChanged<_JobLead> onCopy;
+  final ValueChanged<_JobLead> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final type in _jobTypeOptions)
+              FilterChip(
+                label: Text(type),
+                selected: selectedTypes.contains(type),
+                onSelected: (selected) => onTypeChanged(type, selected),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _LightStatusPill(label: 'Saved', value: '$totalLeads'),
+            _LightStatusPill(label: 'Matched', value: '${leads.length}'),
+            FilledButton.icon(
+              onPressed: leads.isEmpty ? null : onExportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('Export filtered PDF'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (totalLeads == 0)
+          const _InfoBlock(
+            title: 'No job leads saved yet',
+            text:
+                'Paste an actual Blenheim, Renwick or Picton job listing from SEEK, Trade Me Jobs, PickNZ, Wine Jobs or another job page.',
+          )
+        else if (leads.isEmpty)
+          const _InfoBlock(
+            title: 'No job leads match the filters',
+            text: 'Clear or change the job type filters.',
+          ),
+        for (final lead in leads) ...[
+          _JobLeadCard(
+            lead: lead,
+            onOpen: () => onOpen(lead),
+            onLog: () => onLog(lead),
+            onCopy: () => onCopy(lead),
+            onRemove: () => onRemove(lead),
+          ),
+          if (lead != leads.last) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _JobLeadCard extends StatelessWidget {
+  const _JobLeadCard({
+    required this.lead,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final _JobLead lead;
+  final VoidCallback onOpen;
+  final VoidCallback onLog;
+  final VoidCallback onCopy;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  lead.title,
+                  style: const TextStyle(
+                    color: _caseworkInk,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove job lead',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: _caseworkMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LightStatusPill(label: 'Type', value: lead.type),
+              _LightStatusPill(label: 'Employer', value: lead.employer),
+              _LightStatusPill(label: 'Area', value: lead.area),
+              _LightStatusPill(label: 'Posted', value: lead.posted),
+              _LightStatusPill(
+                label: 'Apply',
+                value: lead.quickApply ? 'Quick apply' : 'Standard apply',
+              ),
+              _LightStatusPill(label: 'Contact', value: lead.contact),
+            ],
+          ),
+          if (lead.notes.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              lead.notes,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _caseworkMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: onLog,
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Log to case'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                label: const Text('Copy'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _caseworkInk,
+                  side: const BorderSide(color: _caseworkLine),
+                ),
+              ),
+              if (lead.source.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('Open link'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _caseworkInk,
+                    side: const BorderSide(color: _caseworkLine),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RentalImportPanel extends StatelessWidget {
+  const _RentalImportPanel({
+    required this.controller,
+    required this.onPaste,
+    required this.onParse,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onPaste;
+  final VoidCallback onParse;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          minLines: 8,
+          maxLines: 12,
+          style: const TextStyle(color: _caseworkInk, height: 1.35),
+          decoration: _desktopInputDecoration(
+            'Paste listing text or URL: address, rent, bedrooms, agency, phone/email',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: onParse,
+              icon: const Icon(Icons.auto_fix_high_outlined, size: 16),
+              label: const Text('Extract listing'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onPaste,
+              icon: const Icon(Icons.content_paste_outlined, size: 16),
+              label: const Text('Paste'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkInk,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear_rounded, size: 16),
+              label: const Text('Clear'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _caseworkMuted,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RentalLeadList extends StatelessWidget {
+  const _RentalLeadList({
+    required this.leads,
+    required this.totalLeads,
+    required this.diaryLeadCount,
+    required this.minPriceController,
+    required this.maxPriceController,
+    required this.minRoomsController,
+    required this.selectedDiaryKeys,
+    required this.onFilterChanged,
+    required this.onExportPdf,
+    required this.onExportDiary,
+    required this.onToggleDiary,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final List<_RentalLead> leads;
+  final int totalLeads;
+  final int diaryLeadCount;
+  final TextEditingController minPriceController;
+  final TextEditingController maxPriceController;
+  final TextEditingController minRoomsController;
+  final Set<String> selectedDiaryKeys;
+  final VoidCallback onFilterChanged;
+  final VoidCallback onExportPdf;
+  final VoidCallback onExportDiary;
+  final void Function(_RentalLead lead, bool selected) onToggleDiary;
+  final ValueChanged<_RentalLead> onOpen;
+  final ValueChanged<_RentalLead> onLog;
+  final ValueChanged<_RentalLead> onCopy;
+  final ValueChanged<_RentalLead> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _RentalDiaryFilterPanel(
+          totalLeads: totalLeads,
+          matchedLeads: leads.length,
+          diaryLeadCount: diaryLeadCount,
+          minPriceController: minPriceController,
+          maxPriceController: maxPriceController,
+          minRoomsController: minRoomsController,
+          onChanged: onFilterChanged,
+          onExportPdf: onExportPdf,
+          onExportDiary: onExportDiary,
+        ),
+        const SizedBox(height: 12),
+        if (totalLeads == 0)
+          const _InfoBlock(
+            title: 'No rental leads saved yet',
+            text:
+                'Paste listing text from Trade Me, realestate.co.nz, OneRoof or a local agency page to create a lead card.',
+          )
+        else if (leads.isEmpty)
+          const _InfoBlock(
+            title: 'No leads match the filters',
+            text: 'Clear or widen the price and bedroom filters.',
+          ),
+        for (final lead in leads) ...[
+          _RentalLeadCard(
+            lead: lead,
+            selectedForDiary: selectedDiaryKeys.contains(lead.diaryKey),
+            onToggleDiary: (selected) => onToggleDiary(lead, selected),
+            onOpen: () => onOpen(lead),
+            onLog: () => onLog(lead),
+            onCopy: () => onCopy(lead),
+            onRemove: () => onRemove(lead),
+          ),
+          if (lead != leads.last) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _RentalDiaryFilterPanel extends StatelessWidget {
+  const _RentalDiaryFilterPanel({
+    required this.totalLeads,
+    required this.matchedLeads,
+    required this.diaryLeadCount,
+    required this.minPriceController,
+    required this.maxPriceController,
+    required this.minRoomsController,
+    required this.onChanged,
+    required this.onExportPdf,
+    required this.onExportDiary,
+  });
+
+  final int totalLeads;
+  final int matchedLeads;
+  final int diaryLeadCount;
+  final TextEditingController minPriceController;
+  final TextEditingController maxPriceController;
+  final TextEditingController minRoomsController;
+  final VoidCallback onChanged;
+  final VoidCallback onExportPdf;
+  final VoidCallback onExportDiary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _RentalFilterField(
+                controller: minPriceController,
+                label: 'Min rent',
+                icon: Icons.attach_money_outlined,
+                onChanged: onChanged,
+              ),
+              _RentalFilterField(
+                controller: maxPriceController,
+                label: 'Max rent',
+                icon: Icons.price_check_outlined,
+                onChanged: onChanged,
+              ),
+              _RentalFilterField(
+                controller: minRoomsController,
+                label: 'Min rooms',
+                icon: Icons.bed_outlined,
+                onChanged: onChanged,
+              ),
+              FilledButton.icon(
+                onPressed: matchedLeads == 0 ? null : onExportPdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                label: const Text('Export filtered PDF'),
+              ),
+              FilledButton.icon(
+                onPressed: totalLeads == 0 ? null : onExportDiary,
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                label: const Text('Housing diary PDF'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LightStatusPill(label: 'Saved', value: '$totalLeads'),
+              _LightStatusPill(label: 'Matched', value: '$matchedLeads'),
+              _LightStatusPill(label: 'Diary', value: '$diaryLeadCount'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RentalFilterField extends StatelessWidget {
+  const _RentalFilterField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 132,
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        onChanged: (_) => onChanged(),
+        style: const TextStyle(
+          color: _caseworkInk,
+          fontWeight: FontWeight.w800,
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          labelText: label,
+          labelStyle: const TextStyle(color: _caseworkMuted),
+          prefixIconColor: _caseworkMuted,
+          prefixIcon: Icon(icon, size: 16),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: _caseworkLine),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: _caseworkBlue),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RentalLeadCard extends StatelessWidget {
+  const _RentalLeadCard({
+    required this.lead,
+    required this.selectedForDiary,
+    required this.onToggleDiary,
+    required this.onOpen,
+    required this.onLog,
+    required this.onCopy,
+    required this.onRemove,
+  });
+
+  final _RentalLead lead;
+  final bool selectedForDiary;
+  final ValueChanged<bool> onToggleDiary;
+  final VoidCallback onOpen;
+  final VoidCallback onLog;
+  final VoidCallback onCopy;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: selectedForDiary,
+                onChanged: (value) => onToggleDiary(value ?? false),
+                activeColor: _caseworkBlue,
+                side: const BorderSide(color: _caseworkLine),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  lead.address,
+                  style: const TextStyle(
+                    color: _caseworkInk,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove lead',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: _caseworkMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LightStatusPill(label: 'Price', value: lead.price),
+              _LightStatusPill(label: 'Size', value: lead.size),
+              _LightStatusPill(label: 'Area', value: lead.area),
+              _LightStatusPill(label: 'Agency', value: lead.agency),
+              _LightStatusPill(label: 'Contact', value: lead.contact),
+            ],
+          ),
+          if (lead.source.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: onOpen,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.link_outlined,
+                    color: _caseworkBlue,
+                    size: 15,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      lead.source,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _caseworkBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: onLog,
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Log to case'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                label: const Text('Copy'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _caseworkInk,
+                  side: const BorderSide(color: _caseworkLine),
+                ),
+              ),
+              if (lead.source.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: const Text('Open link'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _caseworkInk,
+                    side: const BorderSide(color: _caseworkLine),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -6160,6 +8386,1018 @@ class _Referral {
   final List<String> criteria;
 }
 
+class _RentalSource {
+  const _RentalSource({
+    required this.name,
+    required this.url,
+    required this.icon,
+  });
+
+  final String name;
+  final String url;
+  final IconData icon;
+}
+
+class _GrocerySource {
+  const _GrocerySource({
+    required this.name,
+    required this.store,
+    required this.url,
+    required this.icon,
+  });
+
+  final String name;
+  final String store;
+  final String url;
+  final IconData icon;
+}
+
+class _JobSource {
+  const _JobSource({required this.name, required this.url, required this.icon});
+
+  final String name;
+  final String url;
+  final IconData icon;
+}
+
+class _GroceryLead {
+  const _GroceryLead({
+    required this.product,
+    required this.brand,
+    required this.category,
+    required this.store,
+    required this.price,
+    required this.unitPrice,
+    required this.checked,
+    required this.source,
+    required this.notes,
+  });
+
+  final String product;
+  final String brand;
+  final String category;
+  final String store;
+  final String price;
+  final String unitPrice;
+  final String checked;
+  final String source;
+  final String notes;
+
+  factory _GroceryLead.fromJson(Map<String, Object?> json) {
+    return _GroceryLead(
+      product: (json['product'] as String?) ?? 'Product not found',
+      brand: (json['brand'] as String?) ?? 'Brand not found',
+      category: (json['category'] as String?) ?? 'Other',
+      store: (json['store'] as String?) ?? 'Store not found',
+      price: (json['price'] as String?) ?? 'Price not found',
+      unitPrice: (json['unitPrice'] as String?) ?? 'Unit price not found',
+      checked: (json['checked'] as String?) ?? 'Checked date not found',
+      source: (json['source'] as String?) ?? '',
+      notes: (json['notes'] as String?) ?? '',
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'product': product,
+      'brand': brand,
+      'category': category,
+      'store': store,
+      'price': price,
+      'unitPrice': unitPrice,
+      'checked': checked,
+      'source': source,
+      'notes': notes,
+    };
+  }
+
+  String get summary => '$product | $store | $price | $unitPrice | $category';
+
+  bool get isBlenheimPriceCheck {
+    final text = '$product $store $source $notes'.toLowerCase();
+    return text.contains('blenheim') ||
+        text.contains('new world') ||
+        text.contains('woolworths') ||
+        text.contains('paknsave') ||
+        text.contains('pak n save') ||
+        text.contains('pak\'nsave') ||
+        text.contains('freshchoice');
+  }
+
+  double? get priceValue {
+    final match = RegExp(r'\d+(?:\.\d{1,2})?').firstMatch(price);
+    if (match == null) return null;
+    return double.tryParse(match.group(0)!);
+  }
+
+  String get noteLine {
+    final parts = [
+      'Grocery price: $product',
+      store,
+      price,
+      unitPrice,
+      category,
+      brand,
+      checked,
+      if (source.isNotEmpty) source,
+    ];
+    return parts.join(' | ');
+  }
+}
+
+int _compareGroceryLeads(_GroceryLead left, _GroceryLead right) {
+  final categoryCompare = left.category.compareTo(right.category);
+  if (categoryCompare != 0) return categoryCompare;
+
+  final productCompare = left.product.toLowerCase().compareTo(
+    right.product.toLowerCase(),
+  );
+  if (productCompare != 0) return productCompare;
+
+  final leftPrice = left.priceValue ?? 999999;
+  final rightPrice = right.priceValue ?? 999999;
+  final priceCompare = leftPrice.compareTo(rightPrice);
+  if (priceCompare != 0) return priceCompare;
+
+  return left.store.toLowerCase().compareTo(right.store.toLowerCase());
+}
+
+class _GroceryLeadParser {
+  static _GroceryLead parse(String rawText) {
+    final text = rawText.trim();
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final source = _firstMatch(text, RegExp(r'https?://\S+')) ?? '';
+    final product = _product(lines, source);
+
+    return _GroceryLead(
+      product: product,
+      brand: _brand(lines, product),
+      category: _category(text),
+      store: _store(text, source),
+      price: _price(text),
+      unitPrice: _unitPrice(text),
+      checked: _checked(text),
+      source: source,
+      notes: text,
+    );
+  }
+
+  static String _product(List<String> lines, String source) {
+    for (final line in lines) {
+      final cleaned = _cleanProductLine(line);
+      if (cleaned != null) return cleaned;
+    }
+
+    final uri = Uri.tryParse(source);
+    if (uri != null) {
+      final segments = uri.pathSegments.reversed;
+      for (final segment in segments) {
+        final decoded = Uri.decodeComponent(
+          segment,
+        ).replaceAll(RegExp(r'[-_+]+'), ' ').trim();
+        final cleaned = _cleanProductLine(decoded);
+        if (cleaned != null) return cleaned;
+      }
+    }
+
+    return 'Product not found';
+  }
+
+  static String? _cleanProductLine(String value) {
+    final line = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (line.length < 3 || line.length > 110) return null;
+    final lower = line.toLowerCase();
+    const blocked = [
+      'add to trolley',
+      'add to cart',
+      'special',
+      'price',
+      'unit price',
+      'club deal',
+      'online only',
+      'each',
+      'per kg',
+      'per 100g',
+      'woolworths',
+      'new world',
+      'paknsave',
+      'pak n save',
+      'blenheim',
+      'search results',
+      'sort by',
+    ];
+    if (blocked.any((word) => lower == word || lower.startsWith('$word '))) {
+      return null;
+    }
+    if (RegExp(r'^\$\s?\d').hasMatch(line)) return null;
+    return line;
+  }
+
+  static String _brand(List<String> lines, String product) {
+    final labelled = _firstMatch(
+      lines.join('\n'),
+      RegExp(r'(?:brand|supplier)[:\s]+([^\n\r|]+)', caseSensitive: false),
+      group: 1,
+    );
+    if (labelled != null) return _clean(labelled);
+
+    final words = product.split(RegExp(r'\s+'));
+    if (words.isEmpty) return 'Brand not found';
+    final first = words.first;
+    return first.length <= 2 ? 'Brand not found' : first;
+  }
+
+  static String _store(String text, String source) {
+    final lower = '$text $source'.toLowerCase();
+    if (lower.contains('new world')) return 'New World Blenheim';
+    if (lower.contains('woolworths')) return 'Woolworths Blenheim';
+    if (lower.contains('paknsave') ||
+        lower.contains('pak n save') ||
+        lower.contains('pak\'nsave')) {
+      return 'PAKnSAVE Blenheim';
+    }
+    if (lower.contains('freshchoice')) return 'FreshChoice Blenheim';
+    if (lower.contains('blenheim')) return 'Blenheim supermarket';
+    return 'Store not found';
+  }
+
+  static String _price(String text) {
+    return _firstMatch(
+          text,
+          RegExp(r'\$\s?\d+(?:\.\d{1,2})?', caseSensitive: false),
+        ) ??
+        'Price not found';
+  }
+
+  static String _unitPrice(String text) {
+    return _firstMatch(
+          text,
+          RegExp(
+            r'\$\s?\d+(?:\.\d{1,2})?\s?/(?:kg|g|100g|l|ml|each|ea|unit)',
+            caseSensitive: false,
+          ),
+        ) ??
+        _firstMatch(
+          text,
+          RegExp(
+            r'\d+(?:\.\d{1,2})?\s?(?:c|¢)/(?:kg|g|100g|l|ml|each|ea|unit)',
+            caseSensitive: false,
+          ),
+        ) ??
+        'Unit price not found';
+  }
+
+  static String _checked(String text) {
+    return _firstMatch(
+          text,
+          RegExp(
+            r'\b(?:checked|last checked|updated)[:\s]+([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|[A-Za-z]+ \d{1,2},? \d{4})',
+            caseSensitive: false,
+          ),
+          group: 1,
+        ) ??
+        _checkedToday();
+  }
+
+  static String _category(String text) {
+    final lower = text.toLowerCase();
+    for (final entry in _groceryCategoryKeywords.entries) {
+      if (entry.value.any(lower.contains)) return entry.key;
+    }
+    return 'Other';
+  }
+
+  static String? _firstMatch(String text, RegExp pattern, {int group = 0}) {
+    final match = pattern.firstMatch(text);
+    if (match == null) return null;
+    return match.group(group)?.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static String _clean(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static String _checkedToday() {
+    final now = DateTime.now();
+    return '${now.day.toString().padLeft(2, '0')}/'
+        '${now.month.toString().padLeft(2, '0')}/${now.year}';
+  }
+}
+
+class _JobLead {
+  const _JobLead({
+    required this.title,
+    required this.employer,
+    required this.type,
+    required this.area,
+    required this.contact,
+    required this.posted,
+    required this.quickApply,
+    required this.source,
+    required this.notes,
+  });
+
+  final String title;
+  final String employer;
+  final String type;
+  final String area;
+  final String contact;
+  final String posted;
+  final bool quickApply;
+  final String source;
+  final String notes;
+
+  factory _JobLead.fromJson(Map<String, Object?> json) {
+    final title = (json['title'] as String?) ?? '';
+    final source = (json['source'] as String?) ?? '';
+    final notes = (json['notes'] as String?) ?? '';
+    return _JobLead(
+      title: _resolveJobTitle(title: title, notes: notes, source: source),
+      employer: (json['employer'] as String?) ?? 'Employer not found',
+      type: (json['type'] as String?) ?? 'Other',
+      area: (json['area'] as String?) ?? 'Local area to confirm',
+      contact: (json['contact'] as String?) ?? 'Contact not found',
+      posted: (json['posted'] as String?) ?? 'Posted date not found',
+      quickApply: json['quickApply'] == true,
+      source: source,
+      notes: notes,
+    );
+  }
+
+  factory _JobLead.fromScraped(JobScrapedListing listing) {
+    return _JobLead(
+      title: _resolveJobTitle(
+        title: listing.title,
+        notes: listing.notes,
+        source: listing.source,
+      ),
+      employer: listing.employer,
+      type: listing.type,
+      area: listing.area,
+      contact: listing.contact,
+      posted: listing.posted,
+      quickApply: listing.quickApply,
+      source: listing.source,
+      notes: listing.notes,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'title': title,
+      'employer': employer,
+      'type': type,
+      'area': area,
+      'contact': contact,
+      'posted': posted,
+      'quickApply': quickApply,
+      'source': source,
+      'notes': notes,
+    };
+  }
+
+  String get summary => '$title | $employer | $type | $area';
+
+  bool get isStrictLocalJob {
+    final text = '$title $employer $notes $source'.toLowerCase();
+    return _hasAllowedLocalJobEvidence(text) &&
+        !_hasExcludedJobLocationEvidence(text);
+  }
+
+  String get noteLine {
+    final parts = [
+      'Job lead: $title',
+      employer,
+      type,
+      area,
+      contact,
+      posted,
+      quickApply ? 'Quick apply' : 'Standard apply',
+      if (source.isNotEmpty) source,
+    ];
+    return parts.join(' | ');
+  }
+}
+
+int _compareJobLeads(_JobLead left, _JobLead right) {
+  final typeCompare = left.type.compareTo(right.type);
+  if (typeCompare != 0) return typeCompare;
+
+  final areaCompare = left.area.compareTo(right.area);
+  if (areaCompare != 0) return areaCompare;
+
+  return left.title.toLowerCase().compareTo(right.title.toLowerCase());
+}
+
+bool _hasAllowedLocalJobEvidence(String text) {
+  final lower = text.toLowerCase();
+  return lower.contains('blenheim') ||
+      lower.contains('renwick') ||
+      lower.contains('picton');
+}
+
+bool _hasExcludedJobLocationEvidence(String text) {
+  final lower = text.toLowerCase();
+  const excluded = [
+    'auckland',
+    'wellington',
+    'christchurch',
+    'hamilton',
+    'tauranga',
+    'rotorua',
+    'dunedin',
+    'queenstown',
+    'nelson',
+    'richmond',
+    'motueka',
+    'timaru',
+    'ashburton',
+    'invercargill',
+    'palmerston north',
+    'new plymouth',
+    'napier',
+    'hastings',
+    'gisborne',
+    'whangarei',
+    'porirua',
+    'lower hutt',
+    'upper hutt',
+    'masterton',
+    'wanaka',
+    'westport',
+    'greymouth',
+  ];
+  return excluded.any(lower.contains);
+}
+
+String _resolveJobTitle({
+  required String title,
+  required String notes,
+  required String source,
+}) {
+  final cleaned = _cleanJobLeadTitle(title);
+  if (cleaned != null) return cleaned;
+
+  final fromNotes = _jobTitleFromText(notes);
+  if (fromNotes != null) return fromNotes;
+
+  final fromSource = _jobTitleFromSource(source);
+  return fromSource ?? 'Job listing';
+}
+
+String? _cleanJobLeadTitle(String value) {
+  final line = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (line.length < 4 || line.length > 95) return null;
+
+  final lower = line.toLowerCase();
+  const blocked = [
+    'job title not found',
+    'apply',
+    'save',
+    'listed',
+    'classification',
+    'subclassification',
+    'location',
+    'salary',
+    'source',
+    'seek marlborough',
+    'trade me jobs',
+    'indeed marlborough',
+    'picknz',
+    'backpacker board',
+    'job search',
+    'view all',
+  ];
+  if (blocked.any(lower.contains)) return null;
+  if (_hasAllowedLocalJobEvidence(lower) &&
+      line.split(RegExp(r'\s+')).length <= 2) {
+    return null;
+  }
+  return line;
+}
+
+String? _jobTitleFromText(String text) {
+  final lines = text
+      .split(RegExp(r'\r?\n|[|]'))
+      .map(_cleanJobLeadTitle)
+      .whereType<String>()
+      .toList();
+  if (lines.isEmpty) return null;
+
+  final titleWords = RegExp(
+    r'\b(worker|labourer|operator|assistant|driver|cleaner|chef|hand|manager|administrator|technician|cellar|vineyard|harvest|picker|packer|receptionist|coordinator|supervisor|retail|sales|support|caregiver|mechanic|builder|electrician)\b',
+    caseSensitive: false,
+  );
+
+  return lines.firstWhere(
+    (line) => titleWords.hasMatch(line),
+    orElse: () => lines.first,
+  );
+}
+
+String? _jobTitleFromSource(String source) {
+  final uri = Uri.tryParse(source);
+  if (uri == null) return null;
+
+  final pieces = uri.pathSegments
+      .where((piece) => piece.isNotEmpty)
+      .where((piece) => int.tryParse(piece) == null)
+      .where((piece) {
+        final lower = piece.toLowerCase();
+        return lower != 'job' &&
+            lower != 'jobs' &&
+            lower != 'listing' &&
+            lower != 'viewjob' &&
+            lower != 'search';
+      })
+      .toList();
+  if (pieces.isEmpty) return null;
+
+  final decoded = Uri.decodeComponent(pieces.last)
+      .replaceAll(RegExp(r'\.[a-z0-9]+$', caseSensitive: false), '')
+      .replaceAll(RegExp(r'[-_+]+'), ' ');
+  return _cleanJobLeadTitle(decoded);
+}
+
+class _JobLeadParser {
+  static _JobLead parse(String rawText) {
+    final text = rawText.trim();
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final source = _firstMatch(text, RegExp(r'https?://\S+')) ?? '';
+    final title = _resolveJobTitle(
+      title: lines.isEmpty ? '' : lines.first,
+      notes: text,
+      source: source,
+    );
+    final employer = _employer(lines, text);
+
+    return _JobLead(
+      title: title,
+      employer: employer,
+      type: _jobType(text),
+      area: _jobArea(text),
+      contact: _contact(text),
+      posted: _posted(text),
+      quickApply: _quickApply(text),
+      source: source,
+      notes: text,
+    );
+  }
+
+  static String _employer(List<String> lines, String text) {
+    final labelled = _firstMatch(
+      text,
+      RegExp(
+        r'(?:company|employer|business|agency)[:\s]+([^\n\r|]+)',
+        caseSensitive: false,
+      ),
+      group: 1,
+    );
+    if (labelled != null) return _clean(labelled);
+    return lines.length > 1 ? _clean(lines[1]) : 'Employer not found';
+  }
+
+  static String _jobType(String text) {
+    final lower = text.toLowerCase();
+    for (final entry in _jobTypeKeywords.entries) {
+      if (entry.value.any(lower.contains)) return entry.key;
+    }
+    return 'Other';
+  }
+
+  static String _jobArea(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('renwick')) return 'Renwick';
+    if (lower.contains('picton')) return 'Picton';
+    if (lower.contains('blenheim')) return 'Blenheim';
+    return 'Local area to confirm';
+  }
+
+  static String _contact(String text) {
+    final email = _firstMatch(
+      text,
+      RegExp(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', caseSensitive: false),
+    );
+    final phone = _firstMatch(
+      text,
+      RegExp(r'(?:\+64|0)\s?\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}'),
+    );
+    if (email != null && phone != null) return '$phone / $email';
+    return phone ?? email ?? 'Contact not found';
+  }
+
+  static String _posted(String text) {
+    return _firstMatch(
+          text,
+          RegExp(
+            r'\b(?:listed|posted)\s+(?:just now|today|yesterday|\d+\s*(?:m|minute|minutes|h|hour|hours|d|day|days)\s+ago)\b',
+            caseSensitive: false,
+          ),
+        ) ??
+        _firstMatch(
+          text,
+          RegExp(
+            r'\b(?:just now|today|yesterday|\d+\s*(?:m|minute|minutes|h|hour|hours|d|day|days)\s+ago)\b',
+            caseSensitive: false,
+          ),
+        ) ??
+        'Posted date not found';
+  }
+
+  static bool _quickApply(String text) {
+    return RegExp(
+      r'\b(?:quick apply|easily apply|apply with seek)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
+
+  static String? _firstMatch(String text, RegExp pattern, {int group = 0}) {
+    final match = pattern.firstMatch(text);
+    if (match == null) return null;
+    return match.group(group)?.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static String _clean(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+}
+
+class _RentalLead {
+  const _RentalLead({
+    required this.address,
+    required this.price,
+    required this.size,
+    required this.agency,
+    required this.contact,
+    required this.source,
+    required this.notes,
+  });
+
+  final String address;
+  final String price;
+  final String size;
+  final String agency;
+  final String contact;
+  final String source;
+  final String notes;
+
+  factory _RentalLead.fromJson(Map<String, Object?> json) {
+    return _RentalLead(
+      address: (json['address'] as String?) ?? 'Address not found',
+      price: (json['price'] as String?) ?? 'Price not found',
+      size: (json['size'] as String?) ?? 'Size not found',
+      agency: (json['agency'] as String?) ?? 'Agency not found',
+      contact: (json['contact'] as String?) ?? 'Contact not found',
+      source: (json['source'] as String?) ?? '',
+      notes: (json['notes'] as String?) ?? '',
+    );
+  }
+
+  factory _RentalLead.fromScraped(RentalScrapedListing listing) {
+    return _RentalLead(
+      address: listing.address,
+      price: listing.price,
+      size: listing.size,
+      agency: listing.agency,
+      contact: listing.contact,
+      source: listing.source,
+      notes: listing.notes,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'address': address,
+      'price': price,
+      'size': size,
+      'agency': agency,
+      'contact': contact,
+      'source': source,
+      'notes': notes,
+    };
+  }
+
+  String get summary {
+    return '$address | $price | $size | $agency | $contact';
+  }
+
+  String get diaryKey {
+    final link = source.trim();
+    return link.isEmpty ? summary.toLowerCase() : link;
+  }
+
+  int? get weeklyRent {
+    final match = RegExp(r'\d[\d,]*').firstMatch(price);
+    if (match == null) return null;
+    return int.tryParse(match.group(0)!.replaceAll(',', ''));
+  }
+
+  int? get bedrooms {
+    final match = RegExp(
+      r'\b(\d+)\s?(?:bed|beds|bedroom|bedrooms|brm|bdrm)\b',
+      caseSensitive: false,
+    ).firstMatch(size);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  String get area => _rentalAreaFor('$address $notes $source');
+
+  bool get isMarlboroughHousing {
+    return _hasMarlboroughHousingEvidence('$address $notes $source');
+  }
+
+  int get areaRank => _rentalAreaRank(area);
+
+  String get landlordAndPhone {
+    final parts = [agency, if (contact != 'Contact not found') contact];
+    return parts.join(' - ');
+  }
+
+  String get noteLine {
+    final parts = [
+      'Rental lead: $address',
+      price,
+      size,
+      agency,
+      contact,
+      if (source.isNotEmpty) source,
+    ];
+    return parts.join(' | ');
+  }
+}
+
+int _compareRentalLeadsByArea(_RentalLead left, _RentalLead right) {
+  final areaCompare = left.areaRank.compareTo(right.areaRank);
+  if (areaCompare != 0) return areaCompare;
+
+  final rentCompare = (left.weeklyRent ?? 999999).compareTo(
+    right.weeklyRent ?? 999999,
+  );
+  if (rentCompare != 0) return rentCompare;
+
+  return left.address.toLowerCase().compareTo(right.address.toLowerCase());
+}
+
+String _rentalAreaFor(String text) {
+  final lower = text.toLowerCase();
+  if (_containsArea(lower, 'Blenheim Central') ||
+      _looksCentralBlenheim(lower)) {
+    return 'Blenheim Central';
+  }
+
+  for (final area in _rentalAreaOrder) {
+    if (area == 'Blenheim Central' ||
+        area == 'Blenheim' ||
+        area == 'Marlborough' ||
+        area == 'Marlborough area to confirm') {
+      continue;
+    }
+    if (_containsArea(lower, area)) return area;
+  }
+
+  if (lower.contains('blenheim')) return 'Blenheim';
+  if (lower.contains('marlborough')) return 'Marlborough';
+  return 'Marlborough area to confirm';
+}
+
+bool _hasMarlboroughHousingEvidence(String text) {
+  final lower = text.toLowerCase();
+  return !_hasExcludedHousingLocationEvidence(lower) &&
+      _marlboroughAreaKeywords.any(lower.contains);
+}
+
+bool _hasExcludedHousingLocationEvidence(String lowerText) {
+  return lowerText.contains('auckland') ||
+      lowerText.contains('wairau valley') ||
+      lowerText.contains('wairau-valley') ||
+      lowerText.contains('archers road') ||
+      lowerText.contains('archers-road') ||
+      lowerText.contains('north shore') ||
+      lowerText.contains('takapuna') ||
+      lowerText.contains('glenfield') ||
+      lowerText.contains('albany') ||
+      lowerText.contains('manukau') ||
+      lowerText.contains('waitakere');
+}
+
+bool _containsArea(String lowerText, String area) {
+  final lowerArea = area.toLowerCase();
+  if (lowerText.contains(lowerArea)) return true;
+  if (area == 'Blenheim Central') {
+    return lowerText.contains('central blenheim') ||
+        lowerText.contains('blenheim cbd') ||
+        lowerText.contains('cbd');
+  }
+  return false;
+}
+
+bool _looksCentralBlenheim(String lowerText) {
+  const centralStreetHints = [
+    'alfred street',
+    'arthur street',
+    'charles street',
+    'grove road',
+    'henry street',
+    'high street',
+    'market street',
+    'maxwell road',
+    'queen street',
+    'scott street',
+    'seymour street',
+    'sinclair street',
+    'symons street',
+    'walter street',
+    'wynen street',
+  ];
+
+  return centralStreetHints.any(lowerText.contains);
+}
+
+int _rentalAreaRank(String area) {
+  final index = _rentalAreaOrder.indexOf(area);
+  if (index != -1) return index;
+  return _rentalAreaOrder.length;
+}
+
+const _rentalAreaOrder = [
+  'Blenheim Central',
+  'Blenheim',
+  'Mayfield',
+  'Redwoodtown',
+  'Springlands',
+  'Riversdale',
+  'Witherlea',
+  'Burleigh',
+  'Islington',
+  'Omaka',
+  'Grovetown',
+  'Riverlands',
+  'Renwick',
+  'Rapaura',
+  'Picton',
+  'Seddon',
+  'Havelock',
+  'Marlborough',
+  'Marlborough area to confirm',
+];
+
+const _marlboroughAreaKeywords = [
+  'marlborough',
+  'blenheim',
+  'renwick',
+  'picton',
+  'seddon',
+  'havelock',
+  'springlands',
+  'redwoodtown',
+  'mayfield',
+  'witherlea',
+  'riverlands',
+  'rapaura',
+  'grovetown',
+];
+
+class _RentalLeadParser {
+  static _RentalLead parse(String rawText) {
+    final text = rawText.trim();
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    return _RentalLead(
+      address: _firstAddress(lines),
+      price:
+          _firstMatch(
+            text,
+            RegExp(
+              r'\$\s?\d[\d,]*(?:\s?(?:pw|p/w|per week|weekly|/week))?',
+              caseSensitive: false,
+            ),
+          ) ??
+          'Price not found',
+      size: _size(text),
+      agency: _agency(lines),
+      contact: _contact(text),
+      source: _firstMatch(text, RegExp(r'https?://\S+')) ?? '',
+      notes: text,
+    );
+  }
+
+  static String _firstAddress(List<String> lines) {
+    final streetPattern = RegExp(
+      r'\b\d+[A-Za-z]?\s+.+\b(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|place|pl|court|ct|crescent|cres|terrace|tce|way)\b',
+      caseSensitive: false,
+    );
+    for (final line in lines) {
+      final match = streetPattern.firstMatch(line);
+      if (match != null) return _clean(match.group(0)!);
+    }
+
+    for (final line in lines) {
+      if (line.toLowerCase().contains('blenheim') ||
+          line.toLowerCase().contains('marlborough')) {
+        return _clean(line);
+      }
+    }
+
+    return lines.isEmpty ? 'Address not found' : _clean(lines.first);
+  }
+
+  static String _size(String text) {
+    final bedrooms = _firstMatch(
+      text,
+      RegExp(
+        r'\b\d+\s?(?:bed|beds|bedroom|bedrooms|brm|bdrm)\b',
+        caseSensitive: false,
+      ),
+    );
+    final bathrooms = _firstMatch(
+      text,
+      RegExp(
+        r'\b\d+\s?(?:bath|baths|bathroom|bathrooms)\b',
+        caseSensitive: false,
+      ),
+    );
+    final floorArea = _firstMatch(
+      text,
+      RegExp(r'\b\d+\s?(?:m2|sqm|square metres)\b', caseSensitive: false),
+    );
+    final values = [?bedrooms, ?bathrooms, ?floorArea];
+    return values.isEmpty ? 'Size not found' : values.join(', ');
+  }
+
+  static String _agency(List<String> lines) {
+    const agencies = [
+      'Trade Me',
+      'realestate.co.nz',
+      'OneRoof',
+      'Harcourts',
+      'Bayleys',
+      'Ray White',
+      'Summit',
+      'First National',
+      'Property Brokers',
+      'Professionals',
+      'Quinovic',
+      'Marlborough Property Management',
+    ];
+
+    for (final agency in agencies) {
+      for (final line in lines) {
+        if (line.toLowerCase().contains(agency.toLowerCase())) {
+          return agency;
+        }
+      }
+    }
+
+    for (final line in lines) {
+      final lower = line.toLowerCase();
+      if (lower.contains('property manager') ||
+          lower.contains('agency') ||
+          lower.contains('real estate')) {
+        return _clean(line);
+      }
+    }
+
+    return 'Agency not found';
+  }
+
+  static String _contact(String text) {
+    final email = _firstMatch(
+      text,
+      RegExp(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', caseSensitive: false),
+    );
+    final phone = _firstMatch(
+      text,
+      RegExp(r'(?:\+64|0)\s?\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}'),
+    );
+    if (email != null && phone != null) return '$phone / $email';
+    return phone ?? email ?? 'Contact not found';
+  }
+
+  static String? _firstMatch(String text, RegExp pattern) {
+    final match = pattern.firstMatch(text);
+    if (match == null) return null;
+    return _clean(match.group(0)!);
+  }
+
+  static String _clean(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+}
+
 class _ActionLogEntry {
   const _ActionLogEntry({
     required this.time,
@@ -7071,6 +10309,13 @@ const _focusItems = [
     Icons.home_work_outlined,
   ),
   _FocusItem(_CaseworkFocus.accommodation, 'Accommodation', Icons.bed_outlined),
+  _FocusItem(_CaseworkFocus.rentals, 'Rentals', Icons.manage_search_outlined),
+  _FocusItem(
+    _CaseworkFocus.groceries,
+    'Groceries',
+    Icons.local_grocery_store_outlined,
+  ),
+  _FocusItem(_CaseworkFocus.jobs, 'Jobs', Icons.work_outline),
   _FocusItem(_CaseworkFocus.probation, 'Probation', Icons.gavel_outlined),
   _FocusItem(
     _CaseworkFocus.referrals,
@@ -7081,6 +10326,260 @@ const _focusItems = [
   _FocusItem(_CaseworkFocus.followUp, 'Follow-up', Icons.event_repeat_outlined),
   _FocusItem(_CaseworkFocus.file, 'Build note', Icons.description_outlined),
 ];
+
+const _rentalSources = [
+  _RentalSource(
+    name: 'Trade Me',
+    url: 'https://www.trademe.co.nz/a/property/residential/rent/marlborough',
+    icon: Icons.storefront_outlined,
+  ),
+  _RentalSource(
+    name: 'realestate.co.nz',
+    url: 'https://www.realestate.co.nz/residential/rental/marlborough',
+    icon: Icons.apartment_outlined,
+  ),
+  _RentalSource(
+    name: 'OneRoof',
+    url: 'https://www.oneroof.co.nz/search/houses-for-rent/marlborough',
+    icon: Icons.roofing_outlined,
+  ),
+  _RentalSource(
+    name: 'Harcourts',
+    url: 'https://harcourts.net/nz/office/marlborough/listings/rent',
+    icon: Icons.real_estate_agent_outlined,
+  ),
+  _RentalSource(
+    name: 'Bayleys',
+    url: 'https://www.bayleys.co.nz/listings/residential/marlborough/rent',
+    icon: Icons.business_outlined,
+  ),
+  _RentalSource(
+    name: 'Ray White',
+    url: 'https://rwblenheim.co.nz/properties/residential-for-rent',
+    icon: Icons.house_outlined,
+  ),
+];
+
+const _grocerySources = [
+  _GrocerySource(
+    name: 'Woolworths search',
+    store: 'Woolworths Blenheim',
+    url: 'https://www.woolworths.co.nz/shop/search/products?search=milk',
+    icon: Icons.local_grocery_store_outlined,
+  ),
+  _GrocerySource(
+    name: 'New World search',
+    store: 'New World Blenheim',
+    url: 'https://www.newworld.co.nz/shop/Search?q=milk',
+    icon: Icons.shopping_basket_outlined,
+  ),
+  _GrocerySource(
+    name: 'PAKnSAVE search',
+    store: 'PAKnSAVE Blenheim',
+    url: 'https://www.paknsave.co.nz/shop/Search?q=milk',
+    icon: Icons.store_mall_directory_outlined,
+  ),
+  _GrocerySource(
+    name: 'Woolworths store finder',
+    store: 'Set store to Blenheim',
+    url: 'https://www.woolworths.co.nz/shop/storelocator',
+    icon: Icons.location_on_outlined,
+  ),
+  _GrocerySource(
+    name: 'Foodstuffs store finder',
+    store: 'Check New World / PAKnSAVE Blenheim',
+    url: 'https://www.newworld.co.nz/store-finder',
+    icon: Icons.map_outlined,
+  ),
+];
+
+const _jobSources = [
+  _JobSource(
+    name: 'SEEK Blenheim',
+    url: 'https://www.seek.co.nz/jobs/in-Blenheim-Marlborough',
+    icon: Icons.work_outline,
+  ),
+  _JobSource(
+    name: 'SEEK Renwick',
+    url: 'https://www.seek.co.nz/jobs/in-Renwick-Marlborough',
+    icon: Icons.work_outline,
+  ),
+  _JobSource(
+    name: 'SEEK Picton',
+    url: 'https://www.seek.co.nz/jobs/in-Picton-Marlborough',
+    icon: Icons.work_outline,
+  ),
+  _JobSource(
+    name: 'Trade Me Blenheim',
+    url: 'https://www.trademe.co.nz/a/jobs/search?search_string=Blenheim',
+    icon: Icons.storefront_outlined,
+  ),
+  _JobSource(
+    name: 'Trade Me Renwick',
+    url: 'https://www.trademe.co.nz/a/jobs/search?search_string=Renwick',
+    icon: Icons.storefront_outlined,
+  ),
+  _JobSource(
+    name: 'Trade Me Picton',
+    url: 'https://www.trademe.co.nz/a/jobs/search?search_string=Picton',
+    icon: Icons.storefront_outlined,
+  ),
+  _JobSource(
+    name: 'PickNZ',
+    url: 'https://www.picknz.co.nz/jobs',
+    icon: Icons.agriculture_outlined,
+  ),
+  _JobSource(
+    name: 'Wine Jobs Online',
+    url: 'https://www.winejobsonline.com/jobs',
+    icon: Icons.wine_bar_outlined,
+  ),
+  _JobSource(
+    name: 'Indeed Blenheim',
+    url: 'https://nz.indeed.com/jobs?q=&l=Blenheim',
+    icon: Icons.search_outlined,
+  ),
+  _JobSource(
+    name: 'Indeed Renwick',
+    url: 'https://nz.indeed.com/jobs?q=&l=Renwick',
+    icon: Icons.search_outlined,
+  ),
+  _JobSource(
+    name: 'Indeed Picton',
+    url: 'https://nz.indeed.com/jobs?q=&l=Picton',
+    icon: Icons.search_outlined,
+  ),
+  _JobSource(
+    name: 'Backpacker Board',
+    url:
+        'https://www.backpackerboard.co.nz/work_jobs/job_listings.php?search=Blenheim',
+    icon: Icons.backpack_outlined,
+  ),
+];
+
+const _jobTypeOptions = [
+  'Wine',
+  'Labour',
+  'Hospitality',
+  'Retail',
+  'Care',
+  'Admin',
+  'Trades',
+  'Transport',
+  'Cleaning',
+  'Other',
+];
+
+const _groceryCategoryOptions = [
+  'Milk',
+  'Bread',
+  'Produce',
+  'Meat',
+  'Pantry',
+  'Frozen',
+  'Household',
+  'Baby',
+  'Pet',
+  'Other',
+];
+
+const _groceryCategoryKeywords = <String, List<String>>{
+  'Milk': ['milk', 'cream', 'yoghurt', 'yogurt', 'cheese', 'butter'],
+  'Bread': ['bread', 'toast', 'bun', 'wrap', 'tortilla', 'bakery'],
+  'Produce': [
+    'apple',
+    'banana',
+    'orange',
+    'potato',
+    'kumara',
+    'carrot',
+    'onion',
+    'lettuce',
+    'tomato',
+    'produce',
+    'fruit',
+    'vegetable',
+  ],
+  'Meat': [
+    'beef',
+    'chicken',
+    'pork',
+    'lamb',
+    'mince',
+    'sausages',
+    'fish',
+    'salmon',
+    'bacon',
+  ],
+  'Pantry': [
+    'rice',
+    'pasta',
+    'flour',
+    'sugar',
+    'cereal',
+    'oats',
+    'coffee',
+    'tea',
+    'beans',
+    'tomatoes',
+    'oil',
+  ],
+  'Frozen': ['frozen', 'ice cream', 'peas', 'chips', 'pizza'],
+  'Household': [
+    'toilet paper',
+    'laundry',
+    'dishwash',
+    'cleaner',
+    'soap',
+    'shampoo',
+  ],
+  'Baby': ['baby', 'nappies', 'formula', 'wipes'],
+  'Pet': ['pet', 'cat', 'dog', 'kitten', 'puppy'],
+};
+
+const _jobTypeKeywords = <String, List<String>>{
+  'Wine': [
+    'wine',
+    'vineyard',
+    'viticulture',
+    'cellar',
+    'harvest',
+    'pruning',
+    'winery',
+    'grape',
+  ],
+  'Labour': [
+    'labour',
+    'labourer',
+    'factory',
+    'warehouse',
+    'process worker',
+    'seasonal',
+    'picker',
+    'packer',
+  ],
+  'Hospitality': [
+    'hospitality',
+    'cafe',
+    'restaurant',
+    'barista',
+    'kitchen',
+    'chef',
+    'front of house',
+  ],
+  'Retail': ['retail', 'sales assistant', 'customer service', 'checkout'],
+  'Care': [
+    'support worker',
+    'caregiver',
+    'healthcare',
+    'disability',
+    'aged care',
+  ],
+  'Admin': ['admin', 'administrator', 'reception', 'office'],
+  'Trades': ['builder', 'plumber', 'electrician', 'mechanic', 'trade'],
+  'Transport': ['driver', 'courier', 'truck', 'forklift', 'delivery'],
+  'Cleaning': ['cleaner', 'cleaning', 'housekeeping'],
+};
 
 const _contactActionOptions = [
   'Client contact method and availability confirmed',
@@ -7379,30 +10878,6 @@ const _probationActionOptions = [
   'Written confirmation requested if address declined',
   'Alternative address pathway identified',
   'Corrections/MSD/CMM next contact time recorded',
-];
-
-const _minimumSafetyChecks = [
-  'Safe place for tonight confirmed or escalated',
-  'Immediate danger / family violence screened',
-  'Client knows next appointment/call time',
-];
-
-const _minimumMsdCriteriaChecks = [
-  'No safe or adequate accommodation available now',
-  'No realistic whanau/friends/private option available tonight',
-  'Unable to pay for suitable temporary accommodation without assistance',
-];
-
-const _minimumDocumentChecks = [
-  'Photo ID checked or replacement pathway started',
-  'Benefit/income evidence available',
-  'Housing search evidence gathered',
-];
-
-const _minimumMsdChecks = [
-  'MSD emergency housing assessment requested',
-  'MSD asked to check transitional housing options',
-  'MSD outcome, person spoken to, and next contact logged',
 ];
 
 const _referralOptions = [

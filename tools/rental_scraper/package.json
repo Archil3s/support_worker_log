@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "support-worker-rental-scraper",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node rental_scraper_server.js",
+    "install-browser": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.57.0"
+  }
+}

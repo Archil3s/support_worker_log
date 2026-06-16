@@ -121,6 +121,8 @@ mr_notes_writer.log
 # Local dev logs
 flutter_analyze_log.txt
 flutter_run_log.txt
+tools/rental_scraper/node_modules/
+tools/rental_scraper/*.log
 
 # Local writer/launcher scripts
 run_app_with_notes_writer.ps1
