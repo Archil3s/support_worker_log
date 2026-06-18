@@ -7,6 +7,12 @@ String appendVoiceNoteText({required String existing, required String spoken}) {
   return shouldKeepTrailingBreak ? '$combined\n\n' : combined;
 }
 
+String appendTrailingVoiceBreak(String value) {
+  final current = normalizeVoiceTranscript(value);
+  if (current.isEmpty) return '';
+  return '$current\n\n';
+}
+
 String normalizeVoiceTranscript(String value) {
   return value
       .replaceAll(RegExp(r'[ \t]+\n'), '\n')

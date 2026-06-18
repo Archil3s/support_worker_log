@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -182,12 +184,16 @@ class _MoodVoiceNoteCard extends StatefulWidget {
 
 class _MoodVoiceNoteCardState extends State<_MoodVoiceNoteCard> {
   final controller = TextEditingController();
+  final focusNode = FocusNode();
   final speechService = SpeechToTextService();
+  Timer? textSilenceTimer;
   bool listening = false;
 
   @override
   void dispose() {
+    textSilenceTimer?.cancel();
     speechService.stopListening();
+    focusNode.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -199,9 +205,10 @@ class _MoodVoiceNoteCardState extends State<_MoodVoiceNoteCard> {
       children: [
         TextField(
           controller: controller,
+          focusNode: focusNode,
           minLines: 4,
           maxLines: 8,
-          onChanged: (_) => setState(() {}),
+          onChanged: _handleVoiceTextChanged,
           decoration: const InputDecoration(
             labelText: 'Mood voice note',
             hintText: 'Speak or type what happened',
@@ -248,21 +255,20 @@ class _MoodVoiceNoteCardState extends State<_MoodVoiceNoteCard> {
 
   Future<void> _toggleVoiceNote() async {
     if (listening) {
-      speechService.stopListening();
+      _stopVoiceCapture();
       return;
     }
 
     setState(() => listening = true);
+    focusNode.requestFocus();
+    final startedAt = DateTime.now();
     final spokenText = await speechService.listenOnce();
     if (!mounted) return;
 
-    setState(() => listening = false);
     if (spokenText == null || spokenText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice input is not available in this browser.'),
-        ),
-      );
+      if (DateTime.now().difference(startedAt).inMilliseconds > 900) {
+        _stopVoiceCapture();
+      }
       return;
     }
 
@@ -274,7 +280,32 @@ class _MoodVoiceNoteCardState extends State<_MoodVoiceNoteCard> {
       text: nextText,
       selection: TextSelection.collapsed(offset: nextText.length),
     );
+    _stopVoiceCapture();
+  }
+
+  void _handleVoiceTextChanged(String _) {
+    if (listening) _armTextSilenceTimer();
     setState(() {});
+  }
+
+  void _armTextSilenceTimer() {
+    textSilenceTimer?.cancel();
+    textSilenceTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || !listening) return;
+      final nextText = appendTrailingVoiceBreak(controller.text);
+      controller.value = TextEditingValue(
+        text: nextText,
+        selection: TextSelection.collapsed(offset: nextText.length),
+      );
+      _stopVoiceCapture();
+    });
+  }
+
+  void _stopVoiceCapture() {
+    textSilenceTimer?.cancel();
+    speechService.stopListening();
+    if (!mounted) return;
+    setState(() => listening = false);
   }
 
   void _saveVoiceNote() {
@@ -808,17 +839,21 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
   double stress = 2;
   double sleepQuality = 3;
   final notesController = TextEditingController();
+  final notesFocusNode = FocusNode();
   final phq9Responses = List<int?>.filled(9, null);
   final gad7Responses = List<int?>.filled(7, null);
   final selectedCueIds = <String>{};
   final selectedStartingTrtCueIds = <String>{};
   final selectedCommunityTrtCueIds = <String>{};
   final speechService = SpeechToTextService();
+  Timer? noteSilenceTimer;
   bool listeningForNote = false;
 
   @override
   void dispose() {
+    noteSilenceTimer?.cancel();
     speechService.stopListening();
+    notesFocusNode.dispose();
     notesController.dispose();
     super.dispose();
   }
@@ -970,8 +1005,10 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
           const SizedBox(height: 8),
           TextField(
             controller: notesController,
+            focusNode: notesFocusNode,
             minLines: 2,
             maxLines: 4,
+            onChanged: _handleCheckInNoteChanged,
             decoration: const InputDecoration(
               labelText: 'What happened? (optional)',
               hintText: 'Trigger, body feeling, thought, or anything unusual',
@@ -998,7 +1035,7 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
 
   Future<void> _toggleVoiceNote() async {
     if (listeningForNote) {
-      speechService.stopListening();
+      _stopCheckInVoiceCapture();
       return;
     }
     await _addVoiceNote();
@@ -1006,18 +1043,16 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
 
   Future<void> _addVoiceNote() async {
     setState(() => listeningForNote = true);
+    notesFocusNode.requestFocus();
 
+    final startedAt = DateTime.now();
     final spokenText = await speechService.listenOnce();
     if (!mounted) return;
 
-    setState(() => listeningForNote = false);
-
     if (spokenText == null || spokenText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice input is not available in this browser.'),
-        ),
-      );
+      if (DateTime.now().difference(startedAt).inMilliseconds > 900) {
+        _stopCheckInVoiceCapture();
+      }
       return;
     }
 
@@ -1029,6 +1064,31 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
       text: nextText,
       selection: TextSelection.collapsed(offset: nextText.length),
     );
+    _stopCheckInVoiceCapture();
+  }
+
+  void _handleCheckInNoteChanged(String _) {
+    if (listeningForNote) _armCheckInNoteSilenceTimer();
+  }
+
+  void _armCheckInNoteSilenceTimer() {
+    noteSilenceTimer?.cancel();
+    noteSilenceTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || !listeningForNote) return;
+      final nextText = appendTrailingVoiceBreak(notesController.text);
+      notesController.value = TextEditingValue(
+        text: nextText,
+        selection: TextSelection.collapsed(offset: nextText.length),
+      );
+      _stopCheckInVoiceCapture();
+    });
+  }
+
+  void _stopCheckInVoiceCapture() {
+    noteSilenceTimer?.cancel();
+    speechService.stopListening();
+    if (!mounted) return;
+    setState(() => listeningForNote = false);
   }
 
   void _save() {
