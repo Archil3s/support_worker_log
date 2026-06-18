@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/personal_log_metrics.dart';
 import '../models/app_settings.dart';
 import '../models/entry_type.dart';
 import '../models/google_drive_file.dart';
@@ -357,7 +358,33 @@ class GoogleDriveService {
     required String personalNotesFolderId,
     required List<PersonalLogEntry> entries,
   }) async {
-    for (final entry in entries) {
+    final moodVoiceNotes = entries
+        .where((entry) => entry.metric == moodVoiceNoteMetric)
+        .toList();
+    final otherEntries = entries
+        .where((entry) => entry.metric != moodVoiceNoteMetric)
+        .toList();
+
+    if (moodVoiceNotes.isNotEmpty) {
+      final healthFolder = await findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: personalNotesFolderId,
+        name: _personalCategoryFolderName(PersonalLogCategory.health),
+      );
+      final bytes = LocalSupportNoteService.buildMoodVoiceNotesDocx(
+        entries: moodVoiceNotes,
+      );
+
+      await uploadOrUpdateFile(
+        accessToken: accessToken,
+        parentId: healthFolder.id,
+        name: 'Mood Voice Notes.docx',
+        mimeType: _docxMimeType,
+        bytes: bytes,
+      );
+    }
+
+    for (final entry in otherEntries) {
       final folder = await _personalLogFolder(
         accessToken: accessToken,
         personalNotesFolderId: personalNotesFolderId,

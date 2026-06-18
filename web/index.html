@@ -50,6 +50,18 @@
       return true;
     };
 
+    let activeSpeechRecognition = null;
+
+    window.supportWorkerLogStopSpeechToText = function() {
+      if (!activeSpeechRecognition) return;
+
+      try {
+        activeSpeechRecognition.stop();
+      } catch (_) {
+        activeSpeechRecognition = null;
+      }
+    };
+
     window.supportWorkerLogSpeechToText = function() {
       return new Promise(function(resolve) {
         const SpeechRecognition =
@@ -62,29 +74,68 @@
 
         const recognition = new SpeechRecognition();
         let finished = false;
+        let pendingParagraphBreak = false;
+        let silenceTimer = null;
+        const segments = [];
+        const silenceBreakMs = 5000;
 
+        activeSpeechRecognition = recognition;
         recognition.lang = navigator.language || 'en-NZ';
-        recognition.interimResults = false;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
-        recognition.onresult = function(event) {
-          const result = event.results && event.results[0] && event.results[0][0];
+        const transcriptText = function() {
+          return segments
+            .join(' ')
+            .replace(/\s+\n\n\s+/g, '\n\n')
+            .replace(/[ \t]{2,}/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        };
+
+        const finish = function(value) {
+          if (finished) return;
           finished = true;
-          resolve(result && result.transcript ? result.transcript : null);
+          if (silenceTimer) clearTimeout(silenceTimer);
+          if (activeSpeechRecognition === recognition) {
+            activeSpeechRecognition = null;
+          }
+          resolve(value || null);
+        };
+
+        const armSilenceTimer = function() {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(function() {
+            if (segments.length > 0) pendingParagraphBreak = true;
+          }, silenceBreakMs);
+        };
+
+        recognition.onresult = function(event) {
+          for (let index = event.resultIndex; index < event.results.length; index++) {
+            const item = event.results[index];
+            if (!item || !item.isFinal || !item[0] || !item[0].transcript) {
+              continue;
+            }
+
+            const text = item[0].transcript.trim();
+            if (!text) continue;
+
+            if (pendingParagraphBreak && segments.length > 0) {
+              segments.push('\n\n');
+            }
+            segments.push(text);
+            pendingParagraphBreak = false;
+            armSilenceTimer();
+          }
         };
 
         recognition.onerror = function() {
-          if (!finished) {
-            finished = true;
-            resolve(null);
-          }
+          finish(transcriptText());
         };
 
         recognition.onend = function() {
-          if (!finished) {
-            finished = true;
-            resolve(null);
-          }
+          finish(transcriptText());
         };
 
         recognition.start();

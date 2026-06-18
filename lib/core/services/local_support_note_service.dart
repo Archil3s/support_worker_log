@@ -405,6 +405,16 @@ Safety concerns
     }
   }
 
+  static List<int> buildMoodVoiceNotesDocx({
+    required List<PersonalLogEntry> entries,
+  }) {
+    try {
+      return _moodVoiceNotesDocx(entries);
+    } catch (error) {
+      throw StateError('Mood voice notes document could not be built: $error');
+    }
+  }
+
   static List<int> buildPayeNoteDocx({required WorkEntry entry}) {
     final archive = Archive();
 
@@ -418,6 +428,23 @@ Safety concerns
     addTextFile('docProps/app.xml', _personalAppPropertiesXml);
     addTextFile('docProps/core.xml', _payeCorePropertiesXml(entry));
     addTextFile('word/document.xml', _payeDocumentXml(entry));
+
+    return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static List<int> _moodVoiceNotesDocx(List<PersonalLogEntry> entries) {
+    final archive = Archive();
+
+    void addTextFile(String name, String contents) {
+      final bytes = utf8.encode(contents);
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    addTextFile('[Content_Types].xml', _personalContentTypesXml);
+    addTextFile('_rels/.rels', _personalRootRelationshipsXml);
+    addTextFile('docProps/app.xml', _personalAppPropertiesXml);
+    addTextFile('docProps/core.xml', _moodVoiceNotesCorePropertiesXml);
+    addTextFile('word/document.xml', _moodVoiceNotesDocumentXml(entries));
 
     return ZipEncoder().encode(archive) ?? <int>[];
   }
@@ -437,6 +464,54 @@ Safety concerns
     addTextFile('word/document.xml', _personalDocumentXml(entry));
 
     return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static String _moodVoiceNotesDocumentXml(List<PersonalLogEntry> entries) {
+    final sortedEntries = [...entries]
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final monthKeys = <int>[];
+    final entriesByMonth = <int, List<PersonalLogEntry>>{};
+
+    for (final entry in sortedEntries) {
+      final key = entry.date.year * 100 + entry.date.month;
+      entriesByMonth
+          .putIfAbsent(key, () {
+            monthKeys.add(key);
+            return <PersonalLogEntry>[];
+          })
+          .add(entry);
+    }
+
+    final paragraphs = <String>[
+      _personalParagraph('Mood Voice Notes', style: 'Title'),
+      _personalParagraph('Grouped by month', style: 'Subtitle'),
+      if (sortedEntries.isEmpty)
+        _personalParagraph('No voice notes saved yet.'),
+      for (final monthKey in monthKeys) ...[
+        _personalParagraph(_monthLabelFromKey(monthKey), style: 'Heading1'),
+        for (final entry in entriesByMonth[monthKey]!) ...[
+          _personalParagraph(
+            '${formatDate(entry.date)} ${_timeLabel(entry.date)}',
+            bold: true,
+          ),
+          _personalParagraph(_blankIfEmpty(entry.notes)),
+          _personalSpacer,
+        ],
+      ],
+    ].join();
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    $paragraphs
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+''';
   }
 
   static String _personalDocumentXml(PersonalLogEntry entry) {
@@ -595,6 +670,16 @@ Safety concerns
 ''';
   }
 
+  static const _moodVoiceNotesCorePropertiesXml = '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Mood Voice Notes</dc:title>
+  <dc:subject>Personal mood voice notes grouped by month</dc:subject>
+  <dc:creator>Support Worker Log</dc:creator>
+  <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
+</cp:coreProperties>
+''';
+
   static String _payeCorePropertiesXml(WorkEntry entry) {
     final title = entry.client.trim().isEmpty ? 'Attendance' : entry.client;
 
@@ -617,6 +702,37 @@ Safety concerns
   static String _blankIfEmpty(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? '-' : trimmed;
+  }
+
+  static String _monthLabelFromKey(int key) {
+    final year = key ~/ 100;
+    final month = key % 100;
+    return '${_monthName(month)} $year';
+  }
+
+  static String _monthName(int month) {
+    return switch (month) {
+      1 => 'January',
+      2 => 'February',
+      3 => 'March',
+      4 => 'April',
+      5 => 'May',
+      6 => 'June',
+      7 => 'July',
+      8 => 'August',
+      9 => 'September',
+      10 => 'October',
+      11 => 'November',
+      12 => 'December',
+      _ => 'Unknown',
+    };
+  }
+
+  static String _timeLabel(DateTime value) {
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final suffix = value.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $suffix';
   }
 
   static const _personalSpacer =

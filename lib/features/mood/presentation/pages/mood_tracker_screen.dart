@@ -2,10 +2,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/constants/personal_log_metrics.dart';
 import '../../../../core/models/google_export_account_scope.dart';
+import '../../../../core/models/personal_log_entry.dart';
 import '../../../../core/services/speech_to_text_service.dart';
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/voice_note_text.dart';
 import '../../../../shared/widgets/empty_state.dart';
 import '../../../../shared/widgets/google_drive_connection_warning.dart';
 import '../../../../shared/widgets/home_screen_shortcut_button.dart';
@@ -26,6 +29,13 @@ class MoodTrackerScreen extends StatelessWidget {
             .whereType<MoodCheckIn>()
             .toList()
           ..sort((a, b) => a.date.compareTo(b.date));
+    final voiceNotes =
+        context
+            .watch<AppState>()
+            .personalLogEntries
+            .where((entry) => entry.metric == moodVoiceNoteMetric)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -50,6 +60,11 @@ class MoodTrackerScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Voice note',
+          child: _MoodVoiceNoteCard(voiceNotes: voiceNotes),
         ),
         const SizedBox(height: 12),
         SectionCard(
@@ -149,6 +164,199 @@ class _TrackerIntro extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoodVoiceNoteCard extends StatefulWidget {
+  const _MoodVoiceNoteCard({required this.voiceNotes});
+
+  final List<PersonalLogEntry> voiceNotes;
+
+  @override
+  State<_MoodVoiceNoteCard> createState() => _MoodVoiceNoteCardState();
+}
+
+class _MoodVoiceNoteCardState extends State<_MoodVoiceNoteCard> {
+  final controller = TextEditingController();
+  final speechService = SpeechToTextService();
+  bool listening = false;
+
+  @override
+  void dispose() {
+    speechService.stopListening();
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          minLines: 4,
+          maxLines: 8,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Mood voice note',
+            hintText: 'Speak or type what happened',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: _toggleVoiceNote,
+              icon: Icon(
+                listening ? Icons.stop_circle_outlined : Icons.mic_outlined,
+              ),
+              label: Text(listening ? 'Stop voice note' : 'Start voice note'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _saveVoiceNote,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save voice note'),
+            ),
+            OutlinedButton.icon(
+              onPressed: controller.text.trim().isEmpty ? null : _clear,
+              icon: const Icon(Icons.clear_rounded),
+              label: const Text('Clear'),
+            ),
+          ],
+        ),
+        if (widget.voiceNotes.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          const Text(
+            'Recent voice notes',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          for (final entry in widget.voiceNotes.take(3))
+            _MoodVoiceNoteTile(entry: entry),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _toggleVoiceNote() async {
+    if (listening) {
+      speechService.stopListening();
+      return;
+    }
+
+    setState(() => listening = true);
+    final spokenText = await speechService.listenOnce();
+    if (!mounted) return;
+
+    setState(() => listening = false);
+    if (spokenText == null || spokenText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice input is not available in this browser.'),
+        ),
+      );
+      return;
+    }
+
+    final nextText = appendVoiceNoteText(
+      existing: controller.text,
+      spoken: spokenText,
+    );
+    controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextText.length),
+    );
+    setState(() {});
+  }
+
+  void _saveVoiceNote() {
+    final note = normalizeVoiceTranscript(controller.text);
+    if (note.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a voice note before saving.')),
+      );
+      return;
+    }
+
+    context.read<AppState>().addPersonalLogEntry(
+      PersonalLogEntry(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        category: PersonalLogCategory.health,
+        date: DateTime.now(),
+        title: 'Mood voice note',
+        notes: note,
+        metric: moodVoiceNoteMetric,
+      ),
+    );
+    controller.clear();
+    setState(() {});
+  }
+
+  void _clear() {
+    controller.clear();
+    setState(() {});
+  }
+}
+
+class _MoodVoiceNoteTile extends StatelessWidget {
+  const _MoodVoiceNoteTile({required this.entry});
+
+  final PersonalLogEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.graphic_eq_outlined, color: Color(0xFF22D3EE)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  formatDate(entry.date),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  entry.notes,
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFCDD7F0),
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Delete voice note',
+            onPressed: () =>
+                context.read<AppState>().deletePersonalLogEntry(entry),
+            icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
       ),
@@ -605,10 +813,12 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
   final selectedCueIds = <String>{};
   final selectedStartingTrtCueIds = <String>{};
   final selectedCommunityTrtCueIds = <String>{};
+  final speechService = SpeechToTextService();
   bool listeningForNote = false;
 
   @override
   void dispose() {
+    speechService.stopListening();
     notesController.dispose();
     super.dispose();
   }
@@ -769,15 +979,11 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: listeningForNote ? null : _addVoiceNote,
+            onPressed: _toggleVoiceNote,
             icon: listeningForNote
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const Icon(Icons.stop_circle_outlined)
                 : const Icon(Icons.mic_outlined),
-            label: Text(listeningForNote ? 'Listening...' : 'Speak note'),
+            label: Text(listeningForNote ? 'Stop voice note' : 'Speak note'),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -790,10 +996,18 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
     );
   }
 
+  Future<void> _toggleVoiceNote() async {
+    if (listeningForNote) {
+      speechService.stopListening();
+      return;
+    }
+    await _addVoiceNote();
+  }
+
   Future<void> _addVoiceNote() async {
     setState(() => listeningForNote = true);
 
-    final spokenText = await SpeechToTextService().listenOnce();
+    final spokenText = await speechService.listenOnce();
     if (!mounted) return;
 
     setState(() => listeningForNote = false);
@@ -807,8 +1021,10 @@ class _MoodCheckInSheetState extends State<_MoodCheckInSheet> {
       return;
     }
 
-    final existing = notesController.text.trim();
-    final nextText = existing.isEmpty ? spokenText : '$existing $spokenText';
+    final nextText = appendVoiceNoteText(
+      existing: notesController.text,
+      spoken: spokenText,
+    );
     notesController.value = TextEditingValue(
       text: nextText,
       selection: TextSelection.collapsed(offset: nextText.length),

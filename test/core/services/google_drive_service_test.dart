@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:support_worker_log/core/constants/personal_log_metrics.dart';
 import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/google_drive_file.dart';
 import 'package:support_worker_log/core/models/personal_log_entry.dart';
@@ -466,6 +467,67 @@ void main() {
       expect(documentText, contains('Good depth and stable knees.'));
       expect(documentText, isNot(contains('Name of client')));
       expect(documentText, isNot(contains('Safety concerns')));
+    },
+  );
+
+  test(
+    'syncPersonalLogEntries groups mood voice notes into one health docx',
+    () async {
+      final api = _FakeGoogleDriveApi(children: const []);
+      final service = GoogleDriveService(api: api);
+
+      await service.syncPersonalLogEntries(
+        accessToken: 'token',
+        personalNotesFolderId: 'personal-notes',
+        entries: [
+          PersonalLogEntry(
+            id: 'voice-1',
+            category: PersonalLogCategory.health,
+            date: DateTime(2026, 6, 2, 9, 5),
+            title: 'Mood voice note',
+            metric: moodVoiceNoteMetric,
+            notes: 'Morning felt steady after breakfast.',
+          ),
+          PersonalLogEntry(
+            id: 'voice-2',
+            category: PersonalLogCategory.health,
+            date: DateTime(2026, 7, 1, 18, 30),
+            title: 'Mood voice note',
+            metric: moodVoiceNoteMetric,
+            notes: 'Evening anxiety settled after a walk.',
+          ),
+          PersonalLogEntry(
+            id: 'health-1',
+            category: PersonalLogCategory.health,
+            date: DateTime(2026, 6, 3),
+            title: 'Sleep',
+            metric: '7 hours',
+            notes: 'Woke once.',
+          ),
+        ],
+      );
+
+      final voiceUpload = api.uploads.singleWhere(
+        (upload) => upload.name == 'Mood Voice Notes.docx',
+      );
+      final documentText = _docxText(voiceUpload.bytes);
+
+      expect(voiceUpload.parentId, 'personal-notes/Health');
+      expect(voiceUpload.mimeType, _docxMimeType);
+      expect(api.uploadedNames, contains('Mood Voice Notes.docx'));
+      expect(
+        api.uploadedNames,
+        isNot(contains('2026-06-02_health_Mood_voice_note.docx')),
+      );
+      expect(documentText, contains('Mood Voice Notes'));
+      expect(documentText, contains('Grouped by month'));
+      expect(documentText, contains('July 2026'));
+      expect(documentText, contains('01/07/2026 6:30 PM'));
+      expect(documentText, contains('Evening anxiety settled after a walk.'));
+      expect(documentText, contains('June 2026'));
+      expect(documentText, contains('02/06/2026 9:05 AM'));
+      expect(documentText, contains('Morning felt steady after breakfast.'));
+      expect(documentText, isNot(contains('Sleep')));
     },
   );
 

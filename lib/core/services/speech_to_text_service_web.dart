@@ -3,6 +3,9 @@ import 'dart:js_interop';
 @JS('supportWorkerLogSpeechToText')
 external JSPromise<JSString?> _supportWorkerLogSpeechToText();
 
+@JS('supportWorkerLogStopSpeechToText')
+external void _supportWorkerLogStopSpeechToText();
+
 class SpeechToTextService {
   Future<String?> listenOnce() async {
     try {
@@ -13,5 +16,11 @@ class SpeechToTextService {
     } catch (_) {
       return null;
     }
+  }
+
+  void stopListening() {
+    try {
+      _supportWorkerLogStopSpeechToText();
+    } catch (_) {}
   }
 }
