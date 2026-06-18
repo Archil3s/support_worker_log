@@ -1,9 +1,10 @@
 String appendVoiceNoteText({required String existing, required String spoken}) {
   final current = normalizeVoiceTranscript(existing);
+  final shouldKeepTrailingBreak = RegExp(r'\n\s*\n\s*$').hasMatch(spoken);
   final next = normalizeVoiceTranscript(spoken);
   if (next.isEmpty) return current;
-  if (current.isEmpty) return next;
-  return '$current\n\n$next';
+  final combined = current.isEmpty ? next : '$current\n\n$next';
+  return shouldKeepTrailingBreak ? '$combined\n\n' : combined;
 }
 
 String normalizeVoiceTranscript(String value) {

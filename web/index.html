@@ -74,7 +74,6 @@
 
         const recognition = new SpeechRecognition();
         let finished = false;
-        let pendingParagraphBreak = false;
         let silenceTimer = null;
         const segments = [];
         const silenceBreakMs = 5000;
@@ -85,13 +84,15 @@
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
-        const transcriptText = function() {
-          return segments
+        const transcriptText = function(includeTrailingBreak) {
+          const text = segments
             .join(' ')
             .replace(/\s+\n\n\s+/g, '\n\n')
             .replace(/[ \t]{2,}/g, ' ')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
+
+          return includeTrailingBreak && text ? text + '\n\n' : text;
         };
 
         const finish = function(value) {
@@ -107,7 +108,10 @@
         const armSilenceTimer = function() {
           if (silenceTimer) clearTimeout(silenceTimer);
           silenceTimer = setTimeout(function() {
-            if (segments.length > 0) pendingParagraphBreak = true;
+            finish(segments.length > 0 ? transcriptText(true) : null);
+            try {
+              recognition.stop();
+            } catch (_) {}
           }, silenceBreakMs);
         };
 
@@ -121,24 +125,21 @@
             const text = item[0].transcript.trim();
             if (!text) continue;
 
-            if (pendingParagraphBreak && segments.length > 0) {
-              segments.push('\n\n');
-            }
             segments.push(text);
-            pendingParagraphBreak = false;
             armSilenceTimer();
           }
         };
 
         recognition.onerror = function() {
-          finish(transcriptText());
+          finish(transcriptText(false));
         };
 
         recognition.onend = function() {
-          finish(transcriptText());
+          finish(transcriptText(false));
         };
 
         recognition.start();
+        armSilenceTimer();
       });
     };
 

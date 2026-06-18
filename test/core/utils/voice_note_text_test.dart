@@ -11,6 +11,15 @@ void main() {
     expect(result, 'First thought\n\nSecond thought\n\nThird thought');
   });
 
+  test('appendVoiceNoteText keeps trailing auto-stop paragraph break', () {
+    final result = appendVoiceNoteText(
+      existing: 'First thought',
+      spoken: 'Second thought\n\n',
+    );
+
+    expect(result, 'First thought\n\nSecond thought\n\n');
+  });
+
   test('normalizeVoiceTranscript trims excess spacing', () {
     expect(
       normalizeVoiceTranscript('  First   line  \n\n\n  Second line  '),
