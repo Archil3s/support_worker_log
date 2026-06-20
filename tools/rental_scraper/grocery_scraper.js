@@ -111,7 +111,6 @@ function startGroceryScrape() {
 
 async function scrapeGroceryCatalogue() {
   const { chromium, firefox } = require('playwright');
-  const headless = process.env.GROCERY_HEADLESS !== 'false';
 
   Object.assign(state, {
     running: true,
@@ -125,10 +124,10 @@ async function scrapeGroceryCatalogue() {
   });
 
   const chromiumBrowser = await chromium.launch({
-    headless,
+    headless: true,
     args: ['--disable-http2'],
   });
-  const firefoxBrowser = await firefox.launch({ headless });
+  const firefoxBrowser = await firefox.launch({ headless: true });
   const contexts = [];
   const results = [];
 
@@ -200,7 +199,11 @@ async function createBlenheimStoreContexts({
   chromiumBrowser,
   firefoxBrowser,
 }) {
+  const userAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
   const contextOptions = {
+    userAgent,
     geolocation: {
       latitude: LOCATION.latitude,
       longitude: LOCATION.longitude,
