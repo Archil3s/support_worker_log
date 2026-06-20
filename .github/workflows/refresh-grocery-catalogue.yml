@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   refresh:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 55
 
     steps:
@@ -36,20 +36,20 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: tools/rental_scraper
-        run: npx playwright install chromium firefox
+        run: npx playwright install --with-deps chromium firefox
 
       - name: Refresh Blenheim prices
         working-directory: tools/rental_scraper
-        run: npm run refresh-groceries
+        env:
+          GROCERY_HEADLESS: 'false'
+        run: xvfb-run -a npm run refresh-groceries
 
       - name: Commit updated catalogue
-        shell: pwsh
         run: |
-          git diff --quiet -- tools/rental_scraper/grocery_prices_blenheim.json
-          if ($LASTEXITCODE -eq 0) {
-            Write-Output "Catalogue did not change."
+          if git diff --quiet -- tools/rental_scraper/grocery_prices_blenheim.json; then
+            echo "Catalogue did not change."
             exit 0
-          }
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f tools/rental_scraper/grocery_prices_blenheim.json
