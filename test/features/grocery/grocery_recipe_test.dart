@@ -289,6 +289,85 @@ void main() {
     expect(price.checkoutTotal, lessThanOrEqualTo(80));
   });
 
+  test('individual meal swap uses a priced same-section keto recipe', () {
+    const baseRecipe = GroceryRecipe(
+      id: 'base',
+      name: 'Base breakfast',
+      diets: ['keto'],
+      minutes: 5,
+      ingredients: [
+        GroceryIngredient(
+          id: 'eggs',
+          name: 'Eggs',
+          amount: 1,
+          unit: 'each',
+          category: 'Eggs and dairy',
+        ),
+      ],
+      steps: [],
+      cookbookId: 'budget',
+    );
+    const alternative = GroceryRecipe(
+      id: 'alternative',
+      name: 'Cookbook breakfast',
+      diets: ['keto'],
+      minutes: 5,
+      ingredients: [
+        GroceryIngredient(
+          id: 'eggs',
+          name: 'Eggs',
+          amount: 2,
+          unit: 'each',
+          category: 'Eggs and dairy',
+        ),
+      ],
+      steps: [],
+      cookbookId: 'rm_200',
+      section: 'Breakfast',
+      netCarbsGrams: 2,
+    );
+    const day = GroceryMealDay(
+      day: 'Monday',
+      breakfastId: 'base',
+      lunchId: 'base',
+      dinnerId: 'base',
+    );
+    const plan = GroceryMealPlan(
+      id: 'keto',
+      name: 'Keto',
+      diet: 'keto',
+      days: [day],
+    );
+    const data = GroceryRecipeData(
+      recipes: [baseRecipe, alternative],
+      plans: [plan],
+    );
+    final eggs = GroceryProduct.fromJson({
+      'id': 'eggs',
+      'name': 'Free Range Eggs 12 Pack',
+      'size': '12pk',
+      'category': 'eggs',
+      'sourceSite': 'paknsave.co.nz',
+      'sourceUrl': 'https://www.paknsave.co.nz/shop/product/eggs',
+      'lastChecked': '2026-06-20',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 10},
+      ],
+    });
+
+    final result = const SuggestBudgetKetoPlan().replaceMeal(
+      data: data,
+      plan: plan,
+      products: [eggs],
+      dayIndex: 0,
+      meal: 'Breakfast',
+      variation: 0,
+    );
+
+    expect(result.days.single.breakfastId, 'alternative');
+    expect(result.days.single.lunchId, 'base');
+  });
+
   test('prices a keto recipe from a matching Blenheim product', () {
     const ingredient = GroceryIngredient(
       id: 'beef_mince',
@@ -533,5 +612,59 @@ void main() {
     expect(price.isComplete, isTrue);
     expect(price.ingredients.single.product?.name, 'Whole Natural Almonds');
     expect(price.ingredients.single.substitutionLabel, contains('Coconut'));
+  });
+
+  test('replaces unavailable seasonal produce with a keto vegetable', () {
+    const ingredient = GroceryIngredient(
+      id: 'avocado',
+      name: 'Avocado',
+      amount: 1,
+      unit: 'each',
+      category: 'Produce',
+    );
+    const recipe = GroceryRecipe(
+      id: 'avocado_meal',
+      name: 'Avocado meal',
+      diets: ['keto'],
+      minutes: 5,
+      ingredients: [ingredient],
+      steps: [],
+      cookbookId: 'test',
+    );
+    final unavailableAvocado = GroceryProduct.fromJson({
+      'id': 'avocado',
+      'name': 'Fresh Avocado',
+      'size': 'ea',
+      'category': 'fresh-vegetables',
+      'sourceSite': 'newworld.co.nz',
+      'sourceUrl': 'https://www.newworld.co.nz/avocado',
+      'available': false,
+      'lastChecked': '2026-06-20',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 3},
+      ],
+    });
+    final cucumber = GroceryProduct.fromJson({
+      'id': 'cucumber',
+      'name': 'Telegraph Cucumber',
+      'size': 'ea',
+      'category': 'fresh-vegetables',
+      'sourceSite': 'paknsave.co.nz',
+      'sourceUrl': 'https://www.paknsave.co.nz/cucumber',
+      'lastChecked': '2026-06-20',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 2},
+      ],
+    });
+
+    final price = const PriceGroceryMealPlan().priceRecipe(
+      recipe: recipe,
+      people: 1,
+      products: [unavailableAvocado, cucumber],
+    );
+
+    expect(price.isComplete, isTrue);
+    expect(price.ingredients.single.product?.id, 'cucumber');
+    expect(price.ingredients.single.substitutionLabel, contains('Avocado'));
   });
 }

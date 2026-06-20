@@ -173,6 +173,7 @@ class PriceGroceryMealPlan {
     final directCandidates = ingredient.pantryStaple
         ? <({GroceryProduct product, int score})>[]
         : products
+              .where((product) => product.canPurchase)
               .where((product) => !product.isDietMarketed)
               .where((product) => !_isExcluded(ingredient, product))
               .map(
@@ -189,6 +190,7 @@ class PriceGroceryMealPlan {
         : substitution == null
         ? <({GroceryProduct product, int score})>[]
         : products
+              .where((product) => product.canPurchase)
               .where((product) => !product.isDietMarketed)
               .where((product) => _matchesSubstitution(substitution, product))
               .map((product) => (product: product, score: 1))
@@ -538,6 +540,36 @@ final _substitutions = <_Substitution>[
     ingredientPattern: RegExp(r'\b(peanut butter|almond butter)\b'),
     productTerms: const ['almond'],
     categories: const ['nuts-bulk-mix'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\bavocado\b'),
+    productTerms: const ['cucumber', 'courgette'],
+    categories: const ['fresh-vegetables'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\b(asparagus|broccoli)\b'),
+    productTerms: const ['cauliflower', 'cabbage', 'courgette'],
+    categories: const ['fresh-vegetables'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\bcauliflower\b'),
+    productTerms: const ['broccoli', 'cabbage', 'courgette'],
+    categories: const ['fresh-vegetables'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\b(courgette|zucchini)\b'),
+    productTerms: const ['cauliflower', 'cabbage', 'capsicum'],
+    categories: const ['fresh-vegetables'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\b(spinach|lettuce)\b'),
+    productTerms: const ['cabbage', 'lettuce', 'spinach'],
+    categories: const ['fresh-vegetables'],
+  ),
+  _Substitution(
+    ingredientPattern: RegExp(r'\b(cucumber|mushroom)\b'),
+    productTerms: const ['courgette', 'capsicum', 'cabbage'],
+    categories: const ['fresh-vegetables'],
   ),
 ];
 

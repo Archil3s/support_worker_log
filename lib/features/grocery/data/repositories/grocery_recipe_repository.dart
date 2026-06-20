@@ -9,8 +9,13 @@ class GroceryRecipeRepository {
 
   static const assetPath = 'assets/grocery/keto_carnivore_recipes.json';
   static const importedAssetPath = 'assets/grocery/rm_200_recipes.json';
+  static Future<GroceryRecipeData>? _cachedData;
 
-  Future<GroceryRecipeData> load() async {
+  Future<GroceryRecipeData> load() {
+    return _cachedData ??= _load();
+  }
+
+  Future<GroceryRecipeData> _load() async {
     final source = await rootBundle.loadString(assetPath);
     final importedSource = await rootBundle.loadString(importedAssetPath);
     final data = decode(source);

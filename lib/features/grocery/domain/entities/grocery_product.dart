@@ -69,6 +69,7 @@ class GroceryProduct {
     required this.lastChecked,
     required this.unitPrice,
     required this.priceHistory,
+    this.available = true,
   });
 
   factory GroceryProduct.fromJson(Map<String, Object?> json) {
@@ -103,6 +104,10 @@ class GroceryProduct {
       lastChecked: DateTime.tryParse(json['lastChecked']?.toString() ?? ''),
       unitPrice: json['unitPrice']?.toString() ?? '',
       priceHistory: history,
+      available:
+          json['available'] != false &&
+          json['inStock'] != false &&
+          json['availability']?.toString().toLowerCase() != 'out of stock',
     );
   }
 
@@ -115,8 +120,10 @@ class GroceryProduct {
   final DateTime? lastChecked;
   final String unitPrice;
   final List<GroceryPricePoint> priceHistory;
+  final bool available;
 
   double get currentPrice => priceHistory.isEmpty ? 0 : priceHistory.last.price;
+  bool get canPurchase => available && currentPrice > 0;
 
   double? get previousPrice {
     if (priceHistory.length < 2) return null;

@@ -42,6 +42,7 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
   GroceryMealPlan? _plan;
   GroceryMealPlan? _suggestedPlan;
   int _budgetVariation = 0;
+  int _mealVariation = 0;
   GroceryPlannerView _view = GroceryPlannerView.week;
   int _people = 1;
   Set<String> _checkedItems = {};
@@ -67,9 +68,6 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
     if (signature == _productPriceSignature) return;
     _productPriceSignature = signature;
     _recipePriceCache.clear();
-    if (_plan?.id == 'budget_keto_80') {
-      _shuffleBudgetPlan();
-    }
   }
 
   Future<void> _load() async {
@@ -103,9 +101,6 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
               value.split('=').first: int.tryParse(value.split('=').last) ?? 1,
         };
       });
-      if (plan.id == 'budget_keto_80') {
-        _shuffleBudgetPlan();
-      }
     } on Object {
       if (!mounted) return;
       setState(() => _error = 'The weekly recipe data could not be loaded.');
@@ -126,9 +121,6 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
       if (plan.budgetNzd != null) _people = 1;
       _checkedItems = {};
     });
-    if (plan.id == 'budget_keto_80') {
-      _shuffleBudgetPlan();
-    }
   }
 
   void _shuffleBudgetPlan() {
@@ -145,6 +137,31 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
     if (!mounted) return;
     setState(() {
       _suggestedPlan = suggestion;
+      _checkedItems = {};
+    });
+  }
+
+  void _swapMeal(int dayIndex, String meal) {
+    final data = _data;
+    final selectedPlan = _plan;
+    if (data == null || selectedPlan == null) return;
+    final activePlan = _suggestedPlan ?? selectedPlan;
+    final replacement = _suggestBudgetPlan.replaceMeal(
+      data: data,
+      plan: activePlan,
+      products: widget.products,
+      dayIndex: dayIndex,
+      meal: meal,
+      variation: ++_mealVariation,
+    );
+    if (identical(replacement, activePlan)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No other priced keto $meal fits this plan.')),
+      );
+      return;
+    }
+    setState(() {
+      _suggestedPlan = replacement;
       _checkedItems = {};
     });
   }
@@ -269,11 +286,13 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
         if (_view == GroceryPlannerView.week)
           for (var index = 0; index < activePlan.days.length; index++) ...[
             _DayCard(
+              dayIndex: index,
               day: activePlan.days[index],
               data: data,
               price: weekPrice.days[index],
               people: _people,
               onRecipeTap: (recipe) => _showRecipe(recipe),
+              onSwapMeal: _swapMeal,
             ),
             const SizedBox(height: 12),
           ]
@@ -757,7 +776,7 @@ class _PlannerControls extends StatelessWidget {
                 const ButtonSegment(
                   value: GroceryPlannerView.shopping,
                   icon: Icon(Icons.shopping_cart_outlined),
-                  label: Text('Plan list'),
+                  label: Text('Shopping list'),
                 ),
               ],
               selected: {view},
@@ -778,18 +797,22 @@ class _PlannerControls extends StatelessWidget {
 
 class _DayCard extends StatelessWidget {
   const _DayCard({
+    required this.dayIndex,
     required this.day,
     required this.data,
     required this.onRecipeTap,
     required this.price,
     required this.people,
+    required this.onSwapMeal,
   });
 
+  final int dayIndex;
   final GroceryMealDay day;
   final GroceryRecipeData data;
   final ValueChanged<GroceryRecipe> onRecipeTap;
   final GroceryDayPrice price;
   final int people;
+  final void Function(int dayIndex, String meal) onSwapMeal;
 
   @override
   Widget build(BuildContext context) {
@@ -808,9 +831,16 @@ class _DayCard extends StatelessWidget {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
           ),
           Text(
-            'Estimated ${formatPrice(price.total)} for $people '
-            '${people == 1 ? 'person' : 'people'}',
-            style: const TextStyle(color: _green, fontSize: 12),
+            price.isComplete
+                ? 'Estimated ${formatPrice(price.total)} for $people '
+                      '${people == 1 ? 'person' : 'people'}'
+                : 'Known meal cost ${formatPrice(price.total)} • '
+                      'some catalogue prices unavailable',
+            style: TextStyle(
+              color: price.isComplete ? _green : Colors.orangeAccent,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 8),
           _MealRow(
@@ -818,18 +848,21 @@ class _DayCard extends StatelessWidget {
             recipe: data.recipe(day.breakfastId),
             onTap: onRecipeTap,
             price: price.breakfast,
+            onSwap: () => onSwapMeal(dayIndex, 'Breakfast'),
           ),
           _MealRow(
             label: 'Lunch',
             recipe: data.recipe(day.lunchId),
             onTap: onRecipeTap,
             price: price.lunch,
+            onSwap: () => onSwapMeal(dayIndex, 'Lunch'),
           ),
           _MealRow(
             label: 'Dinner',
             recipe: data.recipe(day.dinnerId),
             onTap: onRecipeTap,
             price: price.dinner,
+            onSwap: () => onSwapMeal(dayIndex, 'Dinner'),
           ),
         ],
       ),
@@ -843,12 +876,14 @@ class _MealRow extends StatelessWidget {
     required this.recipe,
     required this.onTap,
     required this.price,
+    required this.onSwap,
   });
 
   final String label;
   final GroceryRecipe recipe;
   final ValueChanged<GroceryRecipe> onTap;
   final GroceryRecipePrice price;
+  final VoidCallback onSwap;
 
   @override
   Widget build(BuildContext context) {
@@ -863,12 +898,24 @@ class _MealRow extends StatelessWidget {
         recipe.name,
         style: const TextStyle(fontWeight: FontWeight.w800),
       ),
+      subtitle: Text(
+        price.isComplete
+            ? 'Estimated ${formatPrice(price.total)}'
+            : price.total > 0
+            ? '${formatPrice(price.total)} known • price incomplete'
+            : 'Catalogue price unavailable',
+        style: TextStyle(
+          color: price.isComplete ? _green : Colors.orangeAccent,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            formatPrice(price.total),
-            style: const TextStyle(color: _green, fontWeight: FontWeight.w800),
+          IconButton(
+            tooltip: 'Try another keto $label',
+            onPressed: onSwap,
+            icon: const Icon(Icons.shuffle, color: _blue),
           ),
           const Icon(Icons.chevron_right),
         ],

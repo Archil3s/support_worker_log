@@ -16,11 +16,19 @@ class SuggestBudgetKetoPlan {
     final budget = basePlan.budgetNzd;
     if (budget == null || products.isEmpty) return basePlan;
 
-    final pricedCandidates = data.recipes
+    final allCandidates = data.recipes
         .where((recipe) => recipe.cookbookId == 'rm_200')
         .where((recipe) => recipe.diets.contains('keto'))
         .where((recipe) => _mealSections.contains(recipe.section))
         .where((recipe) => (recipe.netCarbsGrams ?? 0) <= 12)
+        .toList();
+    if (allCandidates.isEmpty) return _reordered(basePlan, variation);
+    final candidateOffset = variation.abs() % allCandidates.length;
+    final candidatesToPrice = [
+      ...allCandidates.skip(candidateOffset),
+      ...allCandidates.take(candidateOffset),
+    ].take(24);
+    final pricedCandidates = candidatesToPrice
         .map(
           (recipe) => (
             recipe: recipe,
@@ -90,6 +98,93 @@ class SuggestBudgetKetoPlan {
           : 'Alternative $variation uses $accepted keto cookbook meals and '
                 'current Blenheim catalogue prices.',
     );
+  }
+
+  GroceryMealPlan replaceMeal({
+    required GroceryRecipeData data,
+    required GroceryMealPlan plan,
+    required List<GroceryProduct> products,
+    required int dayIndex,
+    required String meal,
+    required int variation,
+  }) {
+    if (dayIndex < 0 || dayIndex >= plan.days.length || products.isEmpty) {
+      return plan;
+    }
+    final currentId = switch (meal) {
+      'Breakfast' => plan.days[dayIndex].breakfastId,
+      'Lunch' => plan.days[dayIndex].lunchId,
+      'Dinner' => plan.days[dayIndex].dinnerId,
+      _ => '',
+    };
+    final allCandidates = data.recipes
+        .where((recipe) => recipe.id != currentId)
+        .where((recipe) => recipe.cookbookId == 'rm_200')
+        .where((recipe) => recipe.diets.contains('keto'))
+        .where((recipe) => recipe.section == meal)
+        .where((recipe) => (recipe.netCarbsGrams ?? 0) <= 12)
+        .toList();
+    if (allCandidates.isEmpty) return plan;
+    final candidateOffset = variation.abs() % allCandidates.length;
+    final candidatesToPrice = [
+      ...allCandidates.skip(candidateOffset),
+      ...allCandidates.take(candidateOffset),
+    ].take(18);
+    final candidates =
+        candidatesToPrice
+            .map(
+              (recipe) => (
+                recipe: recipe,
+                price: pricer.priceRecipe(
+                  recipe: recipe,
+                  people: 1,
+                  products: products,
+                ),
+              ),
+            )
+            .where((candidate) => candidate.price.isComplete)
+            .toList()
+          ..sort(
+            (left, right) => left.price.total.compareTo(right.price.total),
+          );
+    if (candidates.isEmpty) return plan;
+
+    final offset = variation.abs() % candidates.length;
+    final rotated = [...candidates.skip(offset), ...candidates.take(offset)];
+    final currentPrice = pricer.priceWeek(
+      data: data,
+      plan: plan,
+      people: 1,
+      products: products,
+    );
+    for (final candidate in rotated) {
+      final replacement = _replace(plan, (
+        day: dayIndex,
+        meal: meal,
+      ), candidate.recipe.id);
+      final replacementPrice = pricer.priceWeek(
+        data: data,
+        plan: replacement,
+        people: 1,
+        products: products,
+      );
+      final budget = plan.budgetNzd;
+      if (budget == null ||
+          replacementPrice.checkoutTotal <= budget ||
+          (currentPrice.checkoutTotal > budget &&
+              replacementPrice.checkoutTotal < currentPrice.checkoutTotal)) {
+        return GroceryMealPlan(
+          id: plan.id,
+          name: plan.name,
+          diet: plan.diet,
+          days: replacement.days,
+          budgetNzd: plan.budgetNzd,
+          profile: plan.profile,
+          note: plan.note,
+        );
+      }
+    }
+    return plan;
   }
 
   GroceryMealPlan _reordered(GroceryMealPlan plan, int variation) {
