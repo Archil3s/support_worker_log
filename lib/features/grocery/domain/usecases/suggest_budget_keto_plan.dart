@@ -46,9 +46,7 @@ class SuggestBudgetKetoPlan {
         .toList();
     if (pricedCandidates.isEmpty) return _reordered(basePlan, variation);
 
-    pricedCandidates.sort(
-      (left, right) => left.price.total.compareTo(right.price.total),
-    );
+    pricedCandidates.sort(_compareProteinValue);
     final candidates = [
       for (final candidate in pricedCandidates) candidate.recipe,
     ];
@@ -144,9 +142,7 @@ class SuggestBudgetKetoPlan {
             )
             .where((candidate) => candidate.price.isComplete)
             .toList()
-          ..sort(
-            (left, right) => left.price.total.compareTo(right.price.total),
-          );
+          ..sort(_compareProteinValue);
     if (candidates.isEmpty) return plan;
 
     final offset = variation.abs() % candidates.length;
@@ -245,6 +241,30 @@ class SuggestBudgetKetoPlan {
 
   ({int day, String meal}) _slotFor(String section, int variation) {
     return (day: variation.abs() % 7, meal: section);
+  }
+
+  int _compareProteinValue(
+    ({GroceryRecipe recipe, GroceryRecipePrice price}) left,
+    ({GroceryRecipe recipe, GroceryRecipePrice price}) right,
+  ) {
+    final leftProtein = left.recipe.proteinGrams;
+    final rightProtein = right.recipe.proteinGrams;
+    final leftValue = leftProtein == null || left.price.total <= 0
+        ? null
+        : leftProtein / left.price.total;
+    final rightValue = rightProtein == null || right.price.total <= 0
+        ? null
+        : rightProtein / right.price.total;
+    if (leftValue == null && rightValue == null) {
+      return left.price.total.compareTo(right.price.total);
+    }
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
+    final proteinValue = rightValue.compareTo(leftValue);
+    if (proteinValue != 0) return proteinValue;
+    final protein = rightProtein!.compareTo(leftProtein!);
+    if (protein != 0) return protein;
+    return left.price.total.compareTo(right.price.total);
   }
 }
 

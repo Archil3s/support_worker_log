@@ -11,7 +11,7 @@ class GroceryController extends ChangeNotifier {
 
   List<GroceryProduct> _catalogue = const [];
   GroceryStore _store = GroceryStore.any;
-  GrocerySort _sort = GrocerySort.unitPrice;
+  GrocerySort _sort = GrocerySort.proteinValue;
   GroceryDiet _diet = GroceryDiet.allCompatible;
   String? _category;
   bool _currentOnly = true;
@@ -157,6 +157,9 @@ class GroceryController extends ChangeNotifier {
     if (_diet == value) return;
     _diet = value;
     _category = null;
+    if (value == GroceryDiet.keto) {
+      _sort = GrocerySort.proteinValue;
+    }
     notifyListeners();
   }
 
@@ -190,9 +193,10 @@ class GroceryController extends ChangeNotifier {
 
   int _compareProducts(GroceryProduct left, GroceryProduct right) {
     return switch (_sort) {
+      GrocerySort.proteinValue => _compareProteinValue(left, right),
       GrocerySort.unitPrice => _compareNullablePrice(
-        left.unitPriceValue,
-        right.unitPriceValue,
+        left.pricePerKilogram,
+        right.pricePerKilogram,
       ),
       GrocerySort.currentPrice => left.currentPrice.compareTo(
         right.currentPrice,
@@ -201,6 +205,22 @@ class GroceryController extends ChangeNotifier {
         right.name.toLowerCase(),
       ),
     };
+  }
+
+  int _compareProteinValue(GroceryProduct left, GroceryProduct right) {
+    final leftValue = left.estimatedProteinGramsPerDollar;
+    final rightValue = right.estimatedProteinGramsPerDollar;
+    if (leftValue == null && rightValue == null) {
+      return _compareNullablePrice(
+        left.pricePerKilogram,
+        right.pricePerKilogram,
+      );
+    }
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
+    final protein = rightValue.compareTo(leftValue);
+    if (protein != 0) return protein;
+    return _compareNullablePrice(left.pricePerKilogram, right.pricePerKilogram);
   }
 
   int _compareNullablePrice(double? left, double? right) {

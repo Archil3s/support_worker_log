@@ -85,6 +85,25 @@ void main() {
     expect(avocado.isKetoCompatible, isTrue);
     expect(avocado.isCarnivoreCompatible, isFalse);
     expect(marketed.isCompatibleWith(GroceryDiet.allCompatible), isFalse);
+    expect(steak.pricePerKilogram, 30);
+    expect(steak.estimatedProteinGramsPerDollar, closeTo(7.33, 0.01));
+  });
+
+  test('normalises supermarket unit prices to price per kilogram', () {
+    final cheese = GroceryProduct.fromJson({
+      'id': 'cheese',
+      'name': 'Tasty Cheese',
+      'size': '500g',
+      'category': 'cheese',
+      'sourceSite': 'paknsave.co.nz',
+      'unitPrice': r'$1.20/100g',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 6},
+      ],
+    });
+
+    expect(cheese.pricePerKilogram, 12);
+    expect(cheese.estimatedProteinGramsPerDollar, 20);
   });
 
   test('parses a saved catalogue used by hosted mobile web', () {

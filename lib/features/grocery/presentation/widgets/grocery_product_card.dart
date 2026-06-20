@@ -78,6 +78,18 @@ class GroceryProductCard extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
+              if (product.estimatedProteinGramsPerDollar case final value?) ...[
+                const SizedBox(height: 5),
+                Text(
+                  'Estimated ${value.toStringAsFixed(1)} g protein per \$1'
+                  '${product.pricePerKilogram == null ? '' : ' • ${NumberFormat.currency(symbol: r'$', decimalDigits: 2).format(product.pricePerKilogram)}/kg'}',
+                  style: const TextStyle(
+                    color: Color(0xFFFFD166),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
               const Spacer(),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,

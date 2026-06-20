@@ -24,12 +24,14 @@ enum GroceryStore {
 }
 
 enum GrocerySort {
+  proteinValue,
   unitPrice,
   currentPrice,
   name;
 
   String get label {
     return switch (this) {
+      GrocerySort.proteinValue => 'Best protein value',
       GrocerySort.unitPrice => 'Lowest unit price',
       GrocerySort.currentPrice => 'Lowest price',
       GrocerySort.name => 'Product name',
@@ -133,6 +135,51 @@ class GroceryProduct {
   double? get unitPriceValue {
     final match = RegExp(r'[\d.]+').firstMatch(unitPrice);
     return match == null ? null : double.tryParse(match.group(0)!);
+  }
+
+  double? get pricePerKilogram {
+    final lower = unitPrice.toLowerCase();
+    final value = unitPriceValue;
+    if (value != null) {
+      if (lower.contains('/kg')) return value;
+      if (lower.contains('/100g')) return value * 10;
+    }
+    final text = '$size $name'.toLowerCase();
+    final kilograms = RegExp(r'(\d+(?:\.\d+)?)\s*kg\b').firstMatch(text);
+    if (kilograms != null) {
+      return currentPrice / double.parse(kilograms.group(1)!);
+    }
+    final grams = RegExp(r'(\d+(?:\.\d+)?)\s*g\b').firstMatch(text);
+    if (grams != null) {
+      return currentPrice / double.parse(grams.group(1)!) * 1000;
+    }
+    return null;
+  }
+
+  double? get estimatedProteinPer100Grams {
+    final text = '$name $category'.toLowerCase();
+    if (RegExp(r'\b(chicken breast|turkey breast)\b').hasMatch(text)) {
+      return 31;
+    }
+    if (RegExp(r'\b(tuna|prawn|shrimp)\b').hasMatch(text)) return 25;
+    if (RegExp(
+      r'\b(beef|steak|lamb|pork|chicken|salmon|fish)\b',
+    ).hasMatch(text)) {
+      return 22;
+    }
+    if (RegExp(r'\b(ham|bacon|sausage)\b').hasMatch(text)) return 18;
+    if (RegExp(r'\b(cheddar|parmesan|tasty cheese|cheese)\b').hasMatch(text)) {
+      return 24;
+    }
+    if (RegExp(r'\b(egg|greek yoghurt|yoghurt)\b').hasMatch(text)) return 11;
+    return null;
+  }
+
+  double? get estimatedProteinGramsPerDollar {
+    final protein = estimatedProteinPer100Grams;
+    final price = pricePerKilogram;
+    if (protein == null || price == null || price <= 0) return null;
+    return protein * 10 / price;
   }
 
   GroceryStore get store {
