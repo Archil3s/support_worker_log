@@ -55,3 +55,8 @@ flutter build web --release --pwa-strategy=none
   for = "/flutter_service_worker.js"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/assets/tools/rental_scraper/grocery_prices_blenheim.json"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

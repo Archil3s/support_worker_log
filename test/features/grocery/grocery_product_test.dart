@@ -86,4 +86,35 @@ void main() {
     expect(avocado.isCarnivoreCompatible, isFalse);
     expect(marketed.isCompatibleWith(GroceryDiet.allCompatible), isFalse);
   });
+
+  test('parses a saved catalogue used by hosted mobile web', () {
+    final catalogue = decodeGroceryCatalogue('''
+      {
+        "updatedAt": "2026-06-20T00:37:34.561Z",
+        "location": {
+          "city": "Blenheim",
+          "region": "Marlborough",
+          "country": "New Zealand"
+        },
+        "products": [
+          {
+            "id": "eggs",
+            "name": "Eggs 12 Pack",
+            "size": "12pk",
+            "category": "eggs",
+            "sourceSite": "paknsave.co.nz",
+            "sourceUrl": "https://www.paknsave.co.nz/eggs",
+            "lastChecked": "2026-06-20",
+            "priceHistory": [
+              {"date": "2026-06-20", "price": 8.99}
+            ]
+          }
+        ]
+      }
+    ''');
+
+    expect(catalogue.products, hasLength(1));
+    expect(catalogue.location.city, 'Blenheim');
+    expect(catalogue.warning, contains('saved Blenheim catalogue'));
+  });
 }

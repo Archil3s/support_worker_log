@@ -4,9 +4,11 @@ import '../../domain/entities/grocery_product.dart';
 
 GroceryCatalogue decodeGroceryCatalogue(String body) {
   final decoded = jsonDecode(body);
-  if (decoded is! Map || decoded['ok'] != true) {
+  if (decoded is! Map ||
+      (decoded['ok'] != true && decoded['products'] is! List)) {
     throw const FormatException('Local scraper returned invalid data.');
   }
+  final savedSnapshot = decoded['ok'] != true;
   final status = decoded['status'];
   final statusMap = status is Map ? status : const {};
   final rawLocation = decoded['location'];
@@ -29,7 +31,13 @@ GroceryCatalogue decodeGroceryCatalogue(String body) {
     pagesCompleted: _readInt(statusMap['pagesCompleted']),
     pagesTotal: _readInt(statusMap['pagesTotal']),
     error: statusMap['error']?.toString(),
-    warning: statusMap['warning']?.toString(),
+    warning:
+        statusMap['warning']?.toString() ??
+        (savedSnapshot
+            ? 'Showing the latest saved Blenheim catalogue. Live refresh is '
+                  'available when the desktop scraper or hosted price API is '
+                  'connected.'
+            : null),
   );
 }
 

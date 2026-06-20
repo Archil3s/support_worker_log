@@ -10,6 +10,8 @@ const _baseUrl = 'http://127.0.0.1:51247';
 class GroceryPriceApi {
   const GroceryPriceApi();
 
+  bool get canStartScrape => true;
+
   Future<GroceryCatalogue> load() async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {

@@ -73,8 +73,9 @@ class GroceryController extends ChangeNotifier {
   Future<void> initialise() async {
     await load();
     final updated = _lastUpdated;
-    if (updated == null ||
-        DateTime.now().difference(updated) > const Duration(hours: 6)) {
+    if (_api.canStartScrape &&
+        (updated == null ||
+            DateTime.now().difference(updated) > const Duration(hours: 6))) {
       await refreshPrices();
     }
   }
@@ -95,10 +96,19 @@ class GroceryController extends ChangeNotifier {
       _pagesTotal = catalogue.pagesTotal;
       _error = catalogue.error;
       _warning = catalogue.warning;
+      if (_catalogue.isNotEmpty &&
+          !_catalogue.any(_isCurrent) &&
+          _currentOnly) {
+        _currentOnly = false;
+        _warning =
+            '${_warning == null ? '' : '$_warning '}'
+            'Current prices were unavailable, so the latest saved prices are '
+            'shown.';
+      }
     } on Object {
       _error =
-          'The local grocery scraper is not running. Restart the desktop app '
-          'or run start_rental_scraper.ps1, then retry.';
+          'Grocery prices could not load. On desktop, restart the scraper. '
+          'On web, check the deployed saved catalogue or hosted price API.';
     } finally {
       _loading = false;
       notifyListeners();
@@ -124,6 +134,13 @@ class GroceryController extends ChangeNotifier {
   }
 
   Future<void> refreshPrices() async {
+    if (!_api.canStartScrape) {
+      _warning =
+          'This web version is showing saved Blenheim prices. Live refresh '
+          'requires the hosted grocery price API.';
+      notifyListeners();
+      return;
+    }
     try {
       await _api.startScrape();
       _scraping = true;

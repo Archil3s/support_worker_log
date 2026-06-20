@@ -43,6 +43,7 @@ flutter:
     - assets/massage/body_reference.png
     - assets/grocery/keto_carnivore_recipes.json
     - assets/grocery/rm_200_recipes.json
+    - tools/rental_scraper/grocery_prices_blenheim.json
 
 
 
