@@ -5,9 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node rental_scraper_server.js",
-    "install-browser": "npx playwright install chromium firefox",
-    "refresh-groceries": "node refresh_grocery_catalogue.js",
-    "test": "node grocery_scraper_test.js && node refresh_grocery_catalogue_test.js"
+    "install-browser": "npx playwright install chromium firefox"
   },
   "dependencies": {
     "playwright": "^1.57.0"
