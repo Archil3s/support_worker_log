@@ -14,6 +14,8 @@ class GroceryController extends ChangeNotifier {
   GrocerySort _sort = GrocerySort.proteinValue;
   GroceryDiet _diet = GroceryDiet.allCompatible;
   String? _category;
+  double? _minimumProteinPer100Grams;
+  double? _maximumPricePerKilogram;
   bool _currentOnly = true;
   bool _loading = false;
   bool _scraping = false;
@@ -36,6 +38,11 @@ class GroceryController extends ChangeNotifier {
             (_store == GroceryStore.any || product.store == _store) &&
             (!_currentOnly || _isCurrent(product)) &&
             (_category == null || product.category == _category) &&
+            matchesProteinPriceFilters(
+              product,
+              minimumProteinPer100Grams: _minimumProteinPer100Grams,
+              maximumPricePerKilogram: _maximumPricePerKilogram,
+            ) &&
             _matchesQuery(product))
           product,
     ];
@@ -47,6 +54,8 @@ class GroceryController extends ChangeNotifier {
   GrocerySort get sort => _sort;
   GroceryDiet get diet => _diet;
   String? get category => _category;
+  double? get minimumProteinPer100Grams => _minimumProteinPer100Grams;
+  double? get maximumPricePerKilogram => _maximumPricePerKilogram;
   bool get currentOnly => _currentOnly;
   bool get loading => _loading;
   bool get scraping => _scraping;
@@ -175,6 +184,18 @@ class GroceryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setMinimumProteinPer100Grams(double? value) {
+    if (_minimumProteinPer100Grams == value) return;
+    _minimumProteinPer100Grams = value;
+    notifyListeners();
+  }
+
+  void setMaximumPricePerKilogram(double? value) {
+    if (_maximumPricePerKilogram == value) return;
+    _maximumPricePerKilogram = value;
+    notifyListeners();
+  }
+
   bool _matchesQuery(GroceryProduct product) {
     if (_query.isEmpty) return true;
     final text = '${product.name} ${product.category} ${product.size}'
@@ -229,4 +250,20 @@ class GroceryController extends ChangeNotifier {
     if (right == null) return -1;
     return left.compareTo(right);
   }
+}
+
+bool matchesProteinPriceFilters(
+  GroceryProduct product, {
+  double? minimumProteinPer100Grams,
+  double? maximumPricePerKilogram,
+}) {
+  if (minimumProteinPer100Grams != null) {
+    final protein = product.estimatedProteinPer100Grams;
+    if (protein == null || protein < minimumProteinPer100Grams) return false;
+  }
+  if (maximumPricePerKilogram != null) {
+    final price = product.pricePerKilogram;
+    if (price == null || price > maximumPricePerKilogram) return false;
+  }
+  return true;
 }

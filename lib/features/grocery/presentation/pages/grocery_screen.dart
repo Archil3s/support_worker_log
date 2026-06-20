@@ -275,6 +275,49 @@ class _SearchPanel extends StatelessWidget {
                     DropdownMenuItem(value: sort, child: Text(sort.label)),
                 ],
               ),
+              DropdownButton<double>(
+                value: groceryController.minimumProteinPer100Grams ?? 0,
+                onChanged: (value) {
+                  groceryController.setMinimumProteinPer100Grams(
+                    value == 0 ? null : value,
+                  );
+                },
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Any protein level')),
+                  DropdownMenuItem(
+                    value: 15,
+                    child: Text('15+ g protein / 100 g'),
+                  ),
+                  DropdownMenuItem(
+                    value: 20,
+                    child: Text('20+ g protein / 100 g'),
+                  ),
+                  DropdownMenuItem(
+                    value: 25,
+                    child: Text('25+ g protein / 100 g'),
+                  ),
+                  DropdownMenuItem(
+                    value: 30,
+                    child: Text('30+ g protein / 100 g'),
+                  ),
+                ],
+              ),
+              DropdownButton<double>(
+                value: groceryController.maximumPricePerKilogram ?? 0,
+                onChanged: (value) {
+                  groceryController.setMaximumPricePerKilogram(
+                    value == 0 ? null : value,
+                  );
+                },
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Any price / kg')),
+                  DropdownMenuItem(value: 10, child: Text(r'Under $10 / kg')),
+                  DropdownMenuItem(value: 15, child: Text(r'Under $15 / kg')),
+                  DropdownMenuItem(value: 20, child: Text(r'Under $20 / kg')),
+                  DropdownMenuItem(value: 25, child: Text(r'Under $25 / kg')),
+                  DropdownMenuItem(value: 30, child: Text(r'Under $30 / kg')),
+                ],
+              ),
               if (groceryController.categories.isNotEmpty)
                 DropdownButton<String?>(
                   value: groceryController.category,

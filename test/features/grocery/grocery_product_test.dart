@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:support_worker_log/features/grocery/data/datasources/grocery_catalogue_decoder.dart';
 import 'package:support_worker_log/features/grocery/domain/entities/grocery_product.dart';
+import 'package:support_worker_log/features/grocery/presentation/controllers/grocery_controller.dart';
 
 void main() {
   test('parses the local scraper catalogue and price history', () {
@@ -104,6 +105,46 @@ void main() {
 
     expect(cheese.pricePerKilogram, 12);
     expect(cheese.estimatedProteinGramsPerDollar, 20);
+  });
+
+  test('filters products by high protein and low price per kilogram', () {
+    final chicken = GroceryProduct.fromJson({
+      'id': 'chicken',
+      'name': 'Chicken Breast 1kg',
+      'size': '1kg',
+      'category': 'chicken',
+      'sourceSite': 'paknsave.co.nz',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 14},
+      ],
+    });
+    final steak = GroceryProduct.fromJson({
+      'id': 'steak',
+      'name': 'Beef Steak 500g',
+      'size': '500g',
+      'category': 'beef-lamb',
+      'sourceSite': 'newworld.co.nz',
+      'priceHistory': [
+        {'date': '2026-06-20', 'price': 18},
+      ],
+    });
+
+    expect(
+      matchesProteinPriceFilters(
+        chicken,
+        minimumProteinPer100Grams: 25,
+        maximumPricePerKilogram: 15,
+      ),
+      isTrue,
+    );
+    expect(
+      matchesProteinPriceFilters(
+        steak,
+        minimumProteinPer100Grams: 25,
+        maximumPricePerKilogram: 15,
+      ),
+      isFalse,
+    );
   });
 
   test('parses a saved catalogue used by hosted mobile web', () {
