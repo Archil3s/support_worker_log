@@ -1,4 +1,13 @@
-enum AppMode { work, personal, massage, mood, cleaning, casework, paye }
+enum AppMode {
+  work,
+  personal,
+  massage,
+  mood,
+  cleaning,
+  grocery,
+  casework,
+  paye,
+}
 
 extension AppModeLabel on AppMode {
   String get label {
@@ -13,6 +22,8 @@ extension AppModeLabel on AppMode {
         return 'Mood Tracker';
       case AppMode.cleaning:
         return 'Cleaning';
+      case AppMode.grocery:
+        return 'Grocery';
       case AppMode.casework:
         return 'Casework';
       case AppMode.paye:

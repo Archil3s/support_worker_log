@@ -123,6 +123,10 @@ flutter_analyze_log.txt
 flutter_run_log.txt
 tools/rental_scraper/node_modules/
 tools/rental_scraper/*.log
+tools/rental_scraper/grocery_prices.json
+tools/rental_scraper/grocery_prices.json.tmp
+tools/rental_scraper/grocery_prices_blenheim.json
+tools/rental_scraper/grocery_prices_blenheim.json.tmp
 
 # Local writer/launcher scripts
 run_app_with_notes_writer.ps1

@@ -8,7 +8,7 @@ $NodeExe = "C:\Program Files\nodejs\node.exe"
 $StdOutLog = "$ScraperRoot\scraper_stdout.log"
 $StdErrLog = "$ScraperRoot\scraper_stderr.log"
 $Port = 51247
-$RequiredParserVersion = 6
+$RequiredParserVersion = 15
 
 function Test-ScraperReachable {
     try {
@@ -76,12 +76,27 @@ function Stop-ScraperOnPort {
     }
 }
 
-if (-not (Test-Path "$ScraperRoot\node_modules\playwright")) {
+$FirefoxInstalled = Get-ChildItem `
+    -Path "$env:LOCALAPPDATA\ms-playwright" `
+    -Directory `
+    -Filter "firefox-*" `
+    -ErrorAction SilentlyContinue
+
+if (
+    -not (Test-Path "$ScraperRoot\node_modules\playwright") -or
+    -not $FirefoxInstalled
+) {
     Write-Host "Installing Playwright for the rental scraper..."
     & npm.cmd install --prefix "$ScraperRoot"
 
     if ($LASTEXITCODE -ne 0) {
         throw "npm install failed for the rental scraper."
+    }
+
+    & npm.cmd run install-browser --prefix "$ScraperRoot"
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright browser installation failed."
     }
 }
 

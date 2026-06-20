@@ -1,0 +1,458 @@
+{
+  "version": 1,
+  "servings": 1,
+  "cookbooks": [
+    {
+      "id": "easy_five",
+      "title": "The Easy 5-Ingredient Ketogenic Diet Cookbook",
+      "author": "Jen Fisch",
+      "note": "Adapted into original short-form instructions; no cookbook text is reproduced."
+    },
+    {
+      "id": "comfort_foods",
+      "title": "Keto Comfort Foods",
+      "author": "Maria Emmerich",
+      "note": "Used as general low-carbohydrate cooking inspiration."
+    },
+    {
+      "id": "complete_beginner",
+      "title": "The Complete Ketogenic Diet for Beginners",
+      "author": "Amy Ramos",
+      "note": "Used as general meal-planning inspiration."
+    },
+    {
+      "id": "rm_200",
+      "title": "RM 200 Recipe Book",
+      "author": "Craig Clarke, Ruled.me",
+      "note": "Concise adaptation from the user-provided cookbook; source page and per-serving nutrition retained."
+    }
+  ],
+  "recipes": [
+    {
+      "id": "budget_eggs",
+      "name": "Three-egg budget breakfast",
+      "diets": ["keto"],
+      "minutes": 10,
+      "cookbookId": "complete_beginner",
+      "ingredients": [
+        {"id": "eggs", "name": "Eggs", "amount": 2, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "butter", "name": "Pure butter", "amount": 15, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Boil, poach, or fry the eggs in reserved meat fat.", "Season to taste."]
+    },
+    {
+      "id": "budget_chicken",
+      "name": "Crispy budget chicken thighs",
+      "diets": ["keto"],
+      "minutes": 35,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "chicken_thighs", "name": "Chicken thighs", "amount": 300, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Pure butter", "amount": 20, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Season the chicken.", "Bake or air-fry until fully cooked and crisp.", "Keep the cooking fat for eggs."]
+    },
+    {
+      "id": "budget_mince",
+      "name": "Simple beef mince bowl",
+      "diets": ["keto"],
+      "minutes": 15,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "beef_mince", "name": "Beef mince", "amount": 200, "unit": "g", "category": "Meat"}
+      ],
+      "steps": ["Brown the mince in its own fat.", "Season and serve hot."]
+    },
+    {
+      "id": "eggs_bacon",
+      "name": "Eggs and bacon",
+      "diets": ["carnivore", "keto"],
+      "minutes": 10,
+      "cookbookId": "complete_beginner",
+      "ingredients": [
+        {"id": "eggs", "name": "Eggs", "amount": 3, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "bacon", "name": "Bacon", "amount": 100, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Butter", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Fry the bacon.", "Cook the eggs in bacon fat or butter."]
+    },
+    {
+      "id": "cheese_omelette",
+      "name": "Cheese omelette",
+      "diets": ["carnivore", "keto"],
+      "minutes": 10,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "eggs", "name": "Eggs", "amount": 3, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "cheddar", "name": "Cheddar cheese", "amount": 40, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "butter", "name": "Butter", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Whisk eggs.", "Cook in butter.", "Add cheese and fold."]
+    },
+    {
+      "id": "beef_patties",
+      "name": "Beef patties and eggs",
+      "diets": ["carnivore", "keto"],
+      "minutes": 20,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "beef_mince", "name": "Beef mince", "amount": 250, "unit": "g", "category": "Meat"},
+        {"id": "eggs", "name": "Eggs", "amount": 2, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "butter", "name": "Butter", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Shape and fry two patties.", "Fry eggs and serve on top."]
+    },
+    {
+      "id": "butter_steak",
+      "name": "Butter-basted steak",
+      "diets": ["carnivore", "keto"],
+      "minutes": 20,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "beef_steak", "name": "Beef steak", "amount": 300, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Butter", "amount": 20, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Sear steak.", "Add butter and baste.", "Rest before serving."]
+    },
+    {
+      "id": "salmon_butter",
+      "name": "Pan-fried salmon",
+      "diets": ["carnivore", "keto"],
+      "minutes": 15,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "salmon", "name": "Salmon fillet", "amount": 220, "unit": "g", "category": "Seafood"},
+        {"id": "butter", "name": "Butter", "amount": 15, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Heat butter.", "Cook salmon skin-side down.", "Turn and finish gently."]
+    },
+    {
+      "id": "chicken_thighs",
+      "name": "Crispy chicken thighs",
+      "diets": ["carnivore", "keto"],
+      "minutes": 40,
+      "cookbookId": "complete_beginner",
+      "ingredients": [
+        {"id": "chicken_thighs", "name": "Chicken thighs", "amount": 350, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Butter", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Season chicken.", "Bake or air-fry until cooked through."]
+    },
+    {
+      "id": "pork_chops",
+      "name": "Pork chops with butter",
+      "diets": ["carnivore", "keto"],
+      "minutes": 25,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "pork_chops", "name": "Pork chops", "amount": 300, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Butter", "amount": 15, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Pan-fry pork chops.", "Rest with butter on top."]
+    },
+    {
+      "id": "lamb_chops",
+      "name": "Pan-seared lamb chops",
+      "diets": ["carnivore", "keto"],
+      "minutes": 20,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "lamb_chops", "name": "Lamb chops", "amount": 300, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Butter", "amount": 15, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Season and sear lamb chops.", "Cook to preference and rest."]
+    },
+    {
+      "id": "keto_yoghurt",
+      "name": "Greek yoghurt and walnuts",
+      "diets": ["keto"],
+      "minutes": 5,
+      "cookbookId": "complete_beginner",
+      "ingredients": [
+        {"id": "greek_yoghurt", "name": "Unsweetened Greek yoghurt", "amount": 180, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "walnuts", "name": "Walnuts", "amount": 25, "unit": "g", "category": "Pantry"}
+      ],
+      "steps": ["Add yoghurt to a bowl.", "Top with walnuts."]
+    },
+    {
+      "id": "chicken_avocado",
+      "name": "Chicken and avocado salad",
+      "diets": ["keto"],
+      "minutes": 20,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "chicken_breast", "name": "Chicken breast", "amount": 220, "unit": "g", "category": "Meat"},
+        {"id": "avocado", "name": "Avocado", "amount": 1, "unit": "each", "category": "Produce"},
+        {"id": "lettuce", "name": "Lettuce", "amount": 100, "unit": "g", "category": "Produce"},
+        {"id": "olive_oil", "name": "Olive oil", "amount": 15, "unit": "ml", "category": "Pantry"}
+      ],
+      "steps": ["Cook and slice chicken.", "Combine with avocado and lettuce.", "Dress with oil."]
+    },
+    {
+      "id": "beef_broccoli",
+      "name": "Beef and broccoli skillet",
+      "diets": ["keto"],
+      "minutes": 25,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "beef_strips", "name": "Beef strips", "amount": 250, "unit": "g", "category": "Meat"},
+        {"id": "broccoli", "name": "Broccoli", "amount": 180, "unit": "g", "category": "Produce"},
+        {"id": "butter", "name": "Butter", "amount": 15, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Brown beef in butter.", "Add broccoli and cook until tender."]
+    },
+    {
+      "id": "salmon_cauliflower",
+      "name": "Salmon and cauliflower mash",
+      "diets": ["keto"],
+      "minutes": 30,
+      "cookbookId": "comfort_foods",
+      "ingredients": [
+        {"id": "salmon", "name": "Salmon fillet", "amount": 220, "unit": "g", "category": "Seafood"},
+        {"id": "cauliflower", "name": "Cauliflower", "amount": 250, "unit": "g", "category": "Produce"},
+        {"id": "butter", "name": "Butter", "amount": 20, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "cream", "name": "Cream", "amount": 30, "unit": "ml", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Steam cauliflower.", "Mash with butter and cream.", "Pan-fry salmon."]
+    },
+    {
+      "id": "pork_cabbage",
+      "name": "Pork and buttered cabbage",
+      "diets": ["keto"],
+      "minutes": 25,
+      "cookbookId": "complete_beginner",
+      "ingredients": [
+        {"id": "pork_chops", "name": "Pork chops", "amount": 300, "unit": "g", "category": "Meat"},
+        {"id": "cabbage", "name": "Cabbage", "amount": 200, "unit": "g", "category": "Produce"},
+        {"id": "butter", "name": "Butter", "amount": 20, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Cook pork chops.", "Sauté cabbage in butter.", "Serve together."]
+    },
+    {
+      "id": "courgette_mince",
+      "name": "Cheesy mince and courgette",
+      "diets": ["keto"],
+      "minutes": 25,
+      "cookbookId": "easy_five",
+      "ingredients": [
+        {"id": "beef_mince", "name": "Beef mince", "amount": 250, "unit": "g", "category": "Meat"},
+        {"id": "courgette", "name": "Courgette", "amount": 180, "unit": "g", "category": "Produce"},
+        {"id": "cheddar", "name": "Cheddar cheese", "amount": 40, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "butter", "name": "Butter", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Brown mince.", "Add courgette.", "Top with cheese and melt."]
+    },
+    {
+      "id": "rm_bacon_cheddar_omelette",
+      "name": "Bacon cheddar chive omelette",
+      "diets": ["keto"],
+      "minutes": 12,
+      "cookbookId": "rm_200",
+      "sourcePage": 14,
+      "servings": 1,
+      "calories": 463,
+      "proteinGrams": 24,
+      "netCarbsGrams": 1,
+      "ingredients": [
+        {"id": "bacon", "name": "Bacon", "amount": 50, "unit": "g", "category": "Meat"},
+        {"id": "eggs", "name": "Eggs", "amount": 2, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "cheddar", "name": "Cheddar cheese", "amount": 28, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Cook the bacon and grate the cheese.", "Cook the eggs gently in bacon fat.", "Add bacon and cheese, fold, and cook until set."]
+    },
+    {
+      "id": "rm_ham_cheddar_souffle",
+      "name": "Ham and cheddar baked eggs",
+      "diets": ["keto"],
+      "minutes": 35,
+      "cookbookId": "rm_200",
+      "sourcePage": 31,
+      "servings": 5,
+      "calories": 404,
+      "proteinGrams": 19.6,
+      "netCarbsGrams": 3.5,
+      "ingredients": [
+        {"id": "ham", "name": "Ham steak", "amount": 34, "unit": "g", "category": "Meat"},
+        {"id": "eggs", "name": "Eggs", "amount": 1.2, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "cheddar", "name": "Cheddar cheese", "amount": 23, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "cream", "name": "Cream", "amount": 24, "unit": "ml", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Soften chopped onion and garlic, then add diced ham.", "Whisk eggs, cream, cheese, and seasoning.", "Combine and bake until puffed and lightly browned."]
+    },
+    {
+      "id": "rm_avocado_tuna_bites",
+      "name": "Avocado tuna melt bites",
+      "diets": ["keto"],
+      "minutes": 25,
+      "cookbookId": "rm_200",
+      "sourcePage": 43,
+      "servings": 4,
+      "calories": 405,
+      "proteinGrams": 18.6,
+      "netCarbsGrams": 2.4,
+      "ingredients": [
+        {"id": "tuna", "name": "Canned tuna", "amount": 71, "unit": "g", "category": "Seafood"},
+        {"id": "avocado", "name": "Avocado", "amount": 0.25, "unit": "each", "category": "Produce"},
+        {"id": "parmesan", "name": "Parmesan cheese", "amount": 7, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "almond_flour", "name": "Almond flour", "amount": 8, "unit": "g", "category": "Pantry"}
+      ],
+      "steps": ["Mix drained tuna with mayonnaise, parmesan, and seasoning.", "Fold in diced avocado and form small bites.", "Coat lightly with almond flour and pan-fry until crisp."]
+    },
+    {
+      "id": "rm_egg_drop_soup",
+      "name": "Five-minute keto egg drop soup",
+      "diets": ["keto"],
+      "minutes": 5,
+      "cookbookId": "rm_200",
+      "sourcePage": 46,
+      "servings": 1,
+      "calories": 279,
+      "proteinGrams": 12,
+      "netCarbsGrams": 2.5,
+      "ingredients": [
+        {"id": "chicken_stock", "name": "Chicken stock", "amount": 355, "unit": "ml", "category": "Pantry"},
+        {"id": "butter", "name": "Pure butter", "amount": 14, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "eggs", "name": "Eggs", "amount": 2, "unit": "each", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Bring stock and butter to a boil.", "Turn off the heat and slowly stir in beaten eggs.", "Rest briefly, season, and serve."]
+    },
+    {
+      "id": "rm_sausage_pepper_soup",
+      "name": "Sausage, spinach, and pepper soup",
+      "diets": ["keto"],
+      "minutes": 55,
+      "cookbookId": "rm_200",
+      "sourcePage": 49,
+      "servings": 6,
+      "calories": 526,
+      "proteinGrams": 27.8,
+      "netCarbsGrams": 3.8,
+      "ingredients": [
+        {"id": "pork_sausage", "name": "Pork sausage", "amount": 151, "unit": "g", "category": "Meat"},
+        {"id": "spinach", "name": "Spinach", "amount": 47, "unit": "g", "category": "Produce"},
+        {"id": "green_pepper", "name": "Green capsicum", "amount": 0.17, "unit": "each", "category": "Produce"},
+        {"id": "beef_stock", "name": "Beef stock", "amount": 158, "unit": "ml", "category": "Pantry"}
+      ],
+      "steps": ["Brown the sausage, then add sliced capsicum.", "Wilt in spinach and add tomatoes, stock, and seasoning.", "Simmer covered, then uncover briefly to reduce."]
+    },
+    {
+      "id": "rm_cheeseburger_casserole",
+      "name": "Bacon cheeseburger casserole",
+      "diets": ["keto"],
+      "minutes": 45,
+      "cookbookId": "rm_200",
+      "sourcePage": 74,
+      "servings": 6,
+      "calories": 478,
+      "proteinGrams": 32.2,
+      "netCarbsGrams": 3.6,
+      "ingredients": [
+        {"id": "beef_mince", "name": "Beef mince", "amount": 76, "unit": "g", "category": "Meat"},
+        {"id": "bacon", "name": "Bacon", "amount": 13, "unit": "g", "category": "Meat"},
+        {"id": "cauliflower", "name": "Cauliflower", "amount": 44, "unit": "g", "category": "Produce"},
+        {"id": "eggs", "name": "Eggs", "amount": 0.5, "unit": "each", "category": "Eggs and dairy"},
+        {"id": "cheddar", "name": "Cheddar cheese", "amount": 19, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Brown the mince and bacon.", "Combine with riced cauliflower, eggs, cheese, and keto condiments.", "Press into a dish, top with cheese, and bake until browned."]
+    },
+    {
+      "id": "rm_crisp_chicken_wings",
+      "name": "Crisp baked chicken wings",
+      "diets": ["carnivore", "keto"],
+      "minutes": 45,
+      "cookbookId": "rm_200",
+      "sourcePage": 82,
+      "servings": 5,
+      "calories": 500,
+      "proteinGrams": 34,
+      "netCarbsGrams": 0,
+      "ingredients": [
+        {"id": "chicken_wings", "name": "Chicken wings", "amount": 272, "unit": "g", "category": "Meat"},
+        {"id": "butter", "name": "Pure butter", "amount": 11, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Dry and season the wings, then chill uncovered if time allows.", "Bake hot, turning once, until crisp and cooked through.", "Toss with melted butter and serve."]
+    },
+    {
+      "id": "rm_creamed_spinach",
+      "name": "Easy keto creamed spinach",
+      "diets": ["keto"],
+      "minutes": 15,
+      "cookbookId": "rm_200",
+      "sourcePage": 138,
+      "servings": 3,
+      "calories": 157,
+      "proteinGrams": 5.7,
+      "netCarbsGrams": 2,
+      "ingredients": [
+        {"id": "spinach", "name": "Frozen spinach", "amount": 95, "unit": "g", "category": "Produce"},
+        {"id": "parmesan", "name": "Parmesan cheese", "amount": 5, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "cream_cheese", "name": "Cream cheese", "amount": 14, "unit": "g", "category": "Eggs and dairy"},
+        {"id": "sour_cream", "name": "Sour cream", "amount": 10, "unit": "g", "category": "Eggs and dairy"}
+      ],
+      "steps": ["Warm the spinach and cook off excess water.", "Stir in cream cheese and sour cream.", "Add parmesan and cook gently until thick."]
+    }
+  ],
+  "plans": [
+    {
+      "id": "rm_cookbook_week",
+      "name": "RM cookbook keto week",
+      "diet": "keto",
+      "profile": "Recipes adapted from selected sections of RM 200 Recipe Book",
+      "note": "Open any meal to see its source page and per-serving nutrition.",
+      "days": [
+        {"day": "Monday", "breakfast": "rm_bacon_cheddar_omelette", "lunch": "rm_egg_drop_soup", "dinner": "rm_cheeseburger_casserole"},
+        {"day": "Tuesday", "breakfast": "rm_ham_cheddar_souffle", "lunch": "rm_avocado_tuna_bites", "dinner": "rm_crisp_chicken_wings"},
+        {"day": "Wednesday", "breakfast": "rm_bacon_cheddar_omelette", "lunch": "rm_sausage_pepper_soup", "dinner": "budget_chicken"},
+        {"day": "Thursday", "breakfast": "rm_ham_cheddar_souffle", "lunch": "rm_egg_drop_soup", "dinner": "rm_cheeseburger_casserole"},
+        {"day": "Friday", "breakfast": "rm_bacon_cheddar_omelette", "lunch": "rm_avocado_tuna_bites", "dinner": "rm_crisp_chicken_wings"},
+        {"day": "Saturday", "breakfast": "rm_ham_cheddar_souffle", "lunch": "rm_sausage_pepper_soup", "dinner": "budget_mince"},
+        {"day": "Sunday", "breakfast": "rm_bacon_cheddar_omelette", "lunch": "rm_creamed_spinach", "dinner": "rm_crisp_chicken_wings"}
+      ]
+    },
+    {
+      "id": "budget_keto_80",
+      "name": "Budget keto — under $80",
+      "diet": "keto",
+      "budgetNzd": 80,
+      "profile": "One 6 ft 3 in, 112 kg adult male",
+      "note": "Budget-first high-protein starting point. It is not a personalised calorie or medical prescription.",
+      "days": [
+        {"day": "Monday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_mince"},
+        {"day": "Tuesday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_chicken"},
+        {"day": "Wednesday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_chicken"},
+        {"day": "Thursday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_mince"},
+        {"day": "Friday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_chicken"},
+        {"day": "Saturday", "breakfast": "budget_eggs", "lunch": "budget_chicken", "dinner": "budget_chicken"},
+        {"day": "Sunday", "breakfast": "budget_chicken", "lunch": "budget_chicken", "dinner": "budget_chicken"}
+      ]
+    },
+    {
+      "id": "carnivore_week",
+      "name": "Carnivore week",
+      "diet": "carnivore",
+      "days": [
+        {"day": "Monday", "breakfast": "eggs_bacon", "lunch": "beef_patties", "dinner": "butter_steak"},
+        {"day": "Tuesday", "breakfast": "cheese_omelette", "lunch": "eggs_bacon", "dinner": "salmon_butter"},
+        {"day": "Wednesday", "breakfast": "eggs_bacon", "lunch": "beef_patties", "dinner": "chicken_thighs"},
+        {"day": "Thursday", "breakfast": "cheese_omelette", "lunch": "eggs_bacon", "dinner": "pork_chops"},
+        {"day": "Friday", "breakfast": "eggs_bacon", "lunch": "beef_patties", "dinner": "lamb_chops"},
+        {"day": "Saturday", "breakfast": "cheese_omelette", "lunch": "salmon_butter", "dinner": "butter_steak"},
+        {"day": "Sunday", "breakfast": "eggs_bacon", "lunch": "chicken_thighs", "dinner": "pork_chops"}
+      ]
+    },
+    {
+      "id": "keto_week",
+      "name": "Keto week",
+      "diet": "keto",
+      "days": [
+        {"day": "Monday", "breakfast": "eggs_bacon", "lunch": "chicken_avocado", "dinner": "beef_broccoli"},
+        {"day": "Tuesday", "breakfast": "keto_yoghurt", "lunch": "cheese_omelette", "dinner": "salmon_cauliflower"},
+        {"day": "Wednesday", "breakfast": "eggs_bacon", "lunch": "chicken_avocado", "dinner": "pork_cabbage"},
+        {"day": "Thursday", "breakfast": "keto_yoghurt", "lunch": "cheese_omelette", "dinner": "courgette_mince"},
+        {"day": "Friday", "breakfast": "eggs_bacon", "lunch": "chicken_avocado", "dinner": "butter_steak"},
+        {"day": "Saturday", "breakfast": "cheese_omelette", "lunch": "keto_yoghurt", "dinner": "salmon_cauliflower"},
+        {"day": "Sunday", "breakfast": "eggs_bacon", "lunch": "beef_broccoli", "dinner": "pork_cabbage"}
+      ]
+    }
+  ]
+}

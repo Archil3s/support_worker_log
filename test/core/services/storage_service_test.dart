@@ -158,4 +158,17 @@ void main() {
 
     expect(restored.appMode, AppMode.mood);
   });
+
+  test('persists grocery app mode', () {
+    const data = StoredAppData(
+      settings: AppSettings(),
+      clients: ['AB'],
+      entries: [],
+      appMode: AppMode.grocery,
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.appMode, AppMode.grocery);
+  });
 }

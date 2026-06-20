@@ -1,8 +1,13 @@
 const http = require('http');
+const {
+  getGroceryCatalogue,
+  scheduleGroceryScrapes,
+  startGroceryScrape,
+} = require('./grocery_scraper');
 
 const PORT = Number(process.env.RENTAL_SCRAPER_PORT || 51247);
 const MAX_BODY = 1024 * 1024;
-const PARSER_VERSION = 6;
+const PARSER_VERSION = 15;
 const MAX_PARALLEL_SOURCES = 4;
 
 function send(res, code, body) {
@@ -831,10 +836,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/groceries' && req.method === 'GET') {
+    send(res, 200, { ok: true, ...getGroceryCatalogue() });
+    return;
+  }
+
+  if (req.url === '/groceries/scrape' && req.method === 'POST') {
+    startGroceryScrape().catch((error) => {
+      console.error('Grocery scrape failed:', error);
+    });
+    send(res, 202, { ok: true, ...getGroceryCatalogue() });
+    return;
+  }
+
   send(res, 404, { ok: false, error: 'Not found' });
 });
 
 if (require.main === module) {
+  scheduleGroceryScrapes();
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`Rental scraper running on http://127.0.0.1:${PORT}`);
   });

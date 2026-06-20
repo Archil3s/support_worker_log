@@ -1304,6 +1304,10 @@ class AppState extends ChangeNotifier {
       'clean' ||
       'house-cleaning' ||
       'house_cleaning' => AppMode.cleaning,
+      'grocery' ||
+      'groceries' ||
+      'supermarket' ||
+      'supermarket-prices' => AppMode.grocery,
       'massage' => AppMode.massage,
       'casework' => AppMode.casework,
       'paye' => AppMode.paye,

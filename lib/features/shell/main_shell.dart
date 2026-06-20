@@ -13,6 +13,7 @@ import '../cleaning/cleaning_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drive/drive_screen.dart';
 import '../entries/entries_screen.dart';
+import '../grocery/presentation/pages/grocery_screen.dart';
 import '../massage/massage_screen.dart';
 import '../mood/presentation/pages/mood_tracker_screen.dart';
 import '../notes/actions_screen.dart';
@@ -109,6 +110,7 @@ class _MainShellState extends State<MainShell> {
     if (mode == AppMode.massage) return 'Massage';
     if (mode == AppMode.mood) return 'Mood Tracker';
     if (mode == AppMode.cleaning) return 'House Cleaning';
+    if (mode == AppMode.grocery) return 'Grocery Prices';
     if (mode == AppMode.casework) return 'Casework';
     if (mode == AppMode.paye) return 'PAYE job - $title';
 
@@ -125,6 +127,8 @@ class _MainShellState extends State<MainShell> {
         return Icons.monitor_heart_outlined;
       case AppMode.cleaning:
         return Icons.cleaning_services_outlined;
+      case AppMode.grocery:
+        return Icons.local_grocery_store_outlined;
       case AppMode.casework:
         return Icons.home_work_outlined;
       case AppMode.paye:
@@ -139,7 +143,8 @@ class _MainShellState extends State<MainShell> {
       AppMode.personal ||
       AppMode.massage ||
       AppMode.mood ||
-      AppMode.cleaning => GoogleExportAccountScope.personal,
+      AppMode.cleaning ||
+      AppMode.grocery => GoogleExportAccountScope.personal,
       AppMode.paye => GoogleExportAccountScope.paye,
       AppMode.work || AppMode.casework => GoogleExportAccountScope.work,
     };
@@ -264,14 +269,20 @@ class _MainShellState extends State<MainShell> {
         final massageMode = appMode == AppMode.massage;
         final moodMode = appMode == AppMode.mood;
         final cleaningMode = appMode == AppMode.cleaning;
+        final groceryMode = appMode == AppMode.grocery;
         final caseworkMode = appMode == AppMode.casework;
         final standaloneMode =
             personalMode ||
             massageMode ||
             moodMode ||
             cleaningMode ||
+            groceryMode ||
             caseworkMode;
-        final contentWidth = caseworkMode && wide ? 1680.0 : maxContentWidth;
+        final contentWidth = caseworkMode && wide
+            ? 1680.0
+            : groceryMode && wide
+            ? 1240.0
+            : maxContentWidth;
 
         return Scaffold(
           appBar: AppBar(
@@ -325,6 +336,13 @@ class _MainShellState extends State<MainShell> {
                       child: ListTile(
                         leading: Icon(Icons.cleaning_services_outlined),
                         title: Text('House Cleaning'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: AppMode.grocery,
+                      child: ListTile(
+                        leading: Icon(Icons.local_grocery_store_outlined),
+                        title: Text('Grocery Prices'),
                       ),
                     ),
                     PopupMenuItem(
@@ -390,7 +408,7 @@ class _MainShellState extends State<MainShell> {
                       constraints: BoxConstraints(maxWidth: contentWidth),
                       child: Column(
                         children: [
-                          if (!cleaningMode)
+                          if (!cleaningMode && !groceryMode)
                             GoogleDriveConnectionWarning(
                               scope: _driveScope(appMode),
                             ),
@@ -404,6 +422,8 @@ class _MainShellState extends State<MainShell> {
                                   ? const MoodTrackerScreen()
                                   : cleaningMode
                                   ? const CleaningScreen()
+                                  : groceryMode
+                                  ? const GroceryScreen()
                                   : caseworkMode
                                   ? const CaseworkScreen()
                                   : _screen(),

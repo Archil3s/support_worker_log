@@ -41,6 +41,8 @@ flutter:
     - assets/templates/TEMPLATE.docx
     - assets/massage/everyday_massage_guide.html
     - assets/massage/body_reference.png
+    - assets/grocery/keto_carnivore_recipes.json
+    - assets/grocery/rm_200_recipes.json
 
 
 
