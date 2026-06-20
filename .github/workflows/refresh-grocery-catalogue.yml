@@ -40,7 +40,9 @@ jobs:
 
       - name: Refresh Blenheim prices
         working-directory: tools/rental_scraper
-        run: npm run refresh-groceries
+        env:
+          GROCERY_HEADLESS: 'false'
+        run: xvfb-run -a npm run refresh-groceries
 
       - name: Commit updated catalogue
         run: |
