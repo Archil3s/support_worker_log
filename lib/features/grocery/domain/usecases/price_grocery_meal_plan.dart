@@ -81,6 +81,7 @@ class PriceGroceryMealPlan {
     required int people,
     required List<GroceryProduct> products,
   }) {
+    final productIndex = _indexFor(products);
     return GroceryRecipePrice(
       people: people,
       ingredients: [
@@ -88,7 +89,7 @@ class PriceGroceryMealPlan {
           _priceIngredient(
             ingredient: ingredient,
             quantity: ingredient.amount * people,
-            products: products,
+            productIndex: productIndex,
           ),
       ],
     );
@@ -100,6 +101,7 @@ class PriceGroceryMealPlan {
     required int people,
     required List<GroceryProduct> products,
   }) {
+    final productIndex = _indexFor(products);
     final days = [
       for (final day in plan.days)
         GroceryDayPrice(
@@ -139,7 +141,7 @@ class PriceGroceryMealPlan {
               category: item.category,
             ),
             quantity: item.amount,
-            products: products,
+            productIndex: productIndex,
           ),
       ],
     );
@@ -149,6 +151,7 @@ class PriceGroceryMealPlan {
     required List<GroceryShoppingItem> items,
     required List<GroceryProduct> products,
   }) {
+    final productIndex = _indexFor(products);
     return [
       for (final item in items)
         _priceIngredient(
@@ -160,7 +163,7 @@ class PriceGroceryMealPlan {
             category: item.category,
           ),
           quantity: item.amount,
-          products: products,
+          productIndex: productIndex,
         ),
     ];
   }
@@ -168,43 +171,42 @@ class PriceGroceryMealPlan {
   GroceryIngredientPrice _priceIngredient({
     required GroceryIngredient ingredient,
     required double quantity,
-    required List<GroceryProduct> products,
+    required _ProductSearchIndex productIndex,
   }) {
     final directCandidates = ingredient.pantryStaple
-        ? <({GroceryProduct product, int score})>[]
-        : products
-              .where((product) => product.canPurchase)
-              .where((product) => !product.isDietMarketed)
-              .where((product) => !_isExcluded(ingredient, product))
-              .map(
-                (product) =>
-                    (product: product, score: _matchScore(ingredient, product)),
-              )
-              .where((candidate) => candidate.score > 0)
-              .toList();
+        ? <_ProductCandidate>[]
+        : [
+            for (final indexedProduct in productIndex.directCandidates(
+              ingredient,
+            ))
+              if (!_isExcluded(ingredient, indexedProduct.normalisedName))
+                _candidateFor(
+                  ingredient,
+                  indexedProduct,
+                  quantity,
+                  _matchScore(ingredient, indexedProduct),
+                ),
+          ].where((candidate) => candidate.score > 0).toList();
     final substitution = directCandidates.isEmpty
         ? _substitutionFor(ingredient)
         : null;
     final candidates = directCandidates.isNotEmpty
         ? directCandidates
         : substitution == null
-        ? <({GroceryProduct product, int score})>[]
-        : products
-              .where((product) => product.canPurchase)
-              .where((product) => !product.isDietMarketed)
-              .where((product) => _matchesSubstitution(substitution, product))
-              .map((product) => (product: product, score: 1))
-              .toList();
+        ? <_ProductCandidate>[]
+        : [
+            for (final indexedProduct in productIndex.substitutionCandidates(
+              substitution,
+            ))
+              if (_matchesSubstitution(substitution, indexedProduct))
+                _candidateFor(ingredient, indexedProduct, quantity, 1),
+          ];
     candidates.sort((left, right) {
       final score = right.score.compareTo(left.score);
       if (score != 0) return score;
-      final purchase = _purchaseCost(
-        left.product,
-        quantity,
-        ingredient.unit,
-      ).compareTo(_purchaseCost(right.product, quantity, ingredient.unit));
+      final purchase = left.purchaseCost.compareTo(right.purchaseCost);
       if (purchase != 0) return purchase;
-      return _unitCost(left.product).compareTo(_unitCost(right.product));
+      return left.unitCost.compareTo(right.unitCost);
     });
     final product = candidates.isEmpty ? null : candidates.first.product;
     final packageQuantity = product == null
@@ -229,7 +231,10 @@ class PriceGroceryMealPlan {
       closestMatch:
           product != null &&
           (substitution != null ||
-              _usesAliasOrCategoryFallback(ingredient, product)),
+              _usesAliasOrCategoryFallback(
+                ingredient,
+                candidates.first.indexedProduct,
+              )),
       substitutionLabel: product == null || substitution == null
           ? null
           : '${ingredient.name} → ${product.name}',
@@ -283,19 +288,24 @@ class PriceGroceryMealPlan {
 
   bool _matchesSubstitution(
     _Substitution substitution,
-    GroceryProduct product,
+    _IndexedProduct indexedProduct,
   ) {
+    final product = indexedProduct.product;
     if (!substitution.categories.contains(product.category.toLowerCase())) {
       return false;
     }
-    final terms = _normalisedTerms(product.name);
+    final terms = indexedProduct.terms;
     return substitution.productTerms.isEmpty ||
         substitution.productTerms.any((term) => _containsTerm(terms, term));
   }
 
-  int _matchScore(GroceryIngredient ingredient, GroceryProduct product) {
-    final productText = _normaliseMatchText(product.name);
-    final productTerms = _normalisedTerms(productText);
+  int _matchScore(
+    GroceryIngredient ingredient,
+    _IndexedProduct indexedProduct,
+  ) {
+    final product = indexedProduct.product;
+    final productText = indexedProduct.normalisedName;
+    final productTerms = indexedProduct.terms;
     final requiredTerms = _originalIngredientTerms(ingredient);
     if (requiredTerms.isEmpty) return 0;
 
@@ -335,12 +345,6 @@ class PriceGroceryMealPlan {
         .toList();
   }
 
-  Set<String> _normalisedTerms(String value) {
-    return _normaliseMatchText(
-      value,
-    ).split(' ').where((term) => term.isNotEmpty).map(_singularTerm).toSet();
-  }
-
   bool _containsTerm(Set<String> productTerms, String term) {
     return productTerms.contains(_singularTerm(term));
   }
@@ -361,10 +365,9 @@ class PriceGroceryMealPlan {
 
   bool _usesAliasOrCategoryFallback(
     GroceryIngredient ingredient,
-    GroceryProduct product,
+    _IndexedProduct indexedProduct,
   ) {
-    final productText = _normaliseMatchText(product.name);
-    final productTerms = _normalisedTerms(productText);
+    final productTerms = indexedProduct.terms;
     return _originalIngredientTerms(
       ingredient,
     ).any((term) => !_containsTerm(productTerms, term));
@@ -415,9 +418,8 @@ class PriceGroceryMealPlan {
     return product.currentPrice * (quantity / packageQuantity).ceil();
   }
 
-  bool _isExcluded(GroceryIngredient ingredient, GroceryProduct product) {
+  bool _isExcluded(GroceryIngredient ingredient, String productName) {
     final ingredientName = _normaliseMatchText(ingredient.name);
-    final productName = _normaliseMatchText(product.name);
     if (ingredientName == 'butter') {
       return RegExp(
         r'\b(spread|margarine|garlic|herb|peanut|butterfl)',
@@ -429,6 +431,21 @@ class PriceGroceryMealPlan {
       ).hasMatch(productName);
     }
     return false;
+  }
+
+  _ProductCandidate _candidateFor(
+    GroceryIngredient ingredient,
+    _IndexedProduct indexedProduct,
+    double quantity,
+    int score,
+  ) {
+    final product = indexedProduct.product;
+    return _ProductCandidate(
+      indexedProduct: indexedProduct,
+      score: score,
+      purchaseCost: _purchaseCost(product, quantity, ingredient.unit),
+      unitCost: _unitCost(product),
+    );
   }
 
   double? _packageQuantity(GroceryProduct product, String unit) {
@@ -484,6 +501,136 @@ class PriceGroceryMealPlan {
       r'psyllium|flax|linseed|cocoa|spice|seasoning)\b',
     ).hasMatch(product.name.toLowerCase());
   }
+}
+
+List<GroceryProduct>? _cachedProducts;
+_ProductSearchIndex? _cachedProductIndex;
+
+_ProductSearchIndex _indexFor(List<GroceryProduct> products) {
+  if (!identical(products, _cachedProducts) || _cachedProductIndex == null) {
+    _cachedProducts = products;
+    _cachedProductIndex = _ProductSearchIndex(products);
+  }
+  return _cachedProductIndex!;
+}
+
+class _ProductSearchIndex {
+  _ProductSearchIndex(List<GroceryProduct> products) {
+    for (final product in products) {
+      if (!product.canPurchase || product.isDietMarketed) continue;
+      final normalisedName = _normaliseProductText(product.name);
+      final indexedProduct = _IndexedProduct(
+        product: product,
+        normalisedName: normalisedName,
+        terms: _normalisedProductTerms(normalisedName),
+      );
+      for (final term in indexedProduct.terms) {
+        _byTerm.putIfAbsent(term, () => []).add(indexedProduct);
+      }
+      _byCategory
+          .putIfAbsent(product.category.toLowerCase(), () => [])
+          .add(indexedProduct);
+    }
+  }
+
+  final Map<String, List<_IndexedProduct>> _byTerm = {};
+  final Map<String, List<_IndexedProduct>> _byCategory = {};
+
+  Iterable<_IndexedProduct> directCandidates(GroceryIngredient ingredient) {
+    final requiredTerms = _ingredientSearchTerms(ingredient);
+    if (requiredTerms.isEmpty) return const [];
+
+    Set<_IndexedProduct>? smallestPool;
+    for (final term in requiredTerms) {
+      final acceptedTerms = {term, ...?_termAliases[term]};
+      final pool = {
+        for (final acceptedTerm in acceptedTerms)
+          ...?_byTerm[_singularProductTerm(acceptedTerm)],
+      };
+      if (pool.isEmpty) return const [];
+      if (smallestPool == null || pool.length < smallestPool.length) {
+        smallestPool = pool;
+      }
+    }
+    return smallestPool ?? const [];
+  }
+
+  Iterable<_IndexedProduct> substitutionCandidates(
+    _Substitution substitution,
+  ) sync* {
+    for (final category in substitution.categories) {
+      yield* _byCategory[category] ?? const [];
+    }
+  }
+}
+
+class _IndexedProduct {
+  const _IndexedProduct({
+    required this.product,
+    required this.normalisedName,
+    required this.terms,
+  });
+
+  final GroceryProduct product;
+  final String normalisedName;
+  final Set<String> terms;
+}
+
+class _ProductCandidate {
+  const _ProductCandidate({
+    required this.indexedProduct,
+    required this.score,
+    required this.purchaseCost,
+    required this.unitCost,
+  });
+
+  final _IndexedProduct indexedProduct;
+  final int score;
+  final double purchaseCost;
+  final double unitCost;
+
+  GroceryProduct get product => indexedProduct.product;
+}
+
+List<String> _ingredientSearchTerms(GroceryIngredient ingredient) {
+  final explicit = _searchTerms[ingredient.id];
+  final source = explicit ?? _normaliseProductText(ingredient.name).split(' ');
+  return source
+      .map(_singularProductTerm)
+      .where((term) => term.length > 2 && !_ignoredTerms.contains(term))
+      .toSet()
+      .toList();
+}
+
+Set<String> _normalisedProductTerms(String value) {
+  return _normaliseProductText(value)
+      .split(' ')
+      .where((term) => term.isNotEmpty)
+      .map(_singularProductTerm)
+      .toSet();
+}
+
+String _normaliseProductText(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'(?<=[a-z])-\s+(?=[a-z])'), '')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+String _singularProductTerm(String term) {
+  final value = term.toLowerCase();
+  if (value.endsWith('ies') && value.length > 4) {
+    return '${value.substring(0, value.length - 3)}y';
+  }
+  if (value.endsWith('es') && value.length > 4) {
+    return value.substring(0, value.length - 2);
+  }
+  if (value.endsWith('s') && value.length > 3) {
+    return value.substring(0, value.length - 1);
+  }
+  return value;
 }
 
 class _Substitution {
