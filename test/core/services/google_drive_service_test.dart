@@ -105,11 +105,11 @@ void main() {
       expect(documentText, isNot(contains('60 minutes')));
       expect(documentText, isNot(contains('1.00 hours')));
       expect(documentText, isNot(contains('Kilometres')));
-      expect(documentText, contains('Main topic(s)  (max. 200 words)'));
+      expect(documentText, contains('Main topic(s)'));
       expect(documentText, contains('Test note'));
-      expect(documentText, contains('Outcome(s)  (Max. 100 words)'));
+      expect(documentText, contains('Outcome(s)'));
       expect(documentText, contains('Saved to Drive'));
-      expect(documentText, contains('Next actions  Max. 150 words)'));
+      expect(documentText, contains('Next actions'));
       expect(documentText, contains('Follow up tomorrow'));
       expect(documentText, contains('Settled'));
       expect(
@@ -471,7 +471,7 @@ void main() {
   );
 
   test(
-    'syncPersonalLogEntries groups mood voice notes into one health docx',
+    'syncPersonalLogEntries groups mood voice notes into one health Google Doc',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
       final service = GoogleDriveService(api: api);
@@ -508,19 +508,20 @@ void main() {
       );
 
       final voiceUpload = api.uploads.singleWhere(
-        (upload) => upload.name == 'Mood Voice Notes.docx',
+        (upload) => upload.name == 'Mood Voice Notes',
       );
       final documentText = _docxText(voiceUpload.bytes);
 
       expect(voiceUpload.parentId, 'personal-notes/Health');
-      expect(voiceUpload.mimeType, _docxMimeType);
-      expect(api.uploadedNames, contains('Mood Voice Notes.docx'));
+      expect(voiceUpload.mimeType, _googleDocsMimeType);
+      expect(voiceUpload.contentMimeType, _docxMimeType);
+      expect(api.uploadedNames, contains('Mood Voice Notes'));
       expect(
         api.uploadedNames,
         isNot(contains('2026-06-02_health_Mood_voice_note.docx')),
       );
       expect(documentText, contains('Mood Voice Notes'));
-      expect(documentText, contains('Grouped by month'));
+      expect(documentText, contains('One living Google Doc'));
       expect(documentText, contains('July 2026'));
       expect(documentText, contains('01/07/2026 6:30 PM'));
       expect(documentText, contains('Evening anxiety settled after a walk.'));
@@ -531,63 +532,85 @@ void main() {
     },
   );
 
-  test(
-    'savePayeNote stores blank docx under person and year folders',
-    () async {
-      final api = _FakeGoogleDriveApi(children: const []);
-      final service = GoogleDriveService(api: api);
+  test('savePayeNote imports long PAYE notes as a Google Doc', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
 
-      await service.savePayeNote(
-        accessToken: 'token',
-        notesFolderId: 'paye-notes',
-        entry: WorkEntry(
-          id: 'paye-1',
-          client: 'Jane Smith',
-          type: EntryType.homeVisit,
-          date: DateTime(2026, 6, 7),
-          startTime: const TimeOfDay(hour: 10, minute: 30),
-          minutes: 30,
-          notes: const [
-            'Attendance: Client, Support worker, Social worker',
-            'Roster question answered',
-          ],
-          odometerStart: 10,
-          odometerEnd: 14.5,
-          supportNoteBreakdown:
-              'Main topic(s)\nRoster question answered\n\n'
-              'Outcome(s)\nShift confirmed\n\n'
-              'Next action(s)\nSend policy link\n\n'
-              'Overall impression\nSettled\n\n'
-              'Local referral tracking\nNone\n\n'
-              'Safety concerns\nNone noted',
-        ),
-      );
+    await service.savePayeNote(
+      accessToken: 'token',
+      notesFolderId: 'paye-notes',
+      entry: WorkEntry(
+        id: 'paye-1',
+        client: 'Jane Smith',
+        type: EntryType.homeVisit,
+        date: DateTime(2026, 6, 7),
+        startTime: const TimeOfDay(hour: 10, minute: 30),
+        minutes: 30,
+        notes: const [
+          'Attendance: Client, Support worker, Social worker',
+          'Roster question answered',
+        ],
+        odometerStart: 10,
+        odometerEnd: 14.5,
+        supportNoteBreakdown: [
+          'Main topic(s)',
+          'Roster question answered',
+          List.filled(220, 'Long session detail.').join(' '),
+          '',
+          'Outcome(s)',
+          'Shift confirmed',
+          '',
+          'Next action(s)',
+          'Send policy link',
+          '',
+          'Overall impression',
+          'Settled',
+          '',
+          'Local referral tracking',
+          'None',
+          '',
+          'Safety concerns',
+          'None noted',
+        ].join('\n'),
+      ),
+    );
 
-      final upload = api.uploads.singleWhere(
-        (item) => item.name == '2026-06-07_Jane_Smith.docx',
-      );
-      final documentText = _docxText(upload.bytes);
+    final upload = api.uploads.singleWhere(
+      (item) => item.name == '2026-06-07_Jane_Smith',
+    );
+    final documentText = _docxText(upload.bytes);
 
-      expect(upload.parentId, 'paye-notes/Jane Smith/2026');
-      expect(upload.mimeType, _docxMimeType);
-      expect(documentText, startsWith('Attendance'));
-      expect(documentText, contains('Client'));
-      expect(documentText, contains('Support worker'));
-      expect(documentText, contains('Social worker'));
-      expect(documentText, isNot(contains('PAYE Support Note')));
-      expect(documentText, isNot(contains('Date:')));
-      expect(documentText, isNot(contains('Jane Smith')));
-      expect(documentText, contains('Roster question answered'));
-      expect(documentText, contains('Shift confirmed'));
-      expect(documentText, contains('Send policy link'));
-      expect(documentText, isNot(contains('Kilometres')));
-      expect(documentText, isNot(contains('Invoice')));
-    },
-  );
+    expect(upload.parentId, 'paye-notes/Jane Smith/2026');
+    expect(upload.mimeType, _googleDocsMimeType);
+    expect(upload.contentMimeType, _docxMimeType);
+    expect(documentText, startsWith('Attendance'));
+    expect(documentText, contains('Client'));
+    expect(documentText, contains('Support worker'));
+    expect(documentText, contains('Social worker'));
+    expect(documentText, isNot(contains('PAYE Support Note')));
+    expect(documentText, isNot(contains('Date:')));
+    expect(documentText, isNot(contains('Jane Smith')));
+    expect(documentText, contains('Roster question answered'));
+    expect(documentText, contains('Long session detail.'));
+    expect(documentText, contains('Shift confirmed'));
+    expect(documentText, contains('Send policy link'));
+    expect(documentText, isNot(contains('Kilometres')));
+    expect(documentText, isNot(contains('Invoice')));
+  });
+
+  test('trashFile sends file removal through Drive API', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    await service.trashFile(accessToken: 'token', fileId: 'temporary-doc');
+
+    expect(api.trashedFileIds, ['temporary-doc']);
+  });
 }
 
 const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const _googleDocsMimeType = 'application/vnd.google-apps.document';
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({
@@ -601,6 +624,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
+  final trashedFileIds = <String>[];
 
   @override
   Future<GoogleDriveFile> createFolder({
@@ -673,6 +697,14 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
       name: '2026-06-02_AB_in-progress.docx',
       mimeType: _docxMimeType,
     );
+  }
+
+  @override
+  Future<void> trashFile({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    trashedFileIds.add(fileId);
   }
 }
 

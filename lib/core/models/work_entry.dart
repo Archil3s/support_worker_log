@@ -6,16 +6,16 @@ import 'app_settings.dart';
 import 'entry_type.dart';
 
 const supportNoteBreakdownTemplate = '''
-Main topic(s)  (max. 200 words)
+Main topic(s)
     1. 
 
-Outcome(s)  (Max. 100 words)
+Outcome(s)
     1. 
 
 Next action(s)
     1.
 
-Overall impression (Max. 150 words)
+Overall impression
     1. 
 
 Local referral tracking

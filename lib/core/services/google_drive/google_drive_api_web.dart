@@ -207,6 +207,31 @@ class GoogleDriveApiPlatform {
     return _fileFromResponse(response, 'Google Drive file move failed');
   }
 
+  Future<void> trashFile({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    if (_useDesktopProxy) {
+      await _proxyJson(
+        '/__google_drive/trash_file',
+        {'accessToken': accessToken, 'fileId': fileId},
+        failureMessage: 'Google Drive file removal failed',
+      );
+      return;
+    }
+
+    await _request(
+      _driveFileUri(fileId).toString(),
+      method: 'PATCH',
+      requestHeaders: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      sendData: jsonEncode({'trashed': true}),
+      failureMessage: 'Google Drive file removal failed',
+    );
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -283,6 +308,12 @@ class GoogleDriveApiPlatform {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'addParents': toParentId,
       'removeParents': fromParentId,
+      'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveFileUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'fields': 'id,name,mimeType,webViewLink',
     });
   }

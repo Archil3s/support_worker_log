@@ -384,6 +384,38 @@ class AppState extends ChangeNotifier {
     return file;
   }
 
+  Future<GoogleDriveFile> saveTemporaryPayeNoteToDrive(WorkEntry entry) async {
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.paye,
+    )) {
+      await connectPayeGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    final notesFolderId = await _ensurePayeNotesDriveFolder(accessToken);
+    return _googleDriveService.savePayeNote(
+      accessToken: accessToken,
+      notesFolderId: notesFolderId,
+      entry: entry,
+      temporary: true,
+    );
+  }
+
+  Future<void> trashPayeDriveFile(String fileId) async {
+    final cleanedFileId = fileId.trim();
+    if (cleanedFileId.isEmpty) return;
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    await _googleDriveService.trashFile(
+      accessToken: accessToken,
+      fileId: cleanedFileId,
+    );
+  }
+
   Future<EntryDriveSupportNoteMeta?> findEntryNoteInCurrentDrive(
     WorkEntry entry,
   ) async {

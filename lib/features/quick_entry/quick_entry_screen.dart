@@ -169,16 +169,16 @@ String _buildSupportNoteBreakdown({
   required String safetyConcerns,
 }) {
   return [
-    'Main topic(s)  (max. 200 words)',
+    'Main topic(s)',
     _cleanSupportNoteSection(mainTopic),
     '',
-    'Outcome(s)  (Max. 100 words)',
+    'Outcome(s)',
     _cleanSupportNoteSection(outcomes),
     '',
     'Next action(s)',
     _cleanSupportNoteSection(nextActions),
     '',
-    'Overall impression (Max. 150 words)',
+    'Overall impression',
     _cleanSupportNoteSection(impression),
     '',
     'Local referral tracking',
@@ -1422,13 +1422,16 @@ class _SupportNoteBreakdownSheetState
         : _cleanSupportNoteSection(safetyConcernsController.text);
     final referralSummary = _referralSummary();
 
-    final error = _validationError(
-      mainTopic: mainTopic,
-      outcomes: outcomes,
-      impression: impression,
-      referrals: referralSummary,
-      safetyConcerns: safetyConcerns,
-    );
+    final payeMode = context.read<AppState>().isPayeMode;
+    final error = payeMode
+        ? null
+        : _validationError(
+            mainTopic: mainTopic,
+            outcomes: outcomes,
+            impression: impression,
+            referrals: referralSummary,
+            safetyConcerns: safetyConcerns,
+          );
 
     if (error != null) {
       ScaffoldMessenger.of(context)
@@ -1852,7 +1855,9 @@ class _SupportNoteBreakdownSheetState
               isLast: stepIndex == 6,
               onBack: _previousStep,
               onNext: _nextStep,
-              saveLabel: 'Save Visit',
+              saveLabel: context.watch<AppState>().isPayeMode
+                  ? 'Finish & Save PAYE Note'
+                  : 'Save Visit',
             ),
           ],
         ),
