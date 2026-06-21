@@ -33,8 +33,10 @@ class _GroceryScreenState extends State<GroceryScreen> {
     super.initState();
     _controller.addListener(_refresh);
     unawaited(_controller.initialise());
-    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      unawaited(_controller.load(showLoading: false));
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_view == _GroceryView.prices && _controller.scraping) {
+        unawaited(_controller.load(showLoading: false));
+      }
     });
   }
 
@@ -86,6 +88,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
           child: _view == _GroceryView.mealPlan
               ? GroceryMealPlanner(
                   products: _controller.catalogue,
+                  catalogueRevision: _controller.catalogueRevision,
                   onFindProduct: _findProduct,
                 )
               : _priceFinder(products),

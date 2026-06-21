@@ -21,6 +21,7 @@ class GroceryController extends ChangeNotifier {
   bool _scraping = false;
   int _pagesCompleted = 0;
   int _pagesTotal = 0;
+  int _catalogueRevision = 0;
   String? _error;
   String? _warning;
   String _query = '';
@@ -61,12 +62,13 @@ class GroceryController extends ChangeNotifier {
   bool get scraping => _scraping;
   int get pagesCompleted => _pagesCompleted;
   int get pagesTotal => _pagesTotal;
+  int get catalogueRevision => _catalogueRevision;
   String? get error => _error;
   String? get warning => _warning;
   String get query => _query;
   DateTime? get lastUpdated => _lastUpdated;
   String get locationLabel => _location.label;
-  List<GroceryProduct> get catalogue => List.unmodifiable(_catalogue);
+  List<GroceryProduct> get catalogue => _catalogue;
 
   List<String> get categories {
     final values = {
@@ -98,6 +100,7 @@ class GroceryController extends ChangeNotifier {
     try {
       final catalogue = await _api.load();
       _catalogue = catalogue.products;
+      _catalogueRevision++;
       _lastUpdated = catalogue.updatedAt;
       _location = catalogue.location;
       _scraping = catalogue.scraping;

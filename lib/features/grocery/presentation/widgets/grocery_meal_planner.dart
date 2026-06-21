@@ -10,6 +10,8 @@ import '../../domain/entities/grocery_product.dart';
 import '../../domain/entities/grocery_recipe.dart';
 import '../../domain/usecases/price_grocery_meal_plan.dart';
 import '../../domain/usecases/suggest_budget_keto_plan.dart';
+import 'grocery_formatters.dart';
+import 'grocery_shopping_list.dart';
 
 const _panel = Color(0xFF151B29);
 const _border = Color(0xFF34405F);
@@ -22,11 +24,13 @@ enum GroceryPlannerView { week, recipes, selected, shopping }
 class GroceryMealPlanner extends StatefulWidget {
   const GroceryMealPlanner({
     required this.products,
+    required this.catalogueRevision,
     required this.onFindProduct,
     super.key,
   });
 
   final List<GroceryProduct> products;
+  final int catalogueRevision;
   final ValueChanged<String> onFindProduct;
 
   @override
@@ -50,23 +54,19 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
   String? _recipeSection;
   Map<String, int> _selectedRecipes = {};
   final Map<String, GroceryRecipePrice> _recipePriceCache = {};
-  int _productPriceSignature = 0;
   int _visibleRecipeCount = 12;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _productPriceSignature = _priceSignature(widget.products);
     unawaited(_load());
   }
 
   @override
   void didUpdateWidget(covariant GroceryMealPlanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final signature = _priceSignature(widget.products);
-    if (signature == _productPriceSignature) return;
-    _productPriceSignature = signature;
+    if (widget.catalogueRevision == oldWidget.catalogueRevision) return;
     _recipePriceCache.clear();
   }
 
@@ -206,7 +206,7 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
   }
 
   GroceryRecipePrice _priceRecipe(GroceryRecipe recipe, {int people = 1}) {
-    final key = '${recipe.id}:$people:$_productPriceSignature';
+    final key = '${recipe.id}:$people:${widget.catalogueRevision}';
     return _recipePriceCache.putIfAbsent(
       key,
       () => _priceMealPlan.priceRecipe(
@@ -215,14 +215,6 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
         products: widget.products,
       ),
     );
-  }
-
-  int _priceSignature(List<GroceryProduct> products) {
-    return Object.hashAll([
-      products.length,
-      for (final product in products)
-        Object.hash(product.id, product.currentPrice, product.lastChecked),
-    ]);
   }
 
   @override
@@ -331,7 +323,7 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
             priceForRecipe: (recipe, servings) =>
                 _priceRecipe(recipe, people: servings),
             onSelectedChanged: _setSelectedRecipe,
-            shoppingList: _ShoppingList(
+            shoppingList: GroceryShoppingList(
               items: selectedShopping,
               checkedItems: _checkedItems,
               onChecked: _toggleChecked,
@@ -348,7 +340,7 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
             ),
           )
         else
-          _ShoppingList(
+          GroceryShoppingList(
             items: shopping,
             checkedItems: _checkedItems,
             onChecked: _toggleChecked,
@@ -434,11 +426,11 @@ class _GroceryMealPlannerState extends State<GroceryMealPlanner> {
               Text(
                 [
                   if (recipe.calories case final calories?)
-                    '${_cleanNumber(calories)} kcal',
+                    '${cleanNumber(calories)} kcal',
                   if (recipe.proteinGrams case final protein?)
-                    '${_cleanNumber(protein)} g protein',
+                    '${cleanNumber(protein)} g protein',
                   if (recipe.netCarbsGrams case final carbs?)
-                    '${_cleanNumber(carbs)} g net carbs',
+                    '${cleanNumber(carbs)} g net carbs',
                 ].join(' • '),
                 style: const TextStyle(color: _muted, fontSize: 12),
               ),
@@ -1066,7 +1058,7 @@ class _RecipeSelectionCard extends StatelessWidget {
                     ? '${formatPrice(price.perServing)} per serving'
                     : 'Incomplete • ${formatPrice(price.perServing)} known',
                 if (recipe.proteinGrams case final protein?)
-                  '${_cleanNumber(protein)} g protein',
+                  '${cleanNumber(protein)} g protein',
               ].join(' • '),
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -1220,190 +1212,4 @@ class _SelectedMeals extends StatelessWidget {
       ],
     );
   }
-}
-
-class _ShoppingList extends StatelessWidget {
-  const _ShoppingList({
-    required this.items,
-    required this.checkedItems,
-    required this.onChecked,
-    required this.onFindProduct,
-    required this.onOpenProduct,
-    required this.onSearchWebsite,
-    required this.onShare,
-    required this.prices,
-    required this.checkoutTotal,
-  });
-
-  final List<GroceryShoppingItem> items;
-  final Set<String> checkedItems;
-  final void Function(String id, bool checked) onChecked;
-  final ValueChanged<String> onFindProduct;
-  final ValueChanged<GroceryProduct> onOpenProduct;
-  final ValueChanged<String> onSearchWebsite;
-  final VoidCallback onShare;
-  final Map<String, GroceryIngredientPrice> prices;
-  final double checkoutTotal;
-
-  @override
-  Widget build(BuildContext context) {
-    final grouped = <String, List<GroceryShoppingItem>>{};
-    for (final item in items) {
-      grouped.putIfAbsent(item.category, () => []).add(item);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FilledButton.icon(
-          onPressed: onShare,
-          icon: const Icon(Icons.share_outlined),
-          label: const Text('Share shopping list'),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Estimated checkout total: ${formatPrice(checkoutTotal)}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: _green,
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final group in grouped.entries) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
-            child: Text(
-              group.key,
-              style: const TextStyle(
-                color: _blue,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          for (final item in group.value) ...[
-            _ShoppingItemCard(
-              item: item,
-              price: prices[item.id],
-              checked: checkedItems.contains(item.id),
-              onChecked: (value) => onChecked(item.id, value),
-              onFindProduct: () => onFindProduct(item.name),
-              onOpenProduct: onOpenProduct,
-              onSearchWebsite: () => onSearchWebsite(item.name),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
-      ],
-    );
-  }
-}
-
-class _ShoppingItemCard extends StatelessWidget {
-  const _ShoppingItemCard({
-    required this.item,
-    required this.price,
-    required this.checked,
-    required this.onChecked,
-    required this.onFindProduct,
-    required this.onOpenProduct,
-    required this.onSearchWebsite,
-  });
-
-  final GroceryShoppingItem item;
-  final GroceryIngredientPrice? price;
-  final bool checked;
-  final ValueChanged<bool> onChecked;
-  final VoidCallback onFindProduct;
-  final ValueChanged<GroceryProduct> onOpenProduct;
-  final VoidCallback onSearchWebsite;
-
-  @override
-  Widget build(BuildContext context) {
-    final product = price?.product;
-    final packageCount = price?.packageCount;
-    return Card(
-      child: Column(
-        children: [
-          CheckboxListTile(
-            value: checked,
-            onChanged: (value) => onChecked(value ?? false),
-            title: Text(
-              item.name,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                decoration: checked ? TextDecoration.lineThrough : null,
-              ),
-            ),
-            subtitle: Text(
-              '${formatShoppingAmount(item.amount, item.unit)}'
-              ' • ${formatOptionalPrice(price?.purchaseCost)}',
-            ),
-            activeColor: _green,
-          ),
-          if (product != null)
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.storefront_outlined),
-              title: Text(product.name),
-              subtitle: Text(
-                '${product.store.label} • ${product.size} • '
-                '${formatPrice(product.currentPrice)} each'
-                '${packageCount == null ? '' : ' • $packageCount package${packageCount == 1 ? '' : 's'}'}',
-              ),
-              trailing: FilledButton.tonalIcon(
-                onPressed: () => onOpenProduct(product),
-                icon: const Icon(Icons.open_in_new, size: 17),
-                label: const Text('View item'),
-              ),
-            )
-          else
-            OverflowBar(
-              alignment: MainAxisAlignment.end,
-              spacing: 8,
-              children: [
-                TextButton.icon(
-                  onPressed: onFindProduct,
-                  icon: const Icon(Icons.price_check_outlined),
-                  label: const Text('Find in app'),
-                ),
-                TextButton.icon(
-                  onPressed: onSearchWebsite,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Search store'),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-String formatShoppingAmount(double amount, String unit) {
-  if (unit == 'each') {
-    final rounded = amount.ceil();
-    return '$rounded ${rounded == 1 ? 'item' : 'items'}';
-  }
-  if (unit == 'g' && amount >= 1000) {
-    return '${_cleanNumber(amount / 1000)} kg';
-  }
-  if (unit == 'ml' && amount >= 1000) {
-    return '${_cleanNumber(amount / 1000)} L';
-  }
-  return '${_cleanNumber(amount)} $unit';
-}
-
-String formatPrice(double value) => '\$${value.toStringAsFixed(2)}';
-
-String formatOptionalPrice(double? value) {
-  return value == null ? 'Price unavailable' : formatPrice(value);
-}
-
-String _cleanNumber(double value) {
-  return value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toStringAsFixed(1);
 }
