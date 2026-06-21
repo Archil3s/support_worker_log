@@ -403,17 +403,62 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> trashPayeDriveFile(String fileId) async {
+  Future<void> deletePayeDriveFile(String fileId) async {
     final cleanedFileId = fileId.trim();
     if (cleanedFileId.isEmpty) return;
 
     final accessToken = await requireGoogleDriveAccessToken(
       scope: GoogleExportAccountScope.paye,
     );
-    await _googleDriveService.trashFile(
+    await _googleDriveService.deleteFile(
       accessToken: accessToken,
       fileId: cleanedFileId,
     );
+  }
+
+  Future<String?> deletePayeDriveNoteForEntry(WorkEntry entry) async {
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.paye,
+    )) {
+      return null;
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
+    if (notesFolderId == null || notesFolderId.isEmpty) return null;
+
+    final savedMeta = await _googleDriveService.loadSupportNoteMeta(entry.id);
+    final accountEmail = payeGoogleAccountEmail?.trim().toLowerCase();
+    final savedAccountEmail = savedMeta?.googleAccountEmail
+        ?.trim()
+        .toLowerCase();
+    final metaMatchesAccount =
+        savedMeta != null &&
+        (accountEmail == null ||
+            accountEmail.isEmpty ||
+            savedAccountEmail == null ||
+            savedAccountEmail.isEmpty ||
+            savedAccountEmail == accountEmail);
+    final driveMeta = metaMatchesAccount
+        ? savedMeta
+        : await _googleDriveService.findPayeNoteInDrive(
+            accessToken: accessToken,
+            notesFolderId: notesFolderId,
+            entry: entry,
+            googleAccountEmail: payeGoogleAccountEmail,
+          );
+    final fileId = driveMeta?.fileId.trim();
+    if (fileId == null || fileId.isEmpty) return null;
+
+    await _googleDriveService.deleteFile(
+      accessToken: accessToken,
+      fileId: fileId,
+    );
+    await _googleDriveService.removeSupportNoteMeta(entry.id);
+
+    return driveMeta!.fileName;
   }
 
   Future<EntryDriveSupportNoteMeta?> findEntryNoteInCurrentDrive(
