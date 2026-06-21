@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 
@@ -51,6 +52,21 @@ class AppState extends ChangeNotifier {
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
   final Map<String, double> _invoiceBaselineTotals = {};
 
+  late final List<String> _clientsView = UnmodifiableListView(_clients);
+  late final List<WorkEntry> _workEntriesView = UnmodifiableListView(_entries);
+  late final List<WorkEntry> _payeEntriesView = UnmodifiableListView(
+    _payeEntries,
+  );
+  late final List<GeneralActionItem> _generalActionsView = UnmodifiableListView(
+    _generalActions,
+  );
+  late final List<PersonalLogEntry> _personalLogEntriesView =
+      UnmodifiableListView(_personalLogEntries);
+  late final Map<String, InvoiceStatus> _invoiceStatusesView =
+      UnmodifiableMapView(_invoiceStatuses);
+  late final Map<String, double> _invoiceBaselineTotalsView =
+      UnmodifiableMapView(_invoiceBaselineTotals);
+
   StreamSubscription<StoredAppData?>? _cloudDataSubscription;
   String? _cloudDataSubscriptionUserId;
   Timer? _driveInvoiceSyncDebounce;
@@ -66,20 +82,16 @@ class AppState extends ChangeNotifier {
   AppSettings get settings => _settings;
   AppMode get appMode => _appMode;
   ActiveVisit? get activeVisit => _activeVisit;
-  List<String> get clients => List.unmodifiable(_clients);
+  List<String> get clients => _clientsView;
   bool get isPayeMode => _appMode == AppMode.paye;
-  List<WorkEntry> get workEntries => List.unmodifiable(_entries);
+  List<WorkEntry> get workEntries => _workEntriesView;
   List<WorkEntry> get entries =>
-      List.unmodifiable(isPayeMode ? _payeEntries : _entries);
-  List<WorkEntry> get payeEntries => List.unmodifiable(_payeEntries);
-  List<GeneralActionItem> get generalActions =>
-      List.unmodifiable(_generalActions);
-  List<PersonalLogEntry> get personalLogEntries =>
-      List.unmodifiable(_personalLogEntries);
-  Map<String, InvoiceStatus> get invoiceStatuses =>
-      Map.unmodifiable(_invoiceStatuses);
-  Map<String, double> get invoiceBaselineTotals =>
-      Map.unmodifiable(_invoiceBaselineTotals);
+      isPayeMode ? _payeEntriesView : _workEntriesView;
+  List<WorkEntry> get payeEntries => _payeEntriesView;
+  List<GeneralActionItem> get generalActions => _generalActionsView;
+  List<PersonalLogEntry> get personalLogEntries => _personalLogEntriesView;
+  Map<String, InvoiceStatus> get invoiceStatuses => _invoiceStatusesView;
+  Map<String, double> get invoiceBaselineTotals => _invoiceBaselineTotalsView;
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get appUnlocked => _appUnlocked;

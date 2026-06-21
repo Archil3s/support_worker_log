@@ -27,6 +27,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
   final _searchController = TextEditingController();
   _GroceryView _view = _GroceryView.prices;
   Timer? _refreshTimer;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
       ..removeListener(_refresh)
       ..dispose();
     _refreshTimer?.cancel();
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -109,6 +111,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
               child: _SearchPanel(
                 controller: _searchController,
                 groceryController: _controller,
+                onQueryChanged: _scheduleSearch,
                 onSearch: () => _controller.search(_searchController.text),
               ),
             ),
@@ -169,9 +172,18 @@ class _GroceryScreenState extends State<GroceryScreen> {
   }
 
   void _findProduct(String productName) {
+    _searchDebounce?.cancel();
     _searchController.text = productName;
     _controller.search(productName);
     setState(() => _view = _GroceryView.prices);
+  }
+
+  void _scheduleSearch(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 180),
+      () => _controller.search(value),
+    );
   }
 
   Future<void> _showHistory(GroceryProduct product) {
@@ -192,11 +204,13 @@ class _SearchPanel extends StatelessWidget {
   const _SearchPanel({
     required this.controller,
     required this.groceryController,
+    required this.onQueryChanged,
     required this.onSearch,
   });
 
   final TextEditingController controller;
   final GroceryController groceryController;
+  final ValueChanged<String> onQueryChanged;
   final VoidCallback onSearch;
 
   @override
@@ -230,7 +244,7 @@ class _SearchPanel extends StatelessWidget {
             key: const ValueKey('grocery-search-field'),
             controller: controller,
             textInputAction: TextInputAction.search,
-            onChanged: groceryController.search,
+            onChanged: onQueryChanged,
             onSubmitted: (_) => onSearch(),
             decoration: InputDecoration(
               labelText: 'Filter compatible products',

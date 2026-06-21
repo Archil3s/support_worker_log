@@ -197,7 +197,7 @@ class _MainShellState extends State<MainShell> {
     return sections.indexOf(_Section.more);
   }
 
-  Widget _screen() {
+  Widget _screen(AppMode appMode) {
     switch (section) {
       case _Section.quick:
         return QuickEntryScreen(onCalendar: () => _go(_Section.calendar));
@@ -220,9 +220,7 @@ class _MainShellState extends State<MainShell> {
         return DashboardScreen(
           onQuickEntry: () => _go(_Section.quick),
           onPayPeriod: () {
-            if (context.read<AppState>().appMode != AppMode.paye) {
-              _go(_Section.pay);
-            }
+            if (appMode != AppMode.paye) _go(_Section.pay);
           },
           onEntries: () => _go(_Section.entries),
           onAdminReview: () => _go(_Section.admin),
@@ -241,7 +239,7 @@ class _MainShellState extends State<MainShell> {
           onCharts: () => _go(_Section.charts),
           onDrive: () => _go(_Section.drive),
           onSettings: () => _go(_Section.settings),
-          showMoneyTools: context.watch<AppState>().appMode != AppMode.paye,
+          showMoneyTools: appMode != AppMode.paye,
         );
       case _Section.tax:
         return const TaxScreen();
@@ -254,8 +252,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.watch<AppState>();
-    final appMode = appState.appMode;
+    final appMode = context.select<AppState, AppMode>((state) => state.appMode);
+    final appState = context.read<AppState>();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -415,7 +413,7 @@ class _MainShellState extends State<MainShell> {
                                       key: ValueKey(appMode),
                                       mode: appMode,
                                     )
-                                  : _screen(),
+                                  : _screen(appMode),
                             ),
                           ),
                         ],

@@ -10,6 +10,8 @@ class GroceryController extends ChangeNotifier {
   final GroceryPriceApi _api;
 
   List<GroceryProduct> _catalogue = const [];
+  List<GroceryProduct>? _productsCache;
+  List<String>? _categoriesCache;
   GroceryStore _store = GroceryStore.any;
   GrocerySort _sort = GrocerySort.proteinValue;
   GroceryDiet _diet = GroceryDiet.allCompatible;
@@ -33,6 +35,8 @@ class GroceryController extends ChangeNotifier {
   );
 
   List<GroceryProduct> get products {
+    final cached = _productsCache;
+    if (cached != null) return cached;
     final filtered = [
       for (final product in _catalogue)
         if (product.isCompatibleWith(_diet) &&
@@ -48,7 +52,7 @@ class GroceryController extends ChangeNotifier {
           product,
     ];
     filtered.sort(_compareProducts);
-    return filtered;
+    return _productsCache = filtered;
   }
 
   GroceryStore get store => _store;
@@ -71,6 +75,8 @@ class GroceryController extends ChangeNotifier {
   List<GroceryProduct> get catalogue => _catalogue;
 
   List<String> get categories {
+    final cached = _categoriesCache;
+    if (cached != null) return cached;
     final values = {
       for (final product in _catalogue)
         if (product.isCompatibleWith(_diet) &&
@@ -78,7 +84,7 @@ class GroceryController extends ChangeNotifier {
             product.category.trim().isNotEmpty)
           product.category,
     }.toList()..sort();
-    return values;
+    return _categoriesCache = values;
   }
 
   Future<void> initialise() async {
@@ -100,6 +106,7 @@ class GroceryController extends ChangeNotifier {
     try {
       final catalogue = await _api.load();
       _catalogue = catalogue.products;
+      _invalidateProductViews();
       _catalogueRevision++;
       _lastUpdated = catalogue.updatedAt;
       _location = catalogue.location;
@@ -128,7 +135,10 @@ class GroceryController extends ChangeNotifier {
   }
 
   void search(String value) {
-    _query = value.trim().toLowerCase();
+    final query = value.trim().toLowerCase();
+    if (_query == query) return;
+    _query = query;
+    _productsCache = null;
     notifyListeners();
   }
 
@@ -136,12 +146,14 @@ class GroceryController extends ChangeNotifier {
     if (_store == value) return;
     _store = value;
     _category = null;
+    _invalidateProductViews();
     notifyListeners();
   }
 
   Future<void> setCurrentOnly(bool value) async {
     if (_currentOnly == value) return;
     _currentOnly = value;
+    _productsCache = null;
     notifyListeners();
   }
 
@@ -172,31 +184,41 @@ class GroceryController extends ChangeNotifier {
     if (value == GroceryDiet.keto) {
       _sort = GrocerySort.proteinValue;
     }
+    _invalidateProductViews();
     notifyListeners();
   }
 
   void setSort(GrocerySort value) {
     if (_sort == value) return;
     _sort = value;
+    _productsCache = null;
     notifyListeners();
   }
 
   void setCategory(String? value) {
     if (_category == value) return;
     _category = value;
+    _productsCache = null;
     notifyListeners();
   }
 
   void setMinimumProteinPer100Grams(double? value) {
     if (_minimumProteinPer100Grams == value) return;
     _minimumProteinPer100Grams = value;
+    _productsCache = null;
     notifyListeners();
   }
 
   void setMaximumPricePerKilogram(double? value) {
     if (_maximumPricePerKilogram == value) return;
     _maximumPricePerKilogram = value;
+    _productsCache = null;
     notifyListeners();
+  }
+
+  void _invalidateProductViews() {
+    _productsCache = null;
+    _categoriesCache = null;
   }
 
   bool _matchesQuery(GroceryProduct product) {
