@@ -207,13 +207,13 @@ class GoogleDriveApiPlatform {
     return _fileFromResponse(response, 'Google Drive file move failed');
   }
 
-  Future<void> trashFile({
+  Future<void> deleteFile({
     required String accessToken,
     required String fileId,
   }) async {
     if (_useDesktopProxy) {
       await _proxyJson(
-        '/__google_drive/trash_file',
+        '/__google_drive/delete_file',
         {'accessToken': accessToken, 'fileId': fileId},
         failureMessage: 'Google Drive file removal failed',
       );
@@ -222,12 +222,8 @@ class GoogleDriveApiPlatform {
 
     await _request(
       _driveFileUri(fileId).toString(),
-      method: 'PATCH',
-      requestHeaders: {
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      sendData: jsonEncode({'trashed': true}),
+      method: 'DELETE',
+      requestHeaders: {'Authorization': 'Bearer $accessToken'},
       failureMessage: 'Google Drive file removal failed',
     );
   }

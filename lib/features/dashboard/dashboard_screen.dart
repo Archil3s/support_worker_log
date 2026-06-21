@@ -185,9 +185,40 @@ class _LastEntryCard extends StatelessWidget {
 
     if (!confirmed) return;
 
+    String? deletedDriveFileName;
+    if (appState.isPayeMode) {
+      try {
+        deletedDriveFileName = await appState.deletePayeDriveNoteForEntry(
+          entry,
+        );
+      } catch (error) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Entry not deleted. Could not permanently delete PAYE Google Doc: $error',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     final removed = appState.deleteEntry(entry);
 
     if (removed == null) return;
+
+    if (appState.isPayeMode) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            deletedDriveFileName == null
+                ? 'PAYE entry deleted'
+                : 'PAYE entry deleted and Google Doc permanently deleted',
+          ),
+        ),
+      );
+      return;
+    }
 
     messenger.showSnackBar(
       SnackBar(
@@ -238,14 +269,18 @@ class _LastEntryCard extends StatelessWidget {
 }
 
 Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
+  final payeMode = context.read<AppState>().isPayeMode;
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
             title: const Text('Delete this note?'),
             content: Text(
-              'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
-              'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
+              payeMode
+                  ? 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+                        'Any matching PAYE Google Doc under this Google account will be permanently deleted, not moved to bin.'
+                  : 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+                        'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
             ),
             actions: [
               TextButton(

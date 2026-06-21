@@ -451,7 +451,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             'Temporary Google Doc opened. It will be removed from Drive in '
             '45 seconds.';
       });
-      unawaited(_trashTemporaryGoogleDoc(appState, file));
+      unawaited(_deleteTemporaryGoogleDoc(appState, file));
       await _launchDriveLink(Uri.parse(link));
     } catch (error) {
       if (!mounted) return;
@@ -468,25 +468,25 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
   }
 
-  Future<void> _trashTemporaryGoogleDoc(
+  Future<void> _deleteTemporaryGoogleDoc(
     AppState appState,
     GoogleDriveFile file,
   ) async {
     await Future<void>.delayed(const Duration(seconds: 45));
 
     try {
-      await appState.trashPayeDriveFile(file.id);
+      await appState.deletePayeDriveFile(file.id);
       if (!mounted) return;
 
       setState(() {
-        message = 'Temporary Google Docs test file removed from Drive.';
+        message = 'Temporary Google Docs test file permanently deleted.';
       });
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
         message =
-            'Temporary Google Doc opened, but could not be removed: $error';
+            'Temporary Google Doc opened, but could not be deleted: $error';
       });
     }
   }

@@ -249,6 +249,11 @@ function googleDriveJsonRequest({ accessToken, method, path: requestPath, body }
             return;
           }
 
+          if (!responseBody.trim()) {
+            resolve({});
+            return;
+          }
+
           try {
             resolve(JSON.parse(responseBody));
           } catch (error) {
@@ -570,7 +575,7 @@ async function moveGoogleDriveFile(req, res) {
   }
 }
 
-async function trashGoogleDriveFile(req, res) {
+async function deleteGoogleDriveFile(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
     return;
@@ -590,14 +595,13 @@ async function trashGoogleDriveFile(req, res) {
       return;
     }
 
-    const trashed = await googleDriveJsonRequest({
+    await googleDriveJsonRequest({
       accessToken: String(payload.accessToken || ''),
-      method: 'PATCH',
-      path: `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,webViewLink`,
-      body: { trashed: true },
+      method: 'DELETE',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}`,
     });
 
-    send(res, 200, JSON.stringify(trashed), 'application/json; charset=utf-8');
+    send(res, 200, JSON.stringify({ deleted: true }), 'application/json; charset=utf-8');
   } catch (error) {
     send(
       res,
@@ -749,8 +753,8 @@ function handleRequest(req, res) {
     return;
   }
 
-  if ((req.url || '').split('?')[0] === '/__google_drive/trash_file') {
-    trashGoogleDriveFile(req, res);
+  if ((req.url || '').split('?')[0] === '/__google_drive/delete_file') {
+    deleteGoogleDriveFile(req, res);
     return;
   }
 

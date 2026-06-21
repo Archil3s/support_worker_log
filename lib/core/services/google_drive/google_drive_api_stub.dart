@@ -92,15 +92,14 @@ class GoogleDriveApiPlatform {
     return _fileFromJson(decoded, 'Google Drive file move failed');
   }
 
-  Future<void> trashFile({
+  Future<void> deleteFile({
     required String accessToken,
     required String fileId,
   }) async {
     await _jsonRequest(
       _driveFileUri(fileId),
-      method: 'PATCH',
+      method: 'DELETE',
       accessToken: accessToken,
-      body: {'trashed': true},
       failureMessage: 'Google Drive file removal failed',
     );
   }
@@ -264,6 +263,8 @@ class GoogleDriveApiPlatform {
         _googleApiError(raw) ?? '$failureMessage with HTTP $status.',
       );
     }
+
+    if (raw.trim().isEmpty) return const <String, dynamic>{};
 
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic>) {

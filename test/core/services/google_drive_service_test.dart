@@ -598,13 +598,13 @@ void main() {
     expect(documentText, isNot(contains('Invoice')));
   });
 
-  test('trashFile sends file removal through Drive API', () async {
+  test('deleteFile sends permanent file removal through Drive API', () async {
     final api = _FakeGoogleDriveApi(children: const []);
     final service = GoogleDriveService(api: api);
 
-    await service.trashFile(accessToken: 'token', fileId: 'temporary-doc');
+    await service.deleteFile(accessToken: 'token', fileId: 'temporary-doc');
 
-    expect(api.trashedFileIds, ['temporary-doc']);
+    expect(api.deletedFileIds, ['temporary-doc']);
   });
 }
 
@@ -624,7 +624,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
-  final trashedFileIds = <String>[];
+  final deletedFileIds = <String>[];
 
   @override
   Future<GoogleDriveFile> createFolder({
@@ -700,11 +700,11 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   }
 
   @override
-  Future<void> trashFile({
+  Future<void> deleteFile({
     required String accessToken,
     required String fileId,
   }) async {
-    trashedFileIds.add(fileId);
+    deletedFileIds.add(fileId);
   }
 }
 

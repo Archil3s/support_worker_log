@@ -244,6 +244,11 @@ class GoogleDriveService {
     );
   }
 
+  Future<void> removeSupportNoteMeta(String entryId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_supportNoteMetaKey(entryId));
+  }
+
   Future<GoogleDriveFile> findOrCreateSupportNoteFolder({
     required String accessToken,
     required String clientNotesFolderId,
@@ -437,11 +442,11 @@ class GoogleDriveService {
     );
   }
 
-  Future<void> trashFile({
+  Future<void> deleteFile({
     required String accessToken,
     required String fileId,
   }) {
-    return _api.trashFile(accessToken: accessToken, fileId: fileId);
+    return _api.deleteFile(accessToken: accessToken, fileId: fileId);
   }
 
   Future<EntryDriveSupportNoteMeta?> findSupportNoteInDrive({
