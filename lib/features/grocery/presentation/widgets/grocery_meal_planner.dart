@@ -747,8 +747,8 @@ class _PlannerControls extends StatelessWidget {
               if (onShuffle != null)
                 FilledButton.icon(
                   onPressed: onShuffle,
-                  icon: const Icon(Icons.shuffle),
-                  label: const Text('Shuffle menu'),
+                  icon: const Icon(Icons.fitness_center),
+                  label: const Text('Max protein under \$80'),
                 ),
             ],
           ),

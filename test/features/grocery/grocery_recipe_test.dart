@@ -287,6 +287,7 @@ void main() {
 
     expect(suggested.days.expand((day) => day.recipeIds), contains('cookbook'));
     expect(price.checkoutTotal, lessThanOrEqualTo(80));
+    expect(suggested.note, contains('Protein-optimised'));
   });
 
   test('individual meal swap uses a priced same-section keto recipe', () {

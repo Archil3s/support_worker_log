@@ -27,7 +27,7 @@ class SuggestBudgetKetoPlan {
     final candidatesToPrice = [
       ...allCandidates.skip(candidateOffset),
       ...allCandidates.take(candidateOffset),
-    ].take(24);
+    ].take(48);
     final pricedCandidates = candidatesToPrice
         .map(
           (recipe) => (
@@ -63,7 +63,7 @@ class SuggestBudgetKetoPlan {
     var accepted = 0;
 
     for (final recipe in rotated) {
-      if (accepted == 6) break;
+      if (accepted == 21) break;
       final slot = _slotFor(recipe.section, variation + accepted);
       final replacement = _replace(suggested, slot, recipe.id);
       final replacementPrice = pricer.priceWeek(
@@ -92,8 +92,8 @@ class SuggestBudgetKetoPlan {
       budgetNzd: budget,
       profile: basePlan.profile,
       note: accepted == 0
-          ? 'Alternative budget menu using the lowest-cost available meals.'
-          : 'Alternative $variation uses $accepted keto cookbook meals and '
+          ? 'Protein budget menu using the lowest-cost available meals.'
+          : 'Protein-optimised menu uses $accepted keto cookbook meals and '
                 'current Blenheim catalogue prices.',
     );
   }
