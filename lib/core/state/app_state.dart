@@ -428,18 +428,18 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<String?> deletePayeDriveNoteForEntry(WorkEntry entry) async {
+  Future<List<String>> deletePayeDriveNoteForEntry(WorkEntry entry) async {
     if (!_googleExportAccountService.isConnected(
       GoogleExportAccountScope.paye,
     )) {
-      return null;
+      return const [];
     }
 
     final accessToken = await requireGoogleDriveAccessToken(
       scope: GoogleExportAccountScope.paye,
     );
     final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
-    if (notesFolderId == null || notesFolderId.isEmpty) return null;
+    if (notesFolderId == null || notesFolderId.isEmpty) return const [];
 
     final savedMeta = await _googleDriveService.loadSupportNoteMeta(entry.id);
     final accountEmail = payeGoogleAccountEmail?.trim().toLowerCase();
@@ -453,24 +453,34 @@ class AppState extends ChangeNotifier {
             savedAccountEmail == null ||
             savedAccountEmail.isEmpty ||
             savedAccountEmail == accountEmail);
-    final driveMeta = metaMatchesAccount
-        ? savedMeta
-        : await _googleDriveService.findPayeNoteInDrive(
-            accessToken: accessToken,
-            notesFolderId: notesFolderId,
-            entry: entry,
-            googleAccountEmail: payeGoogleAccountEmail,
-          );
-    final fileId = driveMeta?.fileId.trim();
-    if (fileId == null || fileId.isEmpty) return null;
-
-    await _googleDriveService.deleteFile(
+    final driveMatches = await _googleDriveService.findPayeNotesInDrive(
       accessToken: accessToken,
-      fileId: fileId,
+      notesFolderId: notesFolderId,
+      entry: entry,
+      googleAccountEmail: payeGoogleAccountEmail,
     );
+    final metasByFileId = <String, EntryDriveSupportNoteMeta>{};
+    for (final meta in driveMatches) {
+      final fileId = meta.fileId.trim();
+      if (fileId.isNotEmpty) metasByFileId[fileId] = meta;
+    }
+    if (metaMatchesAccount) {
+      final fileId = savedMeta.fileId.trim();
+      if (fileId.isNotEmpty) metasByFileId[fileId] = savedMeta;
+    }
+    if (metasByFileId.isEmpty) return const [];
+
+    final deletedFileNames = <String>[];
+    for (final meta in metasByFileId.values) {
+      await _googleDriveService.deleteFile(
+        accessToken: accessToken,
+        fileId: meta.fileId,
+      );
+      deletedFileNames.add(meta.fileName);
+    }
     await _googleDriveService.removeSupportNoteMeta(entry.id);
 
-    return driveMeta!.fileName;
+    return deletedFileNames;
   }
 
   Future<EntryDriveSupportNoteMeta?> findEntryNoteInCurrentDrive(

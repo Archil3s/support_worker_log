@@ -841,12 +841,12 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     if (!confirmed || !mounted) return;
 
-    String? deletedDriveFileName;
+    var deletedDriveFileCount = 0;
     if (appState.isPayeMode) {
       try {
-        deletedDriveFileName = await appState.deletePayeDriveNoteForEntry(
+        deletedDriveFileCount = (await appState.deletePayeDriveNoteForEntry(
           entry,
-        );
+        )).length;
       } catch (error) {
         messenger.showSnackBar(
           SnackBar(
@@ -871,9 +871,9 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            deletedDriveFileName == null
+            deletedDriveFileCount == 0
                 ? 'PAYE entry deleted'
-                : 'PAYE entry deleted and Google Doc permanently deleted',
+                : 'PAYE entry deleted and $deletedDriveFileCount Google Drive/Docs file(s) permanently deleted',
           ),
         ),
       );
