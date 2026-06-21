@@ -484,7 +484,7 @@ Safety concerns
 
     final paragraphs = <String>[
       _personalParagraph('Mood Voice Notes', style: 'Title'),
-      _personalParagraph('Grouped by month', style: 'Subtitle'),
+      _personalParagraph('One living Google Doc', style: 'Subtitle'),
       if (sortedEntries.isEmpty)
         _personalParagraph('No voice notes saved yet.'),
       for (final monthKey in monthKeys) ...[
@@ -492,7 +492,7 @@ Safety concerns
         for (final entry in entriesByMonth[monthKey]!) ...[
           _personalParagraph(
             '${formatDate(entry.date)} ${_timeLabel(entry.date)}',
-            bold: true,
+            style: 'Heading2',
           ),
           _personalParagraph(_blankIfEmpty(entry.notes)),
           _personalSpacer,
@@ -638,6 +638,8 @@ Safety concerns
         '<w:pPr><w:pStyle w:val="Subtitle"/><w:spacing w:after="220"/></w:pPr>',
       'Heading1' =>
         '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="160" w:after="80"/></w:pPr>',
+      'Heading2' =>
+        '<w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="120" w:after="70"/></w:pPr>',
       _ => '<w:pPr><w:spacing w:after="80"/></w:pPr>',
     };
 

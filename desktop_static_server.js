@@ -570,6 +570,43 @@ async function moveGoogleDriveFile(req, res) {
   }
 }
 
+async function trashGoogleDriveFile(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+
+    if (!fileId) {
+      send(res, 400, 'Missing Drive file id.');
+      return;
+    }
+
+    const trashed = await googleDriveJsonRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'PATCH',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,webViewLink`,
+      body: { trashed: true },
+    });
+
+    send(res, 200, JSON.stringify(trashed), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Drive file removal failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -709,6 +746,11 @@ function handleRequest(req, res) {
 
   if ((req.url || '').split('?')[0] === '/__google_drive/move_file') {
     moveGoogleDriveFile(req, res);
+    return;
+  }
+
+  if ((req.url || '').split('?')[0] === '/__google_drive/trash_file') {
+    trashGoogleDriveFile(req, res);
     return;
   }
 

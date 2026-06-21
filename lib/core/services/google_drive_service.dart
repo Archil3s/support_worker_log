@@ -210,6 +210,8 @@ class GoogleDriveService {
     : _api = api ?? GoogleDriveApiPlatform();
 
   final GoogleDriveApiPlatform _api;
+  static const String _googleDocsMimeType =
+      'application/vnd.google-apps.document';
   static const String _docxMimeType =
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   static String _supportNoteMetaKey(String entryId) {
@@ -378,9 +380,10 @@ class GoogleDriveService {
       await uploadOrUpdateFile(
         accessToken: accessToken,
         parentId: healthFolder.id,
-        name: 'Mood Voice Notes.docx',
-        mimeType: _docxMimeType,
+        name: 'Mood Voice Notes',
+        mimeType: _googleDocsMimeType,
         bytes: bytes,
+        contentMimeType: _docxMimeType,
       );
     }
 
@@ -408,6 +411,7 @@ class GoogleDriveService {
     required String accessToken,
     required String notesFolderId,
     required WorkEntry entry,
+    bool temporary = false,
   }) async {
     final personFolder = await findOrCreateFolder(
       accessToken: accessToken,
@@ -424,10 +428,20 @@ class GoogleDriveService {
     return uploadOrUpdateFile(
       accessToken: accessToken,
       parentId: yearFolder.id,
-      name: _payeNoteFileName(entry),
-      mimeType: _docxMimeType,
+      name: temporary
+          ? _temporaryPayeNoteGoogleDocName(entry)
+          : _payeNoteGoogleDocName(entry),
+      mimeType: _googleDocsMimeType,
       bytes: bytes,
+      contentMimeType: _docxMimeType,
     );
+  }
+
+  Future<void> trashFile({
+    required String accessToken,
+    required String fileId,
+  }) {
+    return _api.trashFile(accessToken: accessToken, fileId: fileId);
   }
 
   Future<EntryDriveSupportNoteMeta?> findSupportNoteInDrive({
@@ -501,12 +515,20 @@ class GoogleDriveService {
     );
     if (yearFolder == null) return null;
 
-    final file = await _findChild(
+    final googleDoc = await _findChild(
       accessToken: accessToken,
       parentId: yearFolder.id,
-      name: _payeNoteFileName(entry),
-      mimeType: _docxMimeType,
+      name: _payeNoteGoogleDocName(entry),
+      mimeType: _googleDocsMimeType,
     );
+    final file =
+        googleDoc ??
+        await _findChild(
+          accessToken: accessToken,
+          parentId: yearFolder.id,
+          name: _payeNoteFileName(entry),
+          mimeType: _docxMimeType,
+        );
     if (file == null) return null;
 
     return EntryDriveSupportNoteMeta(
@@ -979,6 +1001,18 @@ class GoogleDriveService {
   String _payeNoteFileName(WorkEntry entry) {
     final person = _folderName(entry.client).replaceAll(' ', '_');
     return '${_dateKey(entry.date)}_$person.docx';
+  }
+
+  String _payeNoteGoogleDocName(WorkEntry entry) {
+    final fileName = _payeNoteFileName(entry);
+    return fileName.endsWith('.docx')
+        ? fileName.substring(0, fileName.length - 5)
+        : fileName;
+  }
+
+  String _temporaryPayeNoteGoogleDocName(WorkEntry entry) {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    return 'TEST_${_payeNoteGoogleDocName(entry)}_$stamp';
   }
 
   String _initialsFromSupportNoteFileName(String fileName, DateTime date) {

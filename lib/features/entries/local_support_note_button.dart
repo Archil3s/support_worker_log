@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/google_export_account_scope.dart';
+import '../../core/models/google_drive_file.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
@@ -109,14 +110,28 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   Future<void> _load() async {
     final appState = context.read<AppState>();
-    final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
-    final savedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
-    final loadedDrive =
-        _driveMetaForAccount(
-          savedDrive,
-          _currentGoogleAccountEmail(appState),
-        ) ??
-        await appState.findEntryNoteInCurrentDrive(widget.entry);
+    EntrySupportNoteMeta? loaded;
+    EntryDriveSupportNoteMeta? loadedDrive;
+
+    try {
+      loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    } catch (_) {
+      loaded = null;
+    }
+
+    try {
+      final savedDrive = await driveService.loadSupportNoteMeta(
+        widget.entry.id,
+      );
+      loadedDrive =
+          _driveMetaForAccount(
+            savedDrive,
+            _currentGoogleAccountEmail(appState),
+          ) ??
+          await appState.findEntryNoteInCurrentDrive(widget.entry);
+    } catch (_) {
+      loadedDrive = null;
+    }
 
     if (!mounted) return;
 
@@ -188,11 +203,17 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   Future<void> _save() async {
     setState(() {
       busy = true;
-      message = 'Saving local note...';
+      message = 'Saving note in the app...';
     });
 
     try {
       final appState = context.read<AppState>();
+      final payeMode = appState.isPayeMode;
+      if (payeMode && status != EntrySupportNoteStatus.submitted) {
+        status = EntrySupportNoteStatus.finished;
+      }
+      await _saveDraftOnly('Note saved in the app.', showMessage: false);
+
       final updated = appState.isPayeMode
           ? await LocalSupportNoteService.savePayeNote(
               entry: widget.entry,
@@ -211,13 +232,15 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
       setState(() {
         meta = updated;
-        message = 'Saved locally as ${updated.fileName}';
+        message = payeMode
+            ? 'PAYE note saved in the app and as ${updated.fileName}'
+            : 'Saved locally as ${updated.fileName}';
       });
     } catch (error) {
       if (!mounted) return;
 
       await _saveDraftOnly(
-        'Could not create the local DOCX: $error\nDraft saved in the app.',
+        'Note saved in the app. Optional local DOCX was not created: $error',
       );
     } finally {
       if (mounted) {
@@ -245,6 +268,15 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       meta = updated;
       if (showMessage) message = nextMessage;
     });
+    _updatePayeEntry(context.read<AppState>());
+  }
+
+  void _updatePayeEntry(AppState appState) {
+    if (!appState.isPayeMode) return;
+
+    appState.updatePayeEntry(
+      widget.entry.copyWith(supportNoteBreakdown: noteController.text.trim()),
+    );
   }
 
   void _scheduleDraftAutosave() {
@@ -308,15 +340,17 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   Future<void> _saveGoogleDriveNote() async {
     setState(() {
       busy = true;
-      message = 'Saving Google Drive note file...';
+      message = 'Saving note in the app before Google Drive...';
     });
 
     try {
       final appState = context.read<AppState>();
+      await _saveDraftOnly('Note saved in the app.', showMessage: false);
       if (appState.isPayeMode) {
         final updatedEntry = widget.entry.copyWith(
           supportNoteBreakdown: noteController.text,
         );
+        appState.updatePayeEntry(updatedEntry);
         final file = await appState.savePayeNoteToDrive(updatedEntry);
         final discovered = await appState.findEntryNoteInCurrentDrive(
           updatedEntry,
@@ -351,7 +385,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
         setState(() {
           driveMeta = updated;
-          message = 'Saved to Google Drive as ${updated.fileName}';
+          message = 'Saved to Google Docs as ${updated.fileName}';
         });
         return;
       }
@@ -390,6 +424,70 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           busy = false;
         });
       }
+    }
+  }
+
+  Future<void> _testGoogleDocsSave() async {
+    setState(() {
+      busy = true;
+      message = 'Creating temporary Google Doc test...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      await _saveDraftOnly('Note saved in the app.', showMessage: false);
+      final updatedEntry = widget.entry.copyWith(
+        supportNoteBreakdown: noteController.text,
+      );
+      appState.updatePayeEntry(updatedEntry);
+
+      final file = await appState.saveTemporaryPayeNoteToDrive(updatedEntry);
+      final link = _googleDocsLink(file);
+
+      if (!mounted) return;
+
+      setState(() {
+        message =
+            'Temporary Google Doc opened. It will be removed from Drive in '
+            '45 seconds.';
+      });
+      unawaited(_trashTemporaryGoogleDoc(appState, file));
+      await _launchDriveLink(Uri.parse(link));
+    } catch (error) {
+      if (!mounted) return;
+
+      await _saveDraftOnly(
+        'Google Docs test failed: $error\nNote draft is still saved in the app.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _trashTemporaryGoogleDoc(
+    AppState appState,
+    GoogleDriveFile file,
+  ) async {
+    await Future<void>.delayed(const Duration(seconds: 45));
+
+    try {
+      await appState.trashPayeDriveFile(file.id);
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Temporary Google Docs test file removed from Drive.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message =
+            'Temporary Google Doc opened, but could not be removed: $error';
+      });
     }
   }
 
@@ -556,6 +654,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
+    final payeMode = context.watch<AppState>().isPayeMode;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -653,7 +752,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: SelectableText(
-                  'Google Drive DOCX note:\n${driveMeta!.fileName}',
+                  payeMode
+                      ? 'Google Docs note:\n${driveMeta!.fileName}'
+                      : 'Google Drive DOCX note:\n${driveMeta!.fileName}',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -676,11 +777,21 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             onPressed: busy ? null : _save,
             icon: const Icon(Icons.save_outlined),
             label: Text(
-              meta == null
+              payeMode
+                  ? 'Save PAYE Note'
+                  : meta == null
                   ? 'Create Local Note File'
                   : 'Update / Rename Local Note File',
             ),
           ),
+          if (payeMode) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'This always saves the PAYE note in the app. Local DOCX and '
+              'Google Drive are optional copies.',
+              style: TextStyle(color: Color(0xFF8396C7), fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: busy ? null : _openFile,
@@ -688,12 +799,24 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             label: const Text('Open Attached Local File'),
           ),
           const SizedBox(height: 8),
+          if (payeMode) ...[
+            OutlinedButton.icon(
+              onPressed: busy ? null : _testGoogleDocsSave,
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Test Google Docs Save & Remove'),
+            ),
+            const SizedBox(height: 8),
+          ],
           OutlinedButton.icon(
             onPressed: busy ? null : _saveGoogleDriveNote,
             icon: const Icon(Icons.cloud_upload_outlined),
             label: Text(
               driveMeta == null
-                  ? 'Create Google Drive DOCX Note'
+                  ? payeMode
+                        ? 'Save Google Docs Note'
+                        : 'Create Google Drive DOCX Note'
+                  : payeMode
+                  ? 'Update Google Docs Note'
                   : 'Update Google Drive DOCX Note',
             ),
           ),
@@ -707,7 +830,11 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           OutlinedButton.icon(
             onPressed: busy ? null : _openGoogleDriveNote,
             icon: const Icon(Icons.open_in_new_outlined),
-            label: const Text('Open Google Drive DOCX Note'),
+            label: Text(
+              payeMode
+                  ? 'Open Google Docs Note'
+                  : 'Open Google Drive DOCX Note',
+            ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -721,7 +848,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Local notes stay attached to this entry card. Drive DOCX notes save under Client Notes.',
+            'Local notes stay attached to this entry card. Google copies are optional.',
             style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],
@@ -791,4 +918,11 @@ Future<void> _launchDriveLink(Uri uri) async {
   if (!launched) {
     await launchUrl(uri);
   }
+}
+
+String _googleDocsLink(GoogleDriveFile file) {
+  final link = file.webViewLink?.trim();
+  if (link != null && link.isNotEmpty) return link;
+
+  return 'https://docs.google.com/document/d/${Uri.encodeComponent(file.id)}/edit';
 }
