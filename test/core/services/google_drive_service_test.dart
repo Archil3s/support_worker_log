@@ -252,6 +252,69 @@ void main() {
     expect(meta.googleAccountEmail, 'paye@example.com');
   });
 
+  test(
+    'findPayeNotesInDrive returns matching Google Doc and legacy docx',
+    () async {
+      final api = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'paye-notes': [
+            const GoogleDriveFile(
+              id: 'person-folder',
+              name: 'Jane Smith',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'person-folder': [
+            const GoogleDriveFile(
+              id: 'year-folder',
+              name: '2026',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'year-folder': [
+            const GoogleDriveFile(
+              id: 'paye-doc',
+              name: '2026-06-07_Jane_Smith',
+              mimeType: _googleDocsMimeType,
+            ),
+            const GoogleDriveFile(
+              id: 'paye-docx',
+              name: '2026-06-07_Jane_Smith.docx',
+              mimeType: _docxMimeType,
+            ),
+            const GoogleDriveFile(
+              id: 'other-doc',
+              name: '2026-06-08_Jane_Smith',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final service = GoogleDriveService(api: api);
+
+      final matches = await service.findPayeNotesInDrive(
+        accessToken: 'token',
+        notesFolderId: 'paye-notes',
+        entry: WorkEntry(
+          id: 'paye-1',
+          client: 'Jane Smith',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 7),
+          startTime: const TimeOfDay(hour: 10, minute: 30),
+          minutes: 30,
+          notes: const [],
+        ),
+        googleAccountEmail: 'paye@example.com',
+      );
+
+      expect(matches.map((meta) => meta.fileId), ['paye-doc', 'paye-docx']);
+      expect(matches.map((meta) => meta.mimeType), [
+        _googleDocsMimeType,
+        _docxMimeType,
+      ]);
+    },
+  );
+
   test('saveSupportNote files text notes under Texts', () async {
     final api = _FakeGoogleDriveApi(children: const []);
     final service = GoogleDriveService(api: api);

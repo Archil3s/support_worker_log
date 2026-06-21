@@ -504,13 +504,31 @@ class GoogleDriveService {
     required WorkEntry entry,
     String? googleAccountEmail,
   }) async {
+    final matches = await findPayeNotesInDrive(
+      accessToken: accessToken,
+      notesFolderId: notesFolderId,
+      entry: entry,
+      googleAccountEmail: googleAccountEmail,
+    );
+
+    if (matches.isEmpty) return null;
+
+    return matches.first;
+  }
+
+  Future<List<EntryDriveSupportNoteMeta>> findPayeNotesInDrive({
+    required String accessToken,
+    required String notesFolderId,
+    required WorkEntry entry,
+    String? googleAccountEmail,
+  }) async {
     final personFolder = await _findChild(
       accessToken: accessToken,
       parentId: notesFolderId,
       name: _folderName(entry.client),
       mimeType: 'application/vnd.google-apps.folder',
     );
-    if (personFolder == null) return null;
+    if (personFolder == null) return const [];
 
     final yearFolder = await _findChild(
       accessToken: accessToken,
@@ -518,37 +536,42 @@ class GoogleDriveService {
       name: entry.date.year.toString(),
       mimeType: 'application/vnd.google-apps.folder',
     );
-    if (yearFolder == null) return null;
+    if (yearFolder == null) return const [];
 
-    final googleDoc = await _findChild(
+    final files = await listFolder(
       accessToken: accessToken,
-      parentId: yearFolder.id,
-      name: _payeNoteGoogleDocName(entry),
-      mimeType: _googleDocsMimeType,
+      folderId: yearFolder.id,
     );
-    final file =
-        googleDoc ??
-        await _findChild(
-          accessToken: accessToken,
-          parentId: yearFolder.id,
-          name: _payeNoteFileName(entry),
-          mimeType: _docxMimeType,
-        );
-    if (file == null) return null;
+    final googleDocName = _payeNoteGoogleDocName(entry);
+    final docxName = _payeNoteFileName(entry);
 
-    return EntryDriveSupportNoteMeta(
-      entryId: entry.id,
-      initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
-      status: EntrySupportNoteStatus.finished,
-      fileId: file.id,
-      fileName: file.name,
-      noteText: '',
-      mimeType: file.mimeType,
-      parentFolderId: yearFolder.id,
-      webViewLink: file.webViewLink,
-      contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
-      googleAccountEmail: googleAccountEmail?.trim(),
-    );
+    return files
+        .where(
+          (file) =>
+              (file.name == googleDocName &&
+                  file.mimeType == _googleDocsMimeType) ||
+              (file.name == docxName && file.mimeType == _docxMimeType),
+        )
+        .map(
+          (file) => EntryDriveSupportNoteMeta(
+            entryId: entry.id,
+            initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
+            status: EntrySupportNoteStatus.finished,
+            fileId: file.id,
+            fileName: file.name,
+            noteText: '',
+            mimeType: file.mimeType,
+            parentFolderId: yearFolder.id,
+            webViewLink: file.webViewLink,
+            contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+            googleAccountEmail: googleAccountEmail?.trim(),
+          ),
+        )
+        .toList()
+      ..sort((a, b) {
+        if (a.mimeType == b.mimeType) return a.fileName.compareTo(b.fileName);
+        return a.mimeType == _googleDocsMimeType ? -1 : 1;
+      });
   }
 
   Future<GoogleDriveFile> _personalLogFolder({
