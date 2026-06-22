@@ -74,7 +74,7 @@ void main() {
             'Outcome(s)\nSaved to Drive\n\n'
             'Next action(s)\nFollow up tomorrow\n\n'
             'Overall impression\nSettled\n\n'
-            'Local referral tracking\n'
+            'Referrals\n'
             'No referrals discussed or made this visit.\n\n'
             'Safety concerns for sexual harm survivors and mental health\n'
             'No safety concerns noted.',
@@ -113,7 +113,7 @@ void main() {
       expect(documentText, contains('Follow up tomorrow'));
       expect(documentText, contains('Settled'));
       expect(
-        documentText.indexOf('Local referral tracking'),
+        documentText.indexOf('Referrals'),
         greaterThan(documentText.indexOf('Follow up tomorrow')),
       );
       expect(
@@ -122,10 +122,7 @@ void main() {
         ),
         greaterThan(documentText.indexOf('No referrals discussed')),
       );
-      expect(
-        _paragraphHasBoldText(documentXml, 'Local referral tracking'),
-        true,
-      );
+      expect(_paragraphHasBoldText(documentXml, 'Referrals'), true);
       expect(
         _paragraphHasBoldText(
           documentXml,
@@ -616,24 +613,30 @@ void main() {
         odometerStart: 10,
         odometerEnd: 14.5,
         supportNoteBreakdown: [
-          'Main topic(s)',
+          'What happened',
           'Roster question answered',
           List.filled(220, 'Long session detail.').join(' '),
           '',
-          'Outcome(s)',
+          'Work/task completed',
+          'Roster checked',
+          '',
+          'Support given',
+          'Explained the roster change and answered questions',
+          '',
+          'Issue/problem',
+          'Unclear shift note',
+          '',
+          'Outcome',
           'Shift confirmed',
           '',
-          'Next action(s)',
+          'Next step',
           'Send policy link',
           '',
-          'Overall impression',
-          'Settled',
+          'Anything to follow up',
+          'Check client received link',
           '',
-          'Local referral tracking',
+          'Referrals',
           'None',
-          '',
-          'Safety concerns',
-          'None noted',
         ].join('\n'),
       ),
     );
@@ -655,8 +658,16 @@ void main() {
     expect(documentText, isNot(contains('Jane Smith')));
     expect(documentText, contains('Roster question answered'));
     expect(documentText, contains('Long session detail.'));
+    expect(documentText, contains('Work/task completed'));
+    expect(documentText, contains('Roster checked'));
+    expect(documentText, contains('Support given'));
+    expect(documentText, contains('Issue/problem'));
     expect(documentText, contains('Shift confirmed'));
+    expect(documentText, contains('Next step'));
     expect(documentText, contains('Send policy link'));
+    expect(documentText, contains('Anything to follow up'));
+    expect(documentText, contains('Check client received link'));
+    expect(documentText, contains('Referrals'));
     expect(documentText, isNot(contains('Kilometres')));
     expect(documentText, isNot(contains('Invoice')));
   });

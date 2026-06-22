@@ -17,6 +17,7 @@ import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
+import '../../shared/widgets/support_note_breakdown_text.dart';
 
 String _noteTitleForEntry({
   required WorkEntry entry,
@@ -976,9 +977,8 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
             ],
             if (widget.entry.supportNoteBreakdown.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
-              SelectableText(
-                widget.entry.supportNoteBreakdown.trim(),
-                style: const TextStyle(height: 1.35),
+              SupportNoteBreakdownText(
+                text: widget.entry.supportNoteBreakdown.trim(),
               ),
             ],
             if (widget.entry.nextActions.isNotEmpty) ...[

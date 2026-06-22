@@ -14,6 +14,7 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
+import '../../shared/widgets/support_note_breakdown_text.dart';
 import '../entries/local_support_note_button.dart';
 
 String _cleanHeaderText(String value) {
@@ -34,6 +35,18 @@ String _calendarErrorText(Object error) {
   return text.isEmpty ? 'Google Calendar sync failed.' : text;
 }
 
+double _keyboardAwareSheetHeight(
+  BuildContext context, {
+  required double maxFraction,
+}) {
+  final screenHeight = MediaQuery.sizeOf(context).height;
+  final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+  final maxHeight = screenHeight * maxFraction;
+  final visibleHeight = screenHeight - keyboardBottom - 48;
+
+  return math.max(280.0, math.min(maxHeight, visibleHeight));
+}
+
 List<NextActionItem> _nextActionsFromBreakdown(String value) {
   final lines = value.split(RegExp(r'\r?\n'));
   final actions = <NextActionItem>[];
@@ -44,15 +57,23 @@ List<NextActionItem> _nextActionsFromBreakdown(String value) {
     final trimmed = line.trim();
     final normalized = trimmed.toLowerCase();
 
-    if (normalized.startsWith('next action')) {
+    if (normalized.startsWith('next action') ||
+        normalized.startsWith('next step')) {
       inNextActions = true;
       continue;
     }
 
     if (inNextActions &&
-        (normalized.startsWith('overall impression') ||
+        (normalized.startsWith('anything to follow up') ||
+            normalized.startsWith('overall impression') ||
+            normalized.startsWith('support given') ||
+            normalized.startsWith('issue/problem') ||
             normalized.startsWith('main topic') ||
-            normalized.startsWith('outcome'))) {
+            normalized.startsWith('what happened') ||
+            normalized.startsWith('work/task completed') ||
+            normalized.startsWith('outcome') ||
+            normalized.startsWith('referrals') ||
+            normalized.startsWith('local referral'))) {
       break;
     }
 
@@ -181,11 +202,48 @@ String _buildSupportNoteBreakdown({
     'Overall impression',
     _cleanSupportNoteSection(impression),
     '',
-    'Local referral tracking',
+    'Referrals',
     _cleanSupportNoteSection(referrals),
     '',
     'Safety concerns for sexual harm survivors and mental health',
     _cleanSupportNoteSection(safetyConcerns),
+  ].join('\n').trim();
+}
+
+String _buildPayeSupportNoteBreakdown({
+  required String whatHappened,
+  required String workTaskCompleted,
+  required String supportGiven,
+  required String issueProblem,
+  required String outcome,
+  required String nextStep,
+  required String followUp,
+  required String referrals,
+}) {
+  return [
+    'What happened',
+    _cleanSupportNoteSection(whatHappened),
+    '',
+    'Work/task completed',
+    _cleanSupportNoteSection(workTaskCompleted),
+    '',
+    'Support given',
+    _cleanSupportNoteSection(supportGiven),
+    '',
+    'Issue/problem',
+    _cleanSupportNoteSection(issueProblem),
+    '',
+    'Outcome',
+    _cleanSupportNoteSection(outcome),
+    '',
+    'Next step',
+    _cleanSupportNoteSection(nextStep),
+    '',
+    'Anything to follow up',
+    _cleanSupportNoteSection(followUp),
+    '',
+    'Referrals',
+    _cleanSupportNoteSection(referrals),
   ].join('\n').trim();
 }
 
@@ -205,6 +263,28 @@ class _SupportNoteDraftFields {
   final String impression;
   final String referrals;
   final String safetyConcerns;
+}
+
+class _PayeSupportNoteDraftFields {
+  const _PayeSupportNoteDraftFields({
+    required this.whatHappened,
+    required this.workTaskCompleted,
+    required this.supportGiven,
+    required this.issueProblem,
+    required this.outcome,
+    required this.nextStep,
+    required this.followUp,
+    required this.referrals,
+  });
+
+  final String whatHappened;
+  final String workTaskCompleted;
+  final String supportGiven;
+  final String issueProblem;
+  final String outcome;
+  final String nextStep;
+  final String followUp;
+  final String referrals;
 }
 
 _SupportNoteDraftFields _parseSupportNoteDraft(String value) {
@@ -238,7 +318,8 @@ _SupportNoteDraftFields _parseSupportNoteDraft(String value) {
       current = 'impression';
       continue;
     }
-    if (normalized.startsWith('local referral')) {
+    if (normalized.startsWith('local referral') ||
+        normalized.startsWith('referrals')) {
       current = 'referrals';
       continue;
     }
@@ -262,6 +343,81 @@ _SupportNoteDraftFields _parseSupportNoteDraft(String value) {
     impression: section('impression'),
     referrals: section('referrals'),
     safetyConcerns: section('safetyConcerns'),
+  );
+}
+
+_PayeSupportNoteDraftFields _parsePayeSupportNoteDraft(String value) {
+  final sections = <String, List<String>>{
+    'whatHappened': [],
+    'workTaskCompleted': [],
+    'supportGiven': [],
+    'issueProblem': [],
+    'outcome': [],
+    'nextStep': [],
+    'followUp': [],
+    'referrals': [],
+  };
+  String? current;
+
+  for (final rawLine in value.split(RegExp(r'\r?\n'))) {
+    final line = rawLine.trim();
+    final normalized = line.toLowerCase();
+
+    if (normalized.startsWith('what happened') ||
+        normalized.startsWith('main topic')) {
+      current = 'whatHappened';
+      continue;
+    }
+    if (normalized.startsWith('work/task completed')) {
+      current = 'workTaskCompleted';
+      continue;
+    }
+    if (normalized.startsWith('support given') ||
+        normalized.startsWith('overall impression')) {
+      current = 'supportGiven';
+      continue;
+    }
+    if (normalized.startsWith('issue/problem') ||
+        normalized.startsWith('safety concerns')) {
+      current = 'issueProblem';
+      continue;
+    }
+    if (normalized.startsWith('outcome')) {
+      current = 'outcome';
+      continue;
+    }
+    if (normalized.startsWith('next step') ||
+        normalized.startsWith('next action')) {
+      current = 'nextStep';
+      continue;
+    }
+    if (normalized.startsWith('anything to follow up')) {
+      current = 'followUp';
+      continue;
+    }
+    if (normalized.startsWith('local referral') ||
+        normalized.startsWith('referrals')) {
+      current = 'referrals';
+      continue;
+    }
+
+    if (current == null || line.isEmpty) continue;
+    sections[current]!.add(line);
+  }
+
+  String section(String key) {
+    return _cleanSupportNoteSection(sections[key]!.join('\n'));
+  }
+
+  return _PayeSupportNoteDraftFields(
+    whatHappened: section('whatHappened'),
+    workTaskCompleted: section('workTaskCompleted'),
+    supportGiven: section('supportGiven'),
+    issueProblem: section('issueProblem'),
+    outcome: section('outcome'),
+    nextStep: section('nextStep'),
+    followUp: section('followUp'),
+    referrals: section('referrals'),
   );
 }
 
@@ -1324,15 +1480,17 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
         top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        bottom: 16 + keyboardBottom,
       ),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.88,
+        height: _keyboardAwareSheetHeight(context, maxFraction: 0.88),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1375,8 +1533,12 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
 class _SupportNoteBreakdownSheetState
     extends State<_SupportNoteBreakdownSheet> {
   final mainTopicController = TextEditingController();
+  final workTaskCompletedController = TextEditingController();
+  final supportGivenController = TextEditingController();
+  final issueProblemController = TextEditingController();
   final outcomesController = TextEditingController();
   final nextActionsController = TextEditingController();
+  final followUpController = TextEditingController();
   final impressionController = TextEditingController();
   final referralNotesController = TextEditingController();
   final safetyConcernsController = TextEditingController();
@@ -1391,8 +1553,20 @@ class _SupportNoteBreakdownSheetState
   @override
   void initState() {
     super.initState();
+    final payeMode = context.read<AppState>().isPayeMode;
     final draft = widget.initialDraft?.trim();
-    if (draft != null && draft.isNotEmpty) {
+    if (payeMode && draft != null && draft.isNotEmpty) {
+      final fields = _parsePayeSupportNoteDraft(draft);
+      mainTopicController.text = fields.whatHappened;
+      workTaskCompletedController.text = fields.workTaskCompleted;
+      supportGivenController.text = fields.supportGiven;
+      issueProblemController.text = fields.issueProblem;
+      outcomesController.text = fields.outcome;
+      nextActionsController.text = fields.nextStep;
+      followUpController.text = fields.followUp;
+      noReferrals = fields.referrals.toLowerCase().startsWith('no referrals');
+      referralNotesController.text = noReferrals ? '' : fields.referrals;
+    } else if (draft != null && draft.isNotEmpty) {
       final fields = _parseSupportNoteDraft(draft);
       mainTopicController.text = fields.mainTopic;
       outcomesController.text = fields.outcomes;
@@ -1407,6 +1581,8 @@ class _SupportNoteBreakdownSheetState
       safetyConcernsController.text = noSafetyConcerns
           ? ''
           : fields.safetyConcerns;
+    } else if (payeMode) {
+      mainTopicController.text = _initialMainTopicText(widget.notes);
     } else {
       mainTopicController.text = _initialMainTopicText(widget.notes);
     }
@@ -1414,8 +1590,12 @@ class _SupportNoteBreakdownSheetState
       offset: mainTopicController.text.length,
     );
     mainTopicController.addListener(_scheduleDraftAutosave);
+    workTaskCompletedController.addListener(_scheduleDraftAutosave);
+    supportGivenController.addListener(_scheduleDraftAutosave);
+    issueProblemController.addListener(_scheduleDraftAutosave);
     outcomesController.addListener(_scheduleDraftAutosave);
     nextActionsController.addListener(_scheduleDraftAutosave);
+    followUpController.addListener(_scheduleDraftAutosave);
     impressionController.addListener(_scheduleDraftAutosave);
     referralNotesController.addListener(_scheduleDraftAutosave);
     safetyConcernsController.addListener(_scheduleDraftAutosave);
@@ -1425,16 +1605,24 @@ class _SupportNoteBreakdownSheetState
   void dispose() {
     draftAutosaveTimer?.cancel();
     mainTopicController.dispose();
+    workTaskCompletedController.dispose();
+    supportGivenController.dispose();
+    issueProblemController.dispose();
     outcomesController.dispose();
     nextActionsController.dispose();
+    followUpController.dispose();
     impressionController.dispose();
     referralNotesController.dispose();
     safetyConcernsController.dispose();
     super.dispose();
   }
 
+  int get _lastStepIndex => context.read<AppState>().isPayeMode ? 8 : 6;
+
+  int get _stepCount => _lastStepIndex + 1;
+
   void _nextStep() {
-    if (stepIndex >= 6) {
+    if (stepIndex >= _lastStepIndex) {
       _save();
       return;
     }
@@ -1488,6 +1676,23 @@ class _SupportNoteBreakdownSheetState
   }
 
   String _currentBreakdown() {
+    if (context.read<AppState>().isPayeMode) {
+      return _buildPayeSupportNoteBreakdown(
+        whatHappened: _cleanSupportNoteSection(mainTopicController.text),
+        workTaskCompleted: _cleanSupportNoteSection(
+          workTaskCompletedController.text,
+        ),
+        supportGiven: _cleanSupportNoteSection(supportGivenController.text),
+        issueProblem: _cleanSupportNoteSection(issueProblemController.text),
+        outcome: _cleanSupportNoteSection(outcomesController.text),
+        nextStep: noNextAction
+            ? ''
+            : _cleanSupportNoteSection(nextActionsController.text),
+        followUp: _cleanSupportNoteSection(followUpController.text),
+        referrals: _referralSummary(),
+      );
+    }
+
     return _buildSupportNoteBreakdown(
       mainTopic: _cleanSupportNoteSection(mainTopicController.text),
       outcomes: _cleanSupportNoteSection(outcomesController.text),
@@ -1525,7 +1730,7 @@ class _SupportNoteBreakdownSheetState
     if (mainTopic.isEmpty) return 'Add the main topic before saving.';
     if (outcomes.isEmpty) return 'Add the outcome before saving.';
     if (impression.isEmpty) return 'Add the overall impression before saving.';
-    if (referrals.isEmpty) return 'Complete local referral tracking.';
+    if (referrals.isEmpty) return 'Complete referrals.';
     if (safetyConcerns.isEmpty) {
       return 'Add safety concerns or mark that none were noted.';
     }
@@ -1593,6 +1798,8 @@ class _SupportNoteBreakdownSheetState
   }
 
   Widget _stepBody() {
+    if (context.read<AppState>().isPayeMode) return _payeStepBody();
+
     switch (stepIndex) {
       case 0:
         return _visitFactsStep();
@@ -1714,6 +1921,163 @@ class _SupportNoteBreakdownSheetState
     }
   }
 
+  Widget _payeStepBody() {
+    switch (stepIndex) {
+      case 0:
+        return _visitFactsStep();
+      case 1:
+        return _payeWhatHappenedStep();
+      case 2:
+        return _payeFieldStep(
+          title: 'Work/task completed',
+          subtitle: 'Record the task or work completed.',
+          controller: workTaskCompletedController,
+          hint: 'What was completed during the session?',
+          helper: 'Keep it task-focused and factual.',
+        );
+      case 3:
+        return _payeFieldStep(
+          title: 'Support given',
+          subtitle: 'Record the practical support provided.',
+          controller: supportGivenController,
+          hint: 'What support did you provide?',
+          helper: 'Use plain language and only include relevant detail.',
+        );
+      case 4:
+        return _payeFieldStep(
+          title: 'Issue/problem',
+          subtitle: 'Record the issue or barrier discussed.',
+          controller: issueProblemController,
+          hint: 'What problem, risk, or barrier came up?',
+          helper: 'Keep wording factual. Avoid judgement or labels.',
+        );
+      case 5:
+        return _payeFieldStep(
+          title: 'Outcome',
+          subtitle: 'Record the result of the support.',
+          controller: outcomesController,
+          hint: 'What changed, improved, or was decided?',
+          helper: 'Use a clear result, even if it is partial.',
+        );
+      case 6:
+        return _payeNextStep();
+      case 7:
+        return _payeFieldStep(
+          title: 'Anything to follow up',
+          subtitle: 'Record anything that needs checking later.',
+          controller: followUpController,
+          hint: 'Anything to follow up next time?',
+          helper: 'Leave blank if there is nothing extra to track.',
+        );
+      default:
+        return _referralStep();
+    }
+  }
+
+  Widget _payeWhatHappenedStep() {
+    return _PromptStep(
+      title: 'What happened',
+      subtitle: 'Capture what happened in the session.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.notes.isNotEmpty) ...[
+            _Panel(
+              title: 'Logged notes',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final note in widget.notes)
+                    ActionChip(
+                      avatar: const Icon(Icons.add, size: 18),
+                      label: Text(note),
+                      onPressed: () => _appendLine(mainTopicController, note),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          _SupportNoteField(
+            controller: mainTopicController,
+            label: 'What happened',
+            hint: 'What happened during the support session?',
+            helper: 'Write the key facts in the order they happened.',
+            wordCount: _wordCount(mainTopicController.text),
+            autofocus: true,
+            expanded: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _payeFieldStep({
+    required String title,
+    required String subtitle,
+    required TextEditingController controller,
+    required String hint,
+    required String helper,
+  }) {
+    return _PromptStep(
+      title: title,
+      subtitle: subtitle,
+      child: _SupportNoteField(
+        controller: controller,
+        label: title,
+        hint: hint,
+        helper: helper,
+        wordCount: _wordCount(controller.text),
+        autofocus: true,
+        expanded: true,
+        onChanged: (_) => setState(() {}),
+      ),
+    );
+  }
+
+  Widget _payeNextStep() {
+    return _PromptStep(
+      title: 'Next step',
+      subtitle: 'Add the next task or mark none needed.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('No next step needed'),
+            subtitle: const Text(
+              'Leave this blank when there is nothing to track.',
+            ),
+            value: noNextAction,
+            onChanged: (value) {
+              setState(() {
+                noNextAction = value;
+                if (value) nextActionsController.clear();
+              });
+              _scheduleDraftAutosave();
+            },
+          ),
+          const SizedBox(height: 8),
+          if (noNextAction)
+            const _NoActionPanel(message: 'No next step needed.')
+          else
+            _SupportNoteField(
+              controller: nextActionsController,
+              label: 'Next step',
+              hint: 'What needs to happen next?',
+              helper: 'One next step per line.',
+              wordCount: _wordCount(nextActionsController.text),
+              autofocus: true,
+              expanded: true,
+              onChanged: (_) => setState(() {}),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _visitFactsStep() {
     final startedAt = TimeOfDay.fromDateTime(
       widget.activeVisit.startedAt,
@@ -1747,7 +2111,7 @@ class _SupportNoteBreakdownSheetState
 
   Widget _referralStep() {
     return _PromptStep(
-      title: 'Local Referral Tracking',
+      title: 'Referrals',
       subtitle: 'Track discussion, consent, and follow-up status.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1851,22 +2215,24 @@ class _SupportNoteBreakdownSheetState
 
   @override
   Widget build(BuildContext context) {
+    final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
         top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        bottom: 16 + keyboardBottom,
       ),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.9,
+        height: _keyboardAwareSheetHeight(context, maxFraction: 0.9),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _PromptHeader(
               title: 'Support Note',
               currentStep: stepIndex,
-              stepCount: 7,
+              stepCount: _stepCount,
               onClose: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 12),
@@ -1887,7 +2253,7 @@ class _SupportNoteBreakdownSheetState
             const SizedBox(height: 8),
             _PromptNavButtons(
               isFirst: stepIndex == 0,
-              isLast: stepIndex == 6,
+              isLast: stepIndex == _lastStepIndex,
               onBack: _previousStep,
               onNext: _nextStep,
               saveLabel: context.watch<AppState>().isPayeMode
@@ -2317,6 +2683,15 @@ class _SavedVisitViewState extends State<_SavedVisitView> {
               children: [
                 for (final note in entry.notes) Chip(label: Text(note)),
               ],
+            ),
+          ),
+        ],
+        if (entry.supportNoteBreakdown.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _Panel(
+            title: 'Support note',
+            child: SupportNoteBreakdownText(
+              text: entry.supportNoteBreakdown.trim(),
             ),
           ),
         ],

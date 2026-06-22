@@ -298,17 +298,21 @@ class LocalSupportNoteService {
     return '''
 Attendance
 
-Main topic(s)
+What happened
 
-Outcome(s)
+Work/task completed
 
-Next action(s)
+Support given
 
-Overall impression
+Issue/problem
 
-Local referral tracking
+Outcome
 
-Safety concerns
+Next step
+
+Anything to follow up
+
+Referrals
 '''
         .trim();
   }
@@ -934,7 +938,7 @@ Safety concerns
 
     if (sections.referrals.isNotEmpty) {
       buffer
-        ..write(_paragraphXml('Local referral tracking', bold: true))
+        ..write(_paragraphXml('Referrals', bold: true))
         ..write(_paragraphXml(sections.referrals));
     }
 
@@ -1000,31 +1004,37 @@ class _PersonalLogSection {
 class _PayeSupportSections {
   const _PayeSupportSections({
     required this.attendance,
-    required this.mainTopic,
-    required this.outcomes,
-    required this.nextActions,
-    required this.impression,
+    required this.whatHappened,
+    required this.workTaskCompleted,
+    required this.supportGiven,
+    required this.issueProblem,
+    required this.outcome,
+    required this.nextStep,
+    required this.followUp,
     required this.referrals,
-    required this.safety,
   });
 
   final String attendance;
-  final String mainTopic;
-  final String outcomes;
-  final String nextActions;
-  final String impression;
+  final String whatHappened;
+  final String workTaskCompleted;
+  final String supportGiven;
+  final String issueProblem;
+  final String outcome;
+  final String nextStep;
+  final String followUp;
   final String referrals;
-  final String safety;
 
   List<_PersonalLogSection> get sections {
     return [
       _PersonalLogSection('Attendance', attendance),
-      _PersonalLogSection('Main topic(s)', mainTopic),
-      _PersonalLogSection('Outcome(s)', outcomes),
-      _PersonalLogSection('Next action(s)', nextActions),
-      _PersonalLogSection('Overall impression', impression),
-      _PersonalLogSection('Local referral tracking', referrals),
-      _PersonalLogSection('Safety concerns', safety),
+      _PersonalLogSection('What happened', whatHappened),
+      _PersonalLogSection('Work/task completed', workTaskCompleted),
+      _PersonalLogSection('Support given', supportGiven),
+      _PersonalLogSection('Issue/problem', issueProblem),
+      _PersonalLogSection('Outcome', outcome),
+      _PersonalLogSection('Next step', nextStep),
+      _PersonalLogSection('Anything to follow up', followUp),
+      _PersonalLogSection('Referrals', referrals),
     ];
   }
 
@@ -1040,12 +1050,14 @@ class _PayeSupportSections {
 
       return [
         _PersonalLogSection('Attendance', attendance),
-        _PersonalLogSection('Main topic(s)', notes),
-        const _PersonalLogSection('Outcome(s)', '-'),
-        const _PersonalLogSection('Next action(s)', '-'),
-        const _PersonalLogSection('Overall impression', '-'),
-        const _PersonalLogSection('Local referral tracking', '-'),
-        const _PersonalLogSection('Safety concerns', '-'),
+        _PersonalLogSection('What happened', notes),
+        const _PersonalLogSection('Work/task completed', '-'),
+        const _PersonalLogSection('Support given', '-'),
+        const _PersonalLogSection('Issue/problem', '-'),
+        const _PersonalLogSection('Outcome', '-'),
+        const _PersonalLogSection('Next step', '-'),
+        const _PersonalLogSection('Anything to follow up', '-'),
+        const _PersonalLogSection('Referrals', '-'),
       ];
     }
 
@@ -1054,13 +1066,33 @@ class _PayeSupportSections {
       attendance: breakdownAttendance.trim().isEmpty
           ? attendance
           : breakdownAttendance,
-      mainTopic: _section(breakdown, 'Main topic'),
-      outcomes: _section(breakdown, 'Outcome'),
-      nextActions: _section(breakdown, 'Next action'),
-      impression: _section(breakdown, 'Overall impression'),
-      referrals: _section(breakdown, 'Local referral tracking'),
-      safety: _section(breakdown, 'Safety concerns'),
+      whatHappened: _firstSection(breakdown, ['What happened', 'Main topic']),
+      workTaskCompleted: _section(breakdown, 'Work/task completed'),
+      supportGiven: _firstSection(breakdown, [
+        'Support given',
+        'Overall impression',
+      ]),
+      issueProblem: _firstSection(breakdown, [
+        'Issue/problem',
+        'Safety concerns',
+      ]),
+      outcome: _section(breakdown, 'Outcome'),
+      nextStep: _firstSection(breakdown, ['Next step', 'Next action']),
+      followUp: _section(breakdown, 'Anything to follow up'),
+      referrals: _firstSection(breakdown, [
+        'Referrals',
+        'Local referral tracking',
+      ]),
     ).sections;
+  }
+
+  static String _firstSection(String source, List<String> headingPrefixes) {
+    for (final headingPrefix in headingPrefixes) {
+      final value = _section(source, headingPrefix);
+      if (value.trim().isNotEmpty) return value;
+    }
+
+    return '';
   }
 
   static String _section(String source, String headingPrefix) {
@@ -1070,11 +1102,18 @@ class _PayeSupportSections {
 
     for (final line in lines) {
       final trimmed = line.trim();
-      final lower = trimmed.toLowerCase();
+      final lower = _normalizedHeading(trimmed);
       final isHeading = [
         'attendance',
-        'main topic',
+        'what happened',
+        'work/task completed',
+        'support given',
+        'issue/problem',
         'outcome',
+        'next step',
+        'anything to follow up',
+        'referrals',
+        'main topic',
         'next action',
         'overall impression',
         'local referral tracking',
@@ -1091,6 +1130,10 @@ class _PayeSupportSections {
     }
 
     return buffer.join('\n');
+  }
+
+  static String _normalizedHeading(String value) {
+    return value.replaceAll('*', '').replaceAll(':', '').trim().toLowerCase();
   }
 
   static String _attendanceFromEntry(WorkEntry entry) {
@@ -1151,7 +1194,7 @@ class _SupportNoteSections {
 
   String get _supportChecksText {
     return [
-      if (referrals.isNotEmpty) ...['Local referral tracking', referrals],
+      if (referrals.isNotEmpty) ...['Referrals', referrals],
       if (safetyConcerns.isNotEmpty) ...[
         'Safety concerns for sexual harm survivors and mental health',
         safetyConcerns,
@@ -1193,7 +1236,8 @@ class _SupportNoteSections {
         continue;
       }
 
-      if (normalized.startsWith('local referral')) {
+      if (normalized.startsWith('local referral') ||
+          normalized.startsWith('referrals')) {
         section = _SupportNoteSection.referrals;
         continue;
       }

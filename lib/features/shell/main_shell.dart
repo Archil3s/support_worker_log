@@ -148,6 +148,7 @@ class _MainShellState extends State<MainShell> {
 
   void _go(_Section next) {
     if (section == next) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => section = next);
   }
 
@@ -426,18 +427,40 @@ class _MainShellState extends State<MainShell> {
           ),
           bottomNavigationBar: wide || standaloneMode
               ? null
-              : SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                    child: _FastBottomNav(
-                      selectedIndex: navIndex,
-                      onTap: _onNavTap,
-                    ),
-                  ),
+              : _KeyboardAwareBottomNav(
+                  selectedIndex: navIndex,
+                  onTap: _onNavTap,
                 ),
         );
       },
+    );
+  }
+}
+
+class _KeyboardAwareBottomNav extends StatelessWidget {
+  const _KeyboardAwareBottomNav({
+    required this.selectedIndex,
+    required this.onTap,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardBottom),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          child: _FastBottomNav(selectedIndex: selectedIndex, onTap: onTap),
+        ),
+      ),
     );
   }
 }
