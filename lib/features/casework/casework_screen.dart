@@ -691,6 +691,17 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             child: _MsdGrantRequirementsGuide(),
           ),
           const SizedBox(height: 16),
+          _DesktopCard(
+            title: 'If client is not on a benefit',
+            icon: Icons.badge_outlined,
+            child: _statusChecklistGroup(
+              options: _notOnBenefitEhDocumentOptions,
+              selected: documents,
+              category: 'No-benefit EH documents',
+              statusFocus: _CaseworkFocus.documents,
+            ),
+          ),
+          const SizedBox(height: 16),
           const _DesktopCard(
             title: 'Language to avoid / use instead',
             icon: Icons.record_voice_over_outlined,
@@ -1798,20 +1809,44 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
   }
 
   Widget _documentsSection() {
-    return SectionCard(
-      title: 'Documents And Proof Ready',
-      child: _statusChecklistGroup(
-        options: _documentOptions,
-        selected: documents,
-        category: 'Documents',
-        statusFocus: _CaseworkFocus.documents,
-      ),
+    return Column(
+      children: [
+        SectionCard(
+          title: 'Documents And Proof Ready',
+          child: _statusChecklistGroup(
+            options: _documentOptions,
+            selected: documents,
+            category: 'Documents',
+            statusFocus: _CaseworkFocus.documents,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'If Client Is Not Currently On A Benefit',
+          child: _statusChecklistGroup(
+            options: _notOnBenefitEhDocumentOptions,
+            selected: documents,
+            category: 'No-benefit EH documents',
+            statusFocus: _CaseworkFocus.documents,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _msdSection() {
     return Column(
       children: [
+        SectionCard(
+          title: 'If Client Is Not Currently On A Benefit',
+          child: _statusChecklistGroup(
+            options: _notOnBenefitEhDocumentOptions,
+            selected: documents,
+            category: 'No-benefit EH documents',
+            statusFocus: _CaseworkFocus.documents,
+          ),
+        ),
+        const SizedBox(height: 12),
         SectionCard(
           title: 'MSD Emergency Housing Criteria',
           child: _statusChecklistGroup(
@@ -2030,6 +2065,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
             onPressed: () => _copyNote(noteFile),
             icon: const Icon(Icons.copy_outlined),
             label: const Text('Copy Note File'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _exportCaseworkDocx(noteFile),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Export Case File DOCX'),
           ),
         ],
       ),
@@ -2277,6 +2318,25 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
       ..showSnackBar(
         const SnackBar(content: Text('Casework note file copied')),
       );
+  }
+
+  Future<void> _exportCaseworkDocx(String noteFile) async {
+    await HousingDiaryPdfService.exportCaseworkDocx(
+      caseCode: activeProfileCode,
+      worker: workerInitialsController.text,
+      sections: _caseworkDocxSections(noteFile),
+    );
+
+    _recordRequest(
+      category: 'File',
+      request: 'Exported full casework file to DOCX',
+      status: 'DOCX exported',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(const SnackBar(content: Text('Casework DOCX exported')));
   }
 
   Future<void> _openRentalSource(_RentalSource source) async {
@@ -3810,6 +3870,152 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
     _addNoteSection(buffer, 'Planned Follow-Up', followUpActions);
     _addNoteSection(buffer, 'Main Notes', [mainNotes]);
     return buffer.toString().trim();
+  }
+
+  List<CaseworkDocxSection> _caseworkDocxSections(String noteFile) {
+    return [
+      CaseworkDocxSection(
+        title: 'Case summary',
+        lines: [
+          'Date/time: ${_dateTime(DateTime.now())}',
+          'Case code: $activeProfileCode',
+          'Worker: ${_valueOr(workerInitialsController.text, '-')}',
+          'Contact: $contact',
+          'Consent: $consent',
+          'Urgency: ${urgency.toUpperCase()}',
+          'Next check-in: ${_valueOr(deadlineController.text, '-')}',
+          if (socialHousingRating != 'Not checked')
+            'Social housing status: $socialHousingRating',
+          if (probationStatus != 'Not applicable')
+            'Probation/bail status: $probationStatus',
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'Live note output',
+        lines: noteFile.split(RegExp(r'\r?\n')),
+      ),
+      CaseworkDocxSection(
+        title: 'If client is not currently on a benefit',
+        lines: _checklistExportLines(_notOnBenefitEhDocumentOptions, documents),
+      ),
+      CaseworkDocxSection(
+        title: 'Emergency housing grant requirements',
+        lines: [
+          for (final requirement in _msdGrantRequirements) ...[
+            'Required item: ${requirement.item}',
+            'How to explain: ${requirement.explain}',
+            'Do not say: ${requirement.avoid}',
+            '',
+          ],
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'MSD language to avoid / use instead',
+        lines: [
+          for (final pair in _msdLanguagePairs) ...[
+            'Avoid: ${pair.avoid}',
+            'Use instead: ${pair.useInstead}',
+            '',
+          ],
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'Presenting need',
+        lines: _setLines(presentingNeeds),
+      ),
+      CaseworkDocxSection(
+        title: 'Situation and scope',
+        lines: _setLines(situationUnderstanding),
+      ),
+      CaseworkDocxSection(
+        title: 'Documents and evidence',
+        lines: [
+          ..._setLines(documents),
+          ..._checklistExportLines(_documentOptions, documents),
+          ..._readinessExportLines(_ehReadinessItems, msdCriteria),
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'MSD / CMM advocacy',
+        lines: [..._setLines(msdCriteria), ..._setLines(msdAdvocacy)],
+      ),
+      CaseworkDocxSection(
+        title: 'Safety and support needs',
+        lines: [
+          ..._setLines(immediateSafety),
+          ..._setLines(supportNeeds),
+          ..._setLines(roadblocks),
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'Housing and accommodation pathway',
+        lines: [
+          ..._setLines(socialHousing),
+          ..._setLines(housingApplications),
+          ..._setLines(accommodationOptions),
+          ..._setLines(probationActions),
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'Referrals and programmes',
+        lines: _setLines(referrals),
+      ),
+      CaseworkDocxSection(
+        title: 'Contacts and follow-up',
+        lines: [..._setLines(contactActions), ..._setLines(followUpActions)],
+      ),
+      CaseworkDocxSection(
+        title: 'Section outcomes and status',
+        lines: [
+          ..._sectionDateStampLines(),
+          ..._itemDateStampLines(),
+          ..._sectionOutcomeLines(),
+        ],
+      ),
+      CaseworkDocxSection(
+        title: 'Rental leads',
+        lines: [for (final lead in rentalLeads) lead.noteLine],
+      ),
+      CaseworkDocxSection(
+        title: 'Grocery price checks',
+        lines: [for (final lead in groceryLeads) lead.noteLine],
+      ),
+      CaseworkDocxSection(
+        title: 'Job leads',
+        lines: [for (final lead in jobLeads) lead.noteLine],
+      ),
+      CaseworkDocxSection(title: 'Action log', lines: _noteActionLogLines()),
+      CaseworkDocxSection(
+        title: 'Main notes',
+        lines: [additionalContextController.text.trim()],
+      ),
+    ];
+  }
+
+  List<String> _setLines(Set<String> values) {
+    final lines = values.map((value) => value.trim()).where((value) {
+      return value.isNotEmpty;
+    }).toList()..sort();
+    return lines;
+  }
+
+  List<String> _checklistExportLines(List<String> options, Set<String> values) {
+    return [
+      for (final option in options)
+        '${values.contains(option) ? '[x]' : '[ ]'} $option',
+    ];
+  }
+
+  List<String> _readinessExportLines(
+    List<_ReadinessItem> items,
+    Set<String> values,
+  ) {
+    return [
+      for (final item in items) ...[
+        '${values.contains(item.title) ? '[x]' : '[ ]'} ${item.title}',
+        '  ${item.text}',
+      ],
+    ];
   }
 
   List<String> _sectionDateStampLines() {
@@ -10354,6 +10560,23 @@ const _ehReadinessItems = [
         'Confirm phone, transport, appointment time, support-worker attendance, safe contact method and what the client must say/do next.',
     tag: 'Appointment',
   ),
+];
+
+const _notOnBenefitEhDocumentOptions = [
+  'Photo ID checked: driver licence, passport, Kiwi Access card, birth certificate, or alternative ID pathway',
+  'MSD client number checked or new client record / MyMSD setup needed',
+  'IRD number, bank account name/number, and payment access checked',
+  'Current income checked: wages, final pay, casual work, ACC, student support, partner income, or no income',
+  'Recent bank statements or transaction history available if MSD asks',
+  'Benefit eligibility pathway checked: Jobseeker, Sole Parent, Supported Living, Youth Payment, or emergency assistance',
+  'Residence / immigration status checked if relevant to MSD eligibility',
+  'Household details recorded: partner, tamariki, pregnancy, shared care, dependants, pets, vehicle',
+  'Current funds and immediate costs recorded: cash on hand, food, fuel, phone credit, medication, storage',
+  'Proof current housing ended or is unsafe: notice, text, email, landlord message, police/FV/health evidence, or worker note',
+  'Safe contact plan ready: phone number, backup contact, transport, appointment time, support person',
+  'Consent to share information with MSD, CMM, landlord, motel/supplier, health, Corrections or other agency recorded',
+  'Support person needed for MSD interview because of literacy, disability, anxiety, trauma, phone access, or understanding forms',
+  'Housing search evidence started or barrier explained if search cannot happen before tonight',
 ];
 
 const _diaryQuickActions = [

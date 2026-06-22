@@ -59,6 +59,13 @@ class LeadSearchPdfEntry {
   final String notes;
 }
 
+class CaseworkDocxSection {
+  const CaseworkDocxSection({required this.title, required this.lines});
+
+  final String title;
+  final List<String> lines;
+}
+
 class HousingDiaryPdfService {
   const HousingDiaryPdfService._();
 
@@ -123,6 +130,23 @@ class HousingDiaryPdfService {
     );
   }
 
+  static Future<void> exportCaseworkDocx({
+    required String caseCode,
+    required String worker,
+    required List<CaseworkDocxSection> sections,
+  }) async {
+    final bytes = Uint8List.fromList(
+      buildCaseworkDocx(caseCode: caseCode, worker: worker, sections: sections),
+    );
+
+    await FileSaver.instance.saveFile(
+      name: 'Casework File $caseCode',
+      bytes: bytes,
+      fileExtension: 'docx',
+      mimeType: MimeType.microsoftWord,
+    );
+  }
+
   static List<int> buildHousingDiaryDocx({
     required String caseCode,
     required String worker,
@@ -139,7 +163,10 @@ class HousingDiaryPdfService {
     addTextFile('[Content_Types].xml', _contentTypesXml);
     addTextFile('_rels/.rels', _rootRelationshipsXml);
     addTextFile('docProps/app.xml', _appPropertiesXml);
-    addTextFile('docProps/core.xml', _corePropertiesXml(caseCode));
+    addTextFile(
+      'docProps/core.xml',
+      _corePropertiesXml('Housing Diary $caseCode'),
+    );
     addTextFile(
       'word/document.xml',
       _documentXml(
@@ -147,6 +174,37 @@ class HousingDiaryPdfService {
         worker: worker,
         properties: properties,
         actions: actions,
+      ),
+    );
+
+    return ZipEncoder().encode(archive) ?? <int>[];
+  }
+
+  static List<int> buildCaseworkDocx({
+    required String caseCode,
+    required String worker,
+    required List<CaseworkDocxSection> sections,
+  }) {
+    final archive = Archive();
+
+    void addTextFile(String name, String contents) {
+      final bytes = utf8.encode(contents);
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    }
+
+    addTextFile('[Content_Types].xml', _contentTypesXml);
+    addTextFile('_rels/.rels', _rootRelationshipsXml);
+    addTextFile('docProps/app.xml', _appPropertiesXml);
+    addTextFile(
+      'docProps/core.xml',
+      _corePropertiesXml('Casework File $caseCode'),
+    );
+    addTextFile(
+      'word/document.xml',
+      _caseworkDocumentXml(
+        caseCode: caseCode,
+        worker: worker,
+        sections: sections,
       ),
     );
 
@@ -762,6 +820,51 @@ class HousingDiaryPdfService {
 ''';
   }
 
+  static String _caseworkDocumentXml({
+    required String caseCode,
+    required String worker,
+    required List<CaseworkDocxSection> sections,
+  }) {
+    final workerText = worker.trim().isEmpty ? '-' : worker.trim();
+    final sectionBlocks = sections
+        .where((section) {
+          return section.title.trim().isNotEmpty &&
+              section.lines.any((line) => line.trim().isNotEmpty);
+        })
+        .map(_docxSectionBlock)
+        .join();
+
+    return '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${_docxParagraph('CASEWORK FILE', style: 'Title', align: 'center')}
+    ${_docxParagraph('Case code: $caseCode    Worker: $workerText', style: 'Small')}
+    ${_docxSpacer()}
+    $sectionBlocks
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+''';
+  }
+
+  static String _docxSectionBlock(CaseworkDocxSection section) {
+    final cleaned = section.lines
+        .map((line) => line.trimRight())
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+    if (cleaned.isEmpty) return '';
+
+    return [
+      _docxParagraph(section.title.trim(), style: 'Heading'),
+      for (final line in cleaned) _docxParagraph(line),
+      _docxSpacer(),
+    ].join();
+  }
+
   static String _docxPropertyBlocks(List<HousingDiaryPropertyEntry> entries) {
     final rows = entries.isEmpty
         ? <HousingDiaryPropertyEntry>[
@@ -888,12 +991,12 @@ class HousingDiaryPdfService {
         .replaceAll("'", '&apos;');
   }
 
-  static String _corePropertiesXml(String caseCode) {
+  static String _corePropertiesXml(String title) {
     final now = DateTime.now().toUtc().toIso8601String();
     return '''
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Housing Diary $caseCode</dc:title>
+  <dc:title>${_xml(title)}</dc:title>
   <dc:creator>Support Worker Log</dc:creator>
   <cp:lastModifiedBy>Support Worker Log</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">$now</dcterms:created>
