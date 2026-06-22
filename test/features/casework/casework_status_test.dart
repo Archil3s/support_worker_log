@@ -501,6 +501,11 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text('If client is not on a benefit'), findsOneWidget);
+    expect(
+      find.textContaining('Photo ID checked: driver licence'),
+      findsOneWidget,
+    );
 
     await Scrollable.ensureVisible(
       tester.element(find.text('MSD language to avoid')),
@@ -518,6 +523,10 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.tap(find.byKey(const ValueKey('casework-tab-file')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Export Case File DOCX'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
