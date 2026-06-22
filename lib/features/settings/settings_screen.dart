@@ -662,7 +662,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               for (final client in appState.clients)
                 _ClientManagerTile(
                   client: client,
-                  usageCount: appState.clientUsageCount(client),
+                  usageCount: appState.isPayeMode
+                      ? null
+                      : appState.clientUsageCount(client),
                   canDelete:
                       appState.isPayeMode || appState.canRemoveClient(client),
                   deleteLabel: appState.isPayeMode
@@ -824,15 +826,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class _ClientManagerTile extends StatelessWidget {
   const _ClientManagerTile({
     required this.client,
-    required this.usageCount,
     required this.canDelete,
+    this.usageCount,
     this.deleteLabel,
     required this.onRename,
     required this.onDelete,
   });
 
   final String client;
-  final int usageCount;
+  final int? usageCount;
   final bool canDelete;
   final String? deleteLabel;
   final VoidCallback onRename;
@@ -840,9 +842,12 @@ class _ClientManagerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final usageText = usageCount == 0
+    final usage = usageCount;
+    final usageText = usage == null
+        ? 'PAYE list only. Existing entries are not kept in this list.'
+        : usage == 0
         ? 'Unused'
-        : 'Used in $usageCount entr${usageCount == 1 ? 'y' : 'ies'}';
+        : 'Used in $usage entr${usage == 1 ? 'y' : 'ies'}';
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -852,7 +857,7 @@ class _ClientManagerTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Rename client',
+            tooltip: usage == null ? 'Rename PAYE person' : 'Rename client',
             icon: const Icon(Icons.edit_outlined),
             onPressed: onRename,
           ),
