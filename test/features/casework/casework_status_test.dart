@@ -463,6 +463,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('msd language guide shows avoid and use instead wording', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: const Scaffold(body: CaseworkScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final msdTab = find.byKey(const ValueKey('casework-tab-msd'));
+    await tester.tap(msdTab);
+    await tester.pumpAndSettle();
+
+    await Scrollable.ensureVisible(
+      tester.element(find.text('MSD language to avoid')),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('MSD language to avoid'), findsOneWidget);
+    expect(find.text('Avoid'), findsWidgets);
+    expect(find.text('Use instead'), findsWidgets);
+    expect(find.text('Client refuses emergency housing.'), findsOneWidget);
+    expect(
+      find.text(
+        'Client has said the option is not safe or suitable because...',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('social support assessment feeds matching services', (
     tester,
   ) async {

@@ -685,6 +685,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
                 'Always verify eligibility, re-grant rules, contribution amounts and supplier details directly with MSD. This tool does not guarantee approval.',
           ),
           const SizedBox(height: 14),
+          const _DesktopCard(
+            title: 'Language to avoid / use instead',
+            icon: Icons.record_voice_over_outlined,
+            child: _MsdLanguageGuide(),
+          ),
+          const SizedBox(height: 16),
           _ResponsiveColumns(
             children: [
               _DesktopCard(
@@ -6054,6 +6060,109 @@ class _WordingGrid extends StatelessWidget {
   }
 }
 
+class _MsdLanguageGuide extends StatelessWidget {
+  const _MsdLanguageGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MSD language to avoid',
+          style: TextStyle(color: _caseworkInk, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        for (final pair in _msdLanguagePairs) ...[
+          _MsdLanguagePairTile(pair: pair),
+          if (pair != _msdLanguagePairs.last) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _MsdLanguagePairTile extends StatelessWidget {
+  const _MsdLanguagePairTile({required this.pair});
+
+  final _MsdLanguagePair pair;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 520;
+          final avoid = _LanguageColumn(
+            title: 'Avoid',
+            text: pair.avoid,
+            color: const Color(0xFFB85800),
+          );
+          final instead = _LanguageColumn(
+            title: 'Use instead',
+            text: pair.useInstead,
+            color: const Color(0xFF125781),
+          );
+
+          if (!columns) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [avoid, const SizedBox(height: 8), instead],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: avoid),
+              const SizedBox(width: 12),
+              Expanded(child: instead),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LanguageColumn extends StatelessWidget {
+  const _LanguageColumn({
+    required this.title,
+    required this.text,
+    required this.color,
+  });
+
+  final String title;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(text, style: const TextStyle(height: 1.3)),
+      ],
+    );
+  }
+}
+
 class _ActionButtonWrap extends StatelessWidget {
   const _ActionButtonWrap({required this.actions, required this.onSelected});
 
@@ -8309,6 +8418,13 @@ class _UrgencyAction {
   final String logText;
 }
 
+class _MsdLanguagePair {
+  const _MsdLanguagePair({required this.avoid, required this.useInstead});
+
+  final String avoid;
+  final String useInstead;
+}
+
 class _QuickLogAction {
   const _QuickLogAction({
     required this.label,
@@ -10266,6 +10382,33 @@ const _wordingActions = [
     focus: _CaseworkFocus.msd,
     logCategory: 'Wording',
     logText: 'Motel/supplier wording added',
+  ),
+];
+
+const _msdLanguagePairs = [
+  _MsdLanguagePair(
+    avoid: 'Client refuses emergency housing.',
+    useInstead: 'Client has said the option is not safe or suitable because...',
+  ),
+  _MsdLanguagePair(
+    avoid: 'Client is homeless by choice.',
+    useInstead:
+        'Client reports no safe, realistic or reasonable accommodation tonight.',
+  ),
+  _MsdLanguagePair(
+    avoid: 'Client will not engage with MSD.',
+    useInstead:
+        'Client needs support with contact, transport, phone access, documents or understanding the next step.',
+  ),
+  _MsdLanguagePair(
+    avoid: 'Client is not trying hard enough to find housing.',
+    useInstead:
+        'Housing search actions, barriers, declined options and no responses are recorded for MSD to assess.',
+  ),
+  _MsdLanguagePair(
+    avoid: 'MSD must approve this.',
+    useInstead:
+        'Worker is requesting an MSD assessment and asking what evidence or pathway is required today.',
   ),
 ];
 
