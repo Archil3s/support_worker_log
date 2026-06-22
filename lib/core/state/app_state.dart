@@ -17,6 +17,7 @@ import '../services/cloud_storage_service.dart';
 import '../services/drive_invoice_cycle_sync_service.dart';
 import '../services/google_export_account_service.dart';
 import '../services/google_drive_service.dart';
+import '../services/local_support_note_service.dart';
 import '../services/storage_service.dart';
 import '../utils/sample_invoice_data.dart';
 
@@ -416,20 +417,37 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<void> deleteStoredSupportNoteData(String entryId) async {
+    await LocalSupportNoteService.removeMeta(entryId);
+    await _googleDriveService.removeSupportNoteMeta(entryId);
+  }
+
   Future<List<String>> deletePayeDriveNoteForEntry(WorkEntry entry) async {
+    final savedMeta = await _googleDriveService.loadSupportNoteMeta(entry.id);
+    final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
+    final hasNotesFolder = notesFolderId != null && notesFolderId.isNotEmpty;
+
     if (!_googleExportAccountService.isConnected(
       GoogleExportAccountScope.paye,
     )) {
+      if (hasNotesFolder || savedMeta != null) {
+        throw StateError(
+          'Connect the PAYE Google account first so the Google Doc can be permanently deleted everywhere.',
+        );
+      }
+
+      await deleteStoredSupportNoteData(entry.id);
       return const [];
     }
 
     final accessToken = await requireGoogleDriveAccessToken(
       scope: GoogleExportAccountScope.paye,
     );
-    final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
-    if (notesFolderId == null || notesFolderId.isEmpty) return const [];
+    if (!hasNotesFolder) {
+      await deleteStoredSupportNoteData(entry.id);
+      return const [];
+    }
 
-    final savedMeta = await _googleDriveService.loadSupportNoteMeta(entry.id);
     final accountEmail = payeGoogleAccountEmail?.trim().toLowerCase();
     final savedAccountEmail = savedMeta?.googleAccountEmail
         ?.trim()
@@ -456,7 +474,10 @@ class AppState extends ChangeNotifier {
       final fileId = savedMeta.fileId.trim();
       if (fileId.isNotEmpty) metasByFileId[fileId] = savedMeta;
     }
-    if (metasByFileId.isEmpty) return const [];
+    if (metasByFileId.isEmpty) {
+      await deleteStoredSupportNoteData(entry.id);
+      return const [];
+    }
 
     final deletedFileNames = <String>[];
     for (final meta in metasByFileId.values) {
@@ -466,7 +487,7 @@ class AppState extends ChangeNotifier {
       );
       deletedFileNames.add(meta.fileName);
     }
-    await _googleDriveService.removeSupportNoteMeta(entry.id);
+    await deleteStoredSupportNoteData(entry.id);
 
     return deletedFileNames;
   }
@@ -885,6 +906,29 @@ class AppState extends ChangeNotifier {
     return !isClientUsed(client);
   }
 
+  bool removeClientFromList(String client) {
+    final removed = _clients.remove(client);
+    if (!removed) return false;
+
+    if (_activeVisit?.client == client) {
+      _activeVisit = null;
+    }
+
+    _persistAndNotify();
+    return true;
+  }
+
+  int clearClientList() {
+    final count = _clients.length;
+    if (count == 0) return 0;
+
+    _clients.clear();
+    _activeVisit = null;
+    _persistAndNotify();
+
+    return count;
+  }
+
   bool removeClient(String client) {
     if (!canRemoveClient(client)) return false;
 
@@ -892,6 +936,115 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
 
     return true;
+  }
+
+  void deleteNextAction({
+    required WorkEntry entry,
+    required NextActionItem action,
+  }) {
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    final index = activeEntries.indexWhere((item) => item.id == entry.id);
+    if (index == -1) return;
+
+    final currentEntry = activeEntries[index];
+    final updatedActions = currentEntry.nextActions
+        .where((item) => item.id != action.id)
+        .toList();
+    final updatedBreakdown = _supportBreakdownWithoutAction(
+      currentEntry.supportNoteBreakdown,
+      action.text,
+    );
+
+    activeEntries[index] = currentEntry.copyWith(
+      nextActions: updatedActions,
+      supportNoteBreakdown: updatedBreakdown,
+    );
+
+    _persistAndNotify();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
+  }
+
+  void deleteAllNextActions({
+    required WorkEntry entry,
+    bool clearTextReplyNeeded = false,
+  }) {
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    final index = activeEntries.indexWhere((item) => item.id == entry.id);
+    if (index == -1) return;
+
+    final currentEntry = activeEntries[index];
+    var updatedBreakdown = currentEntry.supportNoteBreakdown;
+    for (final action in currentEntry.nextActions) {
+      updatedBreakdown = _supportBreakdownWithoutAction(
+        updatedBreakdown,
+        action.text,
+      );
+    }
+
+    activeEntries[index] = currentEntry.copyWith(
+      nextActions: const [],
+      supportNoteBreakdown: updatedBreakdown,
+      textReplyNeeded: clearTextReplyNeeded
+          ? false
+          : currentEntry.textReplyNeeded,
+    );
+
+    _persistAndNotify();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
+  }
+
+  String _supportBreakdownWithoutAction(String value, String actionText) {
+    final target = _normalizedActionLine(actionText);
+    if (target.isEmpty || value.trim().isEmpty) return value;
+
+    final lines = value.split(RegExp(r'\r?\n'));
+    final kept = <String>[];
+    var inNextActionSection = false;
+
+    for (final line in lines) {
+      final normalized = line.trim().toLowerCase();
+      final isNextActionHeading =
+          normalized.startsWith('next action') ||
+          normalized.startsWith('next step');
+      final isOtherHeading =
+          normalized.startsWith('anything to follow up') ||
+          normalized.startsWith('overall impression') ||
+          normalized.startsWith('support given') ||
+          normalized.startsWith('issue/problem') ||
+          normalized.startsWith('main topic') ||
+          normalized.startsWith('what happened') ||
+          normalized.startsWith('work/task completed') ||
+          normalized.startsWith('outcome') ||
+          normalized.startsWith('referrals') ||
+          normalized.startsWith('local referral') ||
+          normalized.startsWith('safety concerns');
+
+      if (isNextActionHeading) {
+        inNextActionSection = true;
+        kept.add(line);
+        continue;
+      }
+
+      if (inNextActionSection && isOtherHeading) {
+        inNextActionSection = false;
+      }
+
+      if (inNextActionSection && _normalizedActionLine(line) == target) {
+        continue;
+      }
+
+      kept.add(line);
+    }
+
+    return kept.join('\n').trim();
+  }
+
+  String _normalizedActionLine(String value) {
+    return value
+        .replaceFirst(RegExp(r'^\s*\d+[\.)]\s*'), '')
+        .replaceFirst(RegExp(r'^\s*[-*]\s*'), '')
+        .trim()
+        .toLowerCase();
   }
 
   bool renameClient({required String oldName, required String newName}) {

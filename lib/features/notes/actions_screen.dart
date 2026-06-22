@@ -81,46 +81,15 @@ class _NextActionsTab extends StatelessWidget {
   }
 
   List<_EntryAction> get _completedActions {
-    final actions = <_EntryAction>[];
-
-    for (final entry in entries) {
-      for (final action in entry.nextActions) {
-        if (action.isCompleted) {
-          actions.add(_EntryAction(entry: entry, action: action));
-        }
-      }
-    }
-
-    actions.sort((a, b) {
-      final left =
-          a.action.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final right =
-          b.action.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-
-      return right.compareTo(left);
-    });
-
-    return actions;
+    return const [];
   }
 
-  void _toggleAction({
+  void _deleteAction({
     required BuildContext context,
     required WorkEntry entry,
     required NextActionItem action,
-    required bool completed,
   }) {
-    final updatedActions = entry.nextActions.map((item) {
-      if (item.id != action.id) return item;
-
-      return item.copyWith(
-        completedAt: completed ? DateTime.now() : null,
-        clearCompletedAt: !completed,
-      );
-    }).toList();
-
-    context.read<AppState>().updateEntry(
-      entry.copyWith(nextActions: updatedActions),
-    );
+    context.read<AppState>().deleteNextAction(entry: entry, action: action);
   }
 
   @override
@@ -145,7 +114,7 @@ class _NextActionsTab extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Actions come from the Next action(s) section when you finish a visit. Ticking an action logs the completion date and time.',
+                'Actions come from the Next action(s) section when you finish a visit. Ticking or deleting an action removes it from the saved entry.',
                 style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
             ],
@@ -171,11 +140,15 @@ class _NextActionsTab extends StatelessWidget {
                         _NextActionTile(
                           entry: item.entry,
                           action: item.action,
-                          onChanged: (completed) => _toggleAction(
+                          onChanged: (_) => _deleteAction(
                             context: context,
                             entry: item.entry,
                             action: item.action,
-                            completed: completed,
+                          ),
+                          onDelete: () => _deleteAction(
+                            context: context,
+                            entry: item.entry,
+                            action: item.action,
                           ),
                         ),
                     ],
@@ -191,11 +164,15 @@ class _NextActionsTab extends StatelessWidget {
                     _NextActionTile(
                       entry: item.entry,
                       action: item.action,
-                      onChanged: (completed) => _toggleAction(
+                      onChanged: (_) => _deleteAction(
                         context: context,
                         entry: item.entry,
                         action: item.action,
-                        completed: completed,
+                      ),
+                      onDelete: () => _deleteAction(
+                        context: context,
+                        entry: item.entry,
+                        action: item.action,
                       ),
                     ),
                 ],
@@ -220,11 +197,13 @@ class _NextActionTile extends StatelessWidget {
     required this.entry,
     required this.action,
     required this.onChanged,
+    required this.onDelete,
   });
 
   final WorkEntry entry;
   final NextActionItem action;
   final ValueChanged<bool> onChanged;
+  final VoidCallback onDelete;
 
   Future<void> _openNote(BuildContext context) async {
     await showModalBottomSheet<void>(
@@ -237,8 +216,6 @@ class _NextActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final completedAt = action.completedAt;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: CheckboxListTile(
@@ -246,10 +223,20 @@ class _NextActionTile extends StatelessWidget {
         onChanged: (value) => onChanged(value ?? false),
         controlAffinity: ListTileControlAffinity.leading,
         activeColor: const Color(0xFF31E981),
-        secondary: IconButton(
-          tooltip: 'Open note',
-          onPressed: () => _openNote(context),
-          icon: const Icon(Icons.note_alt_outlined),
+        secondary: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Open note',
+              onPressed: () => _openNote(context),
+              icon: const Icon(Icons.note_alt_outlined),
+            ),
+            IconButton(
+              tooltip: 'Delete action',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
         title: Text(
           action.text,
@@ -260,11 +247,7 @@ class _NextActionTile extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        subtitle: Text(
-          completedAt == null
-              ? '${entry.client} | ${formatDate(entry.date)}'
-              : '${entry.client} | completed ${_dateTimeText(context, completedAt)}',
-        ),
+        subtitle: Text('${entry.client} | ${formatDate(entry.date)}'),
       ),
     );
   }

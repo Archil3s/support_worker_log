@@ -60,4 +60,27 @@ void main() {
 
     expect(restored?.noteText, longNote);
   });
+
+  test('removeMeta deletes stored support note metadata', () async {
+    final entry = WorkEntry(
+      id: 'paye-note-remove',
+      client: 'Jane Smith',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 6, 19),
+      startTime: const TimeOfDay(hour: 9, minute: 0),
+      minutes: 60,
+      notes: const [],
+    );
+
+    await LocalSupportNoteService.saveDraftMeta(
+      entry: entry,
+      initials: '',
+      status: EntrySupportNoteStatus.finished,
+      noteText: 'Next step\nCall back tomorrow.',
+    );
+
+    await LocalSupportNoteService.removeMeta(entry.id);
+
+    expect(await LocalSupportNoteService.loadMeta(entry.id), isNull);
+  });
 }

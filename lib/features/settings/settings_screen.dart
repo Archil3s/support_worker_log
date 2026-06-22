@@ -165,8 +165,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> confirmRemoveClient(String client) async {
     final appState = context.read<AppState>();
     final usageCount = appState.clientUsageCount(client);
+    final payeMode = appState.isPayeMode;
 
-    if (usageCount > 0) {
+    if (!payeMode && usageCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -177,7 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    if (appState.clients.length <= 1) {
+    if (!payeMode && appState.clients.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('At least one client is required')),
       );
@@ -188,9 +189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Delete Client?'),
+          title: Text(payeMode ? 'Remove PAYE person?' : 'Delete Client?'),
           content: Text(
-            'Delete "$client"? This client is not used by any entries.',
+            payeMode
+                ? 'Remove "$client" from the PAYE people list? Existing saved notes stay under that name.'
+                : 'Delete "$client"? This client is not used by any entries.',
           ),
           actions: [
             TextButton(
@@ -199,7 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Delete'),
+              child: Text(payeMode ? 'Remove' : 'Delete'),
             ),
           ],
         );
@@ -208,14 +211,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed != true) return;
 
-    final removed = context.read<AppState>().removeClient(client);
+    final removed = payeMode
+        ? context.read<AppState>().removeClientFromList(client)
+        : context.read<AppState>().removeClient(client);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          removed ? 'Client deleted' : 'Client could not be deleted',
+          removed
+              ? payeMode
+                    ? 'PAYE person removed'
+                    : 'Client deleted'
+              : payeMode
+              ? 'PAYE person could not be removed'
+              : 'Client could not be deleted',
         ),
       ),
+    );
+  }
+
+  Future<void> confirmClearClients() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Remove all PAYE people?'),
+          content: const Text(
+            'This clears the PAYE people dropdown. Existing saved notes and entries are not deleted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.delete_sweep_outlined),
+              label: const Text('Remove All'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final count = context.read<AppState>().clearClientList();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Removed $count PAYE people from the list')),
     );
   }
 
@@ -593,17 +637,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 12),
         SectionCard(
-          title: 'Client Manager',
+          title: appState.isPayeMode ? 'PAYE People' : 'Client Manager',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: clientController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'New client',
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: appState.isPayeMode
+                            ? 'New PAYE person'
+                            : 'New client',
                       ),
                     ),
                   ),
@@ -616,10 +663,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _ClientManagerTile(
                   client: client,
                   usageCount: appState.clientUsageCount(client),
-                  canDelete: appState.canRemoveClient(client),
+                  canDelete:
+                      appState.isPayeMode || appState.canRemoveClient(client),
+                  deleteLabel: appState.isPayeMode
+                      ? 'Remove from PAYE list'
+                      : null,
                   onRename: () => renameClient(client),
                   onDelete: () => confirmRemoveClient(client),
                 ),
+              if (appState.isPayeMode) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: appState.clients.isEmpty
+                      ? null
+                      : confirmClearClients,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('Remove All PAYE People'),
+                ),
+              ],
             ],
           ),
         ),
@@ -765,6 +826,7 @@ class _ClientManagerTile extends StatelessWidget {
     required this.client,
     required this.usageCount,
     required this.canDelete,
+    this.deleteLabel,
     required this.onRename,
     required this.onDelete,
   });
@@ -772,6 +834,7 @@ class _ClientManagerTile extends StatelessWidget {
   final String client;
   final int usageCount;
   final bool canDelete;
+  final String? deleteLabel;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
@@ -794,9 +857,11 @@ class _ClientManagerTile extends StatelessWidget {
             onPressed: onRename,
           ),
           IconButton(
-            tooltip: canDelete
-                ? 'Delete unused client'
-                : 'Cannot delete a client used by entries',
+            tooltip:
+                deleteLabel ??
+                (canDelete
+                    ? 'Delete unused client'
+                    : 'Cannot delete a client used by entries'),
             icon: const Icon(Icons.delete_outline),
             onPressed: canDelete ? onDelete : null,
           ),

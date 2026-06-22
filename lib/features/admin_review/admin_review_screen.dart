@@ -204,29 +204,16 @@ class AdminReviewScreen extends StatelessWidget {
   }
 
   void _markReplyDone(BuildContext context, WorkEntry entry) {
-    final updatedActions = entry.nextActions.map((action) {
-      if (action.isCompleted) return action;
-      return action.copyWith(completedAt: DateTime.now());
-    }).toList();
-
-    context.read<AppState>().updateEntry(
-      entry.copyWith(textReplyNeeded: false, nextActions: updatedActions),
+    context.read<AppState>().deleteAllNextActions(
+      entry: entry,
+      clearTextReplyNeeded: true,
     );
   }
 
   void _completeOpenActions(BuildContext context, WorkEntry entry) {
-    final updatedActions = entry.nextActions.map((action) {
-      if (action.isCompleted) return action;
-      return action.copyWith(completedAt: DateTime.now());
-    }).toList();
-
-    context.read<AppState>().updateEntry(
-      entry.copyWith(
-        nextActions: updatedActions,
-        textReplyNeeded: entry.type.isWrittenContact
-            ? false
-            : entry.textReplyNeeded,
-      ),
+    context.read<AppState>().deleteAllNextActions(
+      entry: entry,
+      clearTextReplyNeeded: entry.type.isWrittenContact,
     );
   }
 }
