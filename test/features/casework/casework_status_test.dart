@@ -481,6 +481,27 @@ void main() {
     await tester.tap(msdTab);
     await tester.pumpAndSettle();
 
+    expect(find.text('What MSD needs to grant EH'), findsOneWidget);
+    expect(
+      find.text('EH grant requirements to cover with MSD'),
+      findsOneWidget,
+    );
+    expect(find.text('Required item'), findsWidgets);
+    expect(find.text('How to explain'), findsWidgets);
+    expect(find.text('Do not say'), findsWidgets);
+    expect(
+      find.text(
+        'Immediate need: no safe place tonight or for the next few nights.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'State where the person slept last night, where they can safely sleep tonight, and what risk exists if EH is not granted today.',
+      ),
+      findsOneWidget,
+    );
+
     await Scrollable.ensureVisible(
       tester.element(find.text('MSD language to avoid')),
       alignment: 0.5,

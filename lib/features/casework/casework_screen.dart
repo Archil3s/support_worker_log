@@ -686,6 +686,12 @@ class _CaseworkScreenState extends State<CaseworkScreen> {
           ),
           const SizedBox(height: 14),
           const _DesktopCard(
+            title: 'What MSD needs to grant EH',
+            icon: Icons.fact_check_outlined,
+            child: _MsdGrantRequirementsGuide(),
+          ),
+          const SizedBox(height: 16),
+          const _DesktopCard(
             title: 'Language to avoid / use instead',
             icon: Icons.record_voice_over_outlined,
             child: _MsdLanguageGuide(),
@@ -6060,6 +6066,97 @@ class _WordingGrid extends StatelessWidget {
   }
 }
 
+class _MsdGrantRequirementsGuide extends StatelessWidget {
+  const _MsdGrantRequirementsGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'EH grant requirements to cover with MSD',
+          style: TextStyle(color: _caseworkInk, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Use this to prepare the call. It is a worker prompt, not a guarantee of approval.',
+          style: TextStyle(color: _caseworkMuted, height: 1.35),
+        ),
+        const SizedBox(height: 10),
+        for (final requirement in _msdGrantRequirements) ...[
+          _MsdGrantRequirementTile(requirement: requirement),
+          if (requirement != _msdGrantRequirements.last)
+            const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _MsdGrantRequirementTile extends StatelessWidget {
+  const _MsdGrantRequirementTile({required this.requirement});
+
+  final _MsdGrantRequirement requirement;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _caseworkPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _caseworkLine),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 760;
+          final item = _LanguageColumn(
+            title: 'Required item',
+            text: requirement.item,
+            color: const Color(0xFF125781),
+          );
+          final explain = _LanguageColumn(
+            title: 'How to explain',
+            text: requirement.explain,
+            color: const Color(0xFF1F7A3B),
+          );
+          final avoid = _LanguageColumn(
+            title: 'Do not say',
+            text: requirement.avoid,
+            color: const Color(0xFFB85800),
+          );
+
+          if (!columns) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                item,
+                const SizedBox(height: 8),
+                explain,
+                const SizedBox(height: 8),
+                avoid,
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: item),
+              const SizedBox(width: 12),
+              Expanded(child: explain),
+              const SizedBox(width: 12),
+              Expanded(child: avoid),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _MsdLanguageGuide extends StatelessWidget {
   const _MsdLanguageGuide();
 
@@ -8425,6 +8522,18 @@ class _MsdLanguagePair {
   final String useInstead;
 }
 
+class _MsdGrantRequirement {
+  const _MsdGrantRequirement({
+    required this.item,
+    required this.explain,
+    required this.avoid,
+  });
+
+  final String item;
+  final String explain;
+  final String avoid;
+}
+
 class _QuickLogAction {
   const _QuickLogAction({
     required this.label,
@@ -10382,6 +10491,91 @@ const _wordingActions = [
     focus: _CaseworkFocus.msd,
     logCategory: 'Wording',
     logText: 'Motel/supplier wording added',
+  ),
+];
+
+const _msdGrantRequirements = [
+  _MsdGrantRequirement(
+    item: 'Immediate need: no safe place tonight or for the next few nights.',
+    explain:
+        'State where the person slept last night, where they can safely sleep tonight, and what risk exists if EH is not granted today.',
+    avoid:
+        'Do not say they are just looking for somewhere better or want a motel.',
+  ),
+  _MsdGrantRequirement(
+    item: 'No safe, reasonable private, whanau or friend option is available.',
+    explain:
+        'Name the options checked, why each one is unavailable, unsafe, overcrowded, too short-term, or not reasonable for this person.',
+    avoid:
+        'Do not say they have not asked anyone or they refuse all family help.',
+  ),
+  _MsdGrantRequirement(
+    item: 'Current place has ended, is unavailable, or is not safe to stay in.',
+    explain:
+        'Use facts: asked to leave, couch-surfing ended, violence risk, overcrowding, eviction date, health risk, bail condition, or motel exit.',
+    avoid:
+        'Do not describe the person as choosing homelessness or being difficult.',
+  ),
+  _MsdGrantRequirement(
+    item: 'Identity, eligibility and household details can be confirmed.',
+    explain:
+        'Have DOB, client number if known, ID or alternative ID pathway, partner/children details, immigration/residence status if relevant.',
+    avoid:
+        'Do not guess eligibility or say documents are impossible without asking MSD what alternative proof they will accept.',
+  ),
+  _MsdGrantRequirement(
+    item:
+        'Income, available money, bank access and benefit situation are clear.',
+    explain:
+        'Explain current benefit/wages, cash on hand, bank access, payment card issues, partner income, and whether hardship support is needed.',
+    avoid:
+        'Do not say they cannot pay anything without explaining the actual money available and hardship reason.',
+  ),
+  _MsdGrantRequirement(
+    item:
+        'Emergency Housing Contribution has been explained or hardship noted.',
+    explain:
+        'Record that the contribution may apply after 7 nights, whether it is affordable, and what support is needed if payments are already a barrier.',
+    avoid:
+        'Do not promise MSD will waive the contribution or ignore previous contribution arrears.',
+  ),
+  _MsdGrantRequirement(
+    item: 'Accommodation type is suitable for the household and safety needs.',
+    explain:
+        'Tell MSD about children, pregnancy, disability, medication, pets, vehicle, accessibility, family violence, exclusion zones, bail or EM address limits.',
+    avoid:
+        'Do not accept any placement as suitable if there is a known safety, disability, tamariki, Corrections or health issue.',
+  ),
+  _MsdGrantRequirement(
+    item: 'Evidence is ready or the worker can explain what is still coming.',
+    explain:
+        'Mention police/FV evidence, health letters, tenancy notice, Corrections/MOJ information, school/OT/support agency evidence, and what can be sent next.',
+    avoid:
+        'Do not say there is no evidence; say what has been checked and what evidence is pending.',
+  ),
+  _MsdGrantRequirement(
+    item:
+        'Housing search and re-grant activity is recorded when EH is ongoing.',
+    explain:
+        'List applications, viewings, contacts, declines, no responses, barriers, CMM actions, and next housing steps before asking for a re-grant.',
+    avoid:
+        'Do not say nothing has been done since the last grant; explain barriers and actions taken.',
+  ),
+  _MsdGrantRequirement(
+    item:
+        'Previous EH warnings, exits, declines, or supplier issues are addressed.',
+    explain:
+        'Ask what issue MSD needs resolved, then explain the person has a plan for appointments, contribution, conduct, supplier safety, or housing activity.',
+    avoid:
+        'Do not argue that old warnings do not matter or blame the supplier without facts.',
+  ),
+  _MsdGrantRequirement(
+    item:
+        'The person can attend, be contacted, and follow the next step today.',
+    explain:
+        'Confirm phone access, transport, appointment time, support worker attendance, safe contact method, and who will do the next action.',
+    avoid:
+        'Do not say they will sort it later without a clear contact plan and next step.',
   ),
 ];
 
