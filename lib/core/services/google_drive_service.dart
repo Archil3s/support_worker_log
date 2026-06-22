@@ -1107,9 +1107,9 @@ class GoogleDriveService {
       contents: supportNoteBreakdownTemplate,
     ),
     _TextTemplate(
-      name: 'Referral Tracking Template.txt',
+      name: 'Referrals Template.txt',
       contents:
-          'Local Referral Tracking\n\n'
+          'Referrals\n\n'
           'Police / emergency services:\n'
           'GP / crisis team:\n'
           'Sexual harm services:\n'
