@@ -2,12 +2,14 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/general_action.dart';
+import '../../core/models/google_drive_file.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
@@ -158,26 +160,34 @@ class _NotesListTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final payeMode = context.watch<AppState>().isPayeMode;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
         _NotesOverview(entries: entries),
         const SizedBox(height: 12),
         SectionCard(
-          title: 'Local Notes',
+          title: payeMode ? 'PAYE Notes' : 'Local Notes',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.icon(
                 onPressed: onChooseFolder,
                 icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('Use Default MR NOTES FOLDER'),
+                label: Text(
+                  payeMode
+                      ? 'Use Default PAYE Notes Folder'
+                      : 'Use Default MR NOTES FOLDER',
+                ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Create local support-note files attached to saved entries. Files are stored only in the folder you choose.',
+              Text(
+                payeMode
+                    ? 'Create, test, save, open, and remove PAYE Google Docs notes from saved PAYE entries.'
+                    : 'Create local support-note files attached to saved entries. Files are stored only in the folder you choose.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+                style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
             ],
           ),
@@ -1218,11 +1228,67 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         meta = updated;
         message = 'Saved locally as ${updated.fileName}';
       });
+      _updatePayeEntry(appState);
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
         message = 'Could not save local note: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveDraftOnly(
+    String nextMessage, {
+    bool showMessage = true,
+  }) async {
+    final updated = await LocalSupportNoteService.saveDraftMeta(
+      entry: widget.entry,
+      initials: initialsController.text,
+      status: status,
+      noteText: noteController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      meta = updated;
+      if (showMessage) message = nextMessage;
+    });
+    _updatePayeEntry(context.read<AppState>());
+  }
+
+  void _updatePayeEntry(AppState appState) {
+    if (!appState.isPayeMode) return;
+
+    appState.updatePayeEntry(
+      widget.entry.copyWith(supportNoteBreakdown: noteController.text.trim()),
+    );
+  }
+
+  Future<void> _saveDraftAndReturn() async {
+    setState(() {
+      busy = true;
+      message = 'Saving note draft...';
+    });
+
+    try {
+      await _saveDraftOnly('Draft saved in the app.');
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not save note draft: $error';
       });
     } finally {
       if (mounted) {
@@ -1258,9 +1324,11 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     try {
       final appState = context.read<AppState>();
       if (appState.isPayeMode) {
+        await _saveDraftOnly('Note saved in the app.', showMessage: false);
         final updatedEntry = widget.entry.copyWith(
           supportNoteBreakdown: noteController.text,
         );
+        appState.updatePayeEntry(updatedEntry);
         final file = await appState.savePayeNoteToDrive(updatedEntry);
         final discovered = await appState.findEntryNoteInCurrentDrive(
           updatedEntry,
@@ -1333,6 +1401,69 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           busy = false;
         });
       }
+    }
+  }
+
+  Future<void> _testGoogleDocsSave() async {
+    setState(() {
+      busy = true;
+      message = 'Creating temporary Google Doc test...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      await _saveDraftOnly('Note saved in the app.', showMessage: false);
+      final updatedEntry = widget.entry.copyWith(
+        supportNoteBreakdown: noteController.text,
+      );
+      appState.updatePayeEntry(updatedEntry);
+
+      final file = await appState.saveTemporaryPayeNoteToDrive(updatedEntry);
+      final link = _googleDocsLink(file);
+
+      if (!mounted) return;
+
+      setState(() {
+        message =
+            'Temporary Google Doc opened. It will be removed from Drive in 45 seconds.';
+      });
+      unawaited(_deleteTemporaryGoogleDoc(appState, file));
+      await _launchDriveLink(Uri.parse(link));
+    } catch (error) {
+      if (!mounted) return;
+
+      await _saveDraftOnly(
+        'Google Docs test failed: $error\nNote draft is still saved in the app.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteTemporaryGoogleDoc(
+    AppState appState,
+    GoogleDriveFile file,
+  ) async {
+    await Future<void>.delayed(const Duration(seconds: 45));
+
+    try {
+      await appState.deletePayeDriveFile(file.id);
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Temporary Google Docs test file permanently deleted.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message =
+            'Temporary Google Doc opened, but could not be deleted: $error';
+      });
     }
   }
 
@@ -1507,16 +1638,25 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   Future<void> _openDriveFile() async {
     final current = driveMeta;
+    final appState = context.read<AppState>();
+    final accountMeta = _driveMetaForAccount(
+      current,
+      _currentGoogleAccountEmail(appState),
+    );
     final link = current?.openLink;
 
-    if (current == null || link == null || link.isEmpty) {
+    if (current == null ||
+        accountMeta == null ||
+        link == null ||
+        link.isEmpty) {
       setState(() {
-        message = 'Create the Google Drive note file first.';
+        message =
+            'Save the Google Drive note file under the selected account first.';
       });
       return;
     }
 
-    await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+    await _launchDriveLink(Uri.parse(link));
   }
 
   String _friendlyError(Object error) {
@@ -1531,6 +1671,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
+    final payeMode = context.watch<AppState>().isPayeMode;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1565,7 +1706,11 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           FilledButton.icon(
             onPressed: busy ? null : _chooseFolder,
             icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Use Default MR NOTES FOLDER'),
+            label: Text(
+              payeMode
+                  ? 'Use Default PAYE Notes Folder'
+                  : 'Use Default MR NOTES FOLDER',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1583,10 +1728,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             enabled: !busy,
             minLines: 8,
             maxLines: 14,
-            decoration: const InputDecoration(
-              labelText: 'Support worker note',
+            decoration: InputDecoration(
+              labelText: payeMode ? 'PAYE note' : 'Support worker note',
               alignLabelWithHint: true,
-              prefixIcon: Icon(Icons.notes_outlined),
+              prefixIcon: const Icon(Icons.notes_outlined),
             ),
           ),
           const SizedBox(height: 14),
@@ -1623,7 +1768,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: SelectableText(
-                  'Attached Google Drive file:\n${driveMeta!.fileName}',
+                  payeMode
+                      ? 'Google Docs note:\n${driveMeta!.fileName}'
+                      : 'Attached Google Drive file:\n${driveMeta!.fileName}',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -1652,11 +1799,20 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             onPressed: busy ? null : _save,
             icon: const Icon(Icons.save_outlined),
             label: Text(
-              meta == null
+              payeMode
+                  ? 'Save PAYE Note'
+                  : meta == null
                   ? 'Create Local Note File'
                   : 'Update / Rename Local Note File',
             ),
           ),
+          if (payeMode) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'This always saves the PAYE note in the app. Local DOCX and Google Drive are optional copies.',
+              style: TextStyle(color: Color(0xFF8396C7), fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: busy ? null : _openFile,
@@ -1664,25 +1820,47 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             label: const Text('Open Attached Local File'),
           ),
           const SizedBox(height: 8),
+          if (payeMode) ...[
+            OutlinedButton.icon(
+              onPressed: busy ? null : _testGoogleDocsSave,
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Test Google Docs Save & Remove'),
+            ),
+            const SizedBox(height: 8),
+          ],
           FilledButton.icon(
             onPressed: busy ? null : _saveToDrive,
             icon: const Icon(Icons.add_to_drive_outlined),
             label: Text(
               driveMeta == null
-                  ? 'Create Google Drive Note File'
+                  ? payeMode
+                        ? 'Save Google Docs Note'
+                        : 'Create Google Drive Note File'
+                  : payeMode
+                  ? 'Update Google Docs Note'
                   : 'Create Updated Google Drive Note File',
             ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
+            onPressed: busy ? null : _saveDraftAndReturn,
+            icon: const Icon(Icons.drafts_outlined),
+            label: const Text('Save Draft & Return'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
             onPressed: busy ? null : _openDriveFile,
             icon: const Icon(Icons.open_in_new),
-            label: const Text('Open Google Drive File'),
+            label: Text(
+              payeMode ? 'Open Google Docs Note' : 'Open Google Drive File',
+            ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Local files save to the folder you choose. Google Drive files save to the Client Notes folder created in More > Google Drive.',
-            style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+          Text(
+            payeMode
+                ? 'PAYE Google Docs notes save to the PAYE notes folder for the selected PAYE Google account.'
+                : 'Local files save to the folder you choose. Google Drive files save to the Client Notes folder created in More > Google Drive.',
+            style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],
       ),
@@ -1794,4 +1972,21 @@ Color _statusColor(EntrySupportNoteStatus status) {
     case EntrySupportNoteStatus.submitted:
       return const Color(0xFF8B5CF6);
   }
+}
+
+Future<void> _launchDriveLink(Uri uri) async {
+  final launched = kIsWeb
+      ? await launchUrl(uri, webOnlyWindowName: '_blank')
+      : await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  if (!launched) {
+    await launchUrl(uri);
+  }
+}
+
+String _googleDocsLink(GoogleDriveFile file) {
+  final link = file.webViewLink?.trim();
+  if (link != null && link.isNotEmpty) return link;
+
+  return 'https://docs.google.com/document/d/${Uri.encodeComponent(file.id)}/edit';
 }
