@@ -116,6 +116,11 @@ class LocalSupportNoteService {
     return null;
   }
 
+  static Future<void> removeMeta(String entryId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_metaKey(entryId));
+  }
+
   static Future<EntrySupportNoteMeta> saveNote({
     required WorkEntry entry,
     required String initials,

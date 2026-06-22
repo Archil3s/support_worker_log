@@ -1013,6 +1013,8 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         );
         return;
       }
+    } else {
+      await appState.deleteStoredSupportNoteData(entry.id);
     }
 
     final removed = appState.deleteEntry(entry);
@@ -1036,22 +1038,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return;
     }
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Entry deleted'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            appState.restoreEntry(removed);
-            if (mounted) {
-              setState(() {
-                recentlySavedEntry = removed.entry;
-              });
-            }
-          },
-        ),
-      ),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Entry deleted')));
   }
 
   void _snack(String message) {
@@ -1213,7 +1200,7 @@ Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
                   ? 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
                         'Any matching PAYE Google Doc under this Google account will be permanently deleted, not moved to bin.'
                   : 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
-                        'This syncs the app entry deletion, but does not remove existing Google Drive DOCX files.',
+                        'Local saved note metadata will be permanently removed. This cannot be undone.',
             ),
             actions: [
               TextButton(
