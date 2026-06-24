@@ -7,7 +7,7 @@ class AppLockService {
   static const _unlockValidUntilKey = 'app_lock_unlock_valid_until_v1';
   static const _allowedFailedAttempts = 2;
   static const _lockoutDuration = Duration(minutes: 5);
-  static const _unlockDuration = Duration(hours: 24);
+  static const _unlockDuration = Duration(hours: 1);
 
   bool verifyPassword(String password) {
     return password.trim() == _appPassword;

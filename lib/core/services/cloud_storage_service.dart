@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
@@ -21,7 +21,10 @@ class CloudStorageService {
   static const _googleSignInTimeout = Duration(seconds: 75);
   static const _sessionStartedAtKey =
       'support_worker_log_session_started_at_v1';
-  static const _sessionMaxAge = Duration(hours: 24);
+  static const _sessionMaxAge = Duration(hours: 1);
+
+  @visibleForTesting
+  static Duration get sessionMaxAgeForTesting => _sessionMaxAge;
 
   User? get currentUser => _auth.currentUser;
 
