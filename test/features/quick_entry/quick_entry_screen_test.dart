@@ -51,4 +51,25 @@ void main() {
 
     expect(notes, const ['Transport']);
   });
+
+  test('empty Work support note still keeps the core note format', () {
+    final note = buildWorkSupportNoteBreakdownForTest(
+      mainTopic: '',
+      outcomes: '',
+      nextActions: '',
+      impression: '',
+      referrals: 'No referrals discussed or made this visit.',
+      safetyConcerns: 'No safety concerns noted.',
+    );
+
+    expect(note, contains('Main topic(s)'));
+    expect(note, contains('Outcome(s)'));
+    expect(note, contains('Next action(s)'));
+    expect(note, contains('Overall impression'));
+    expect(note, contains('Referrals'));
+    expect(
+      note,
+      contains('Safety concerns for sexual harm survivors and mental health'),
+    );
+  });
 }

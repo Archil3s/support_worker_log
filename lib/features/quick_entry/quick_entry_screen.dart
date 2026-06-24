@@ -207,6 +207,25 @@ String _buildSupportNoteBreakdown({
   ].join('\n').trim();
 }
 
+@visibleForTesting
+String buildWorkSupportNoteBreakdownForTest({
+  required String mainTopic,
+  required String outcomes,
+  required String nextActions,
+  required String impression,
+  required String referrals,
+  required String safetyConcerns,
+}) {
+  return _buildSupportNoteBreakdown(
+    mainTopic: mainTopic,
+    outcomes: outcomes,
+    nextActions: nextActions,
+    impression: impression,
+    referrals: referrals,
+    safetyConcerns: safetyConcerns,
+  );
+}
+
 String _buildPayeSupportNoteBreakdown({
   required String whatHappened,
   required String workTaskCompleted,
@@ -1663,43 +1682,7 @@ class _SupportNoteBreakdownSheetState
   }
 
   void _save() {
-    final breakdown = _currentBreakdown();
-    final mainTopic = _cleanSupportNoteSection(mainTopicController.text);
-    final outcomes = _cleanSupportNoteSection(outcomesController.text);
-    final impression = _cleanSupportNoteSection(impressionController.text);
-    final safetyConcerns = noSafetyConcerns
-        ? 'No safety concerns noted.'
-        : _cleanSupportNoteSection(safetyConcernsController.text);
-    final referralSummary = _referralSummary();
-
-    final payeMode = context.read<AppState>().isPayeMode;
-    final error = payeMode
-        ? null
-        : _validationError(
-            mainTopic: mainTopic,
-            outcomes: outcomes,
-            impression: impression,
-            referrals: referralSummary,
-            safetyConcerns: safetyConcerns,
-          );
-
-    if (error != null) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(error),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        );
-      return;
-    }
-
-    Navigator.of(context).pop(breakdown);
+    Navigator.of(context).pop(_currentBreakdown());
   }
 
   String _currentBreakdown() {
@@ -1745,24 +1728,6 @@ class _SupportNoteBreakdownSheetState
     draftAutosaveTimer?.cancel();
     widget.onSaveDraft(_currentBreakdown());
     Navigator.of(context).pop();
-  }
-
-  String? _validationError({
-    required String mainTopic,
-    required String outcomes,
-    required String impression,
-    required String referrals,
-    required String safetyConcerns,
-  }) {
-    if (mainTopic.isEmpty) return 'Add the main topic before saving.';
-    if (outcomes.isEmpty) return 'Add the outcome before saving.';
-    if (impression.isEmpty) return 'Add the overall impression before saving.';
-    if (referrals.isEmpty) return 'Complete referrals.';
-    if (safetyConcerns.isEmpty) {
-      return 'Add safety concerns or mark that none were noted.';
-    }
-
-    return null;
   }
 
   String _referralSummary() {
@@ -2255,7 +2220,14 @@ class _SupportNoteBreakdownSheetState
               compact: true,
             ),
             const SizedBox(height: 12),
-            Expanded(child: SingleChildScrollView(child: _stepBody())),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: keyboardBottom + 160),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                child: _stepBody(),
+              ),
+            ),
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: _saveDraftAndClose,
@@ -2450,7 +2422,13 @@ class _SupportNoteField extends StatelessWidget {
       autofocus: autofocus,
       minLines: expanded ? 8 : 3,
       maxLines: expanded ? 18 : 7,
+      keyboardType: TextInputType.multiline,
       textInputAction: TextInputAction.newline,
+      scrollPadding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 180,
+      ),
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,

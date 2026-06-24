@@ -106,6 +106,31 @@ void main() {
     expect(restored?.noteText, longNote);
   });
 
+  test('empty Work draft still saves in app', () async {
+    final entry = WorkEntry(
+      id: 'work-note-empty',
+      client: 'Jane Smith',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 6, 19),
+      startTime: const TimeOfDay(hour: 9, minute: 0),
+      minutes: 60,
+      notes: const [],
+    );
+
+    await LocalSupportNoteService.saveDraftMeta(
+      entry: entry,
+      initials: '',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: '',
+    );
+
+    final restored = await LocalSupportNoteService.loadMeta(entry.id);
+
+    expect(restored?.initials, 'JS');
+    expect(restored?.noteText, '');
+    expect(restored?.status, EntrySupportNoteStatus.inProgress);
+  });
+
   test('removeMeta deletes stored support note metadata', () async {
     final entry = WorkEntry(
       id: 'paye-note-remove',

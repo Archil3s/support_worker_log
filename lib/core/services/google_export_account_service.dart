@@ -84,9 +84,12 @@ class GoogleExportAccountService {
     final cleaned = email.trim();
     if (cleaned.isEmpty) return;
 
+    final currentEmail = emailFor(scope)?.trim().toLowerCase();
     _preferredEmails[scope] = cleaned;
     _knownEmails.add(cleaned);
-    _connections.remove(scope);
+    if (currentEmail != cleaned.toLowerCase()) {
+      _connections.remove(scope);
+    }
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_preferredEmailKey(scope), cleaned);
