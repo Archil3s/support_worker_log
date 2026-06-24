@@ -14,6 +14,7 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
+import '../../shared/widgets/note_text_input_tools.dart';
 import '../../shared/widgets/support_note_breakdown_text.dart';
 import '../entries/local_support_note_button.dart';
 
@@ -2404,7 +2405,7 @@ class _NoActionPanel extends StatelessWidget {
   }
 }
 
-class _SupportNoteField extends StatelessWidget {
+class _SupportNoteField extends StatefulWidget {
   const _SupportNoteField({
     required this.controller,
     required this.label,
@@ -2428,36 +2429,72 @@ class _SupportNoteField extends StatelessWidget {
   final bool expanded;
 
   @override
-  Widget build(BuildContext context) {
-    final limit = maxWords;
-    final isOverLimit = limit != null && wordCount > limit;
-    final countText = limit == null ? '$wordCount words' : '$wordCount/$limit';
+  State<_SupportNoteField> createState() => _SupportNoteFieldState();
+}
 
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      minLines: expanded ? 8 : 3,
-      maxLines: expanded ? 18 : 7,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      scrollPadding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
-      ),
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        helperText: helper,
-        counterText: countText,
-        counterStyle: TextStyle(
-          color: isOverLimit ? Colors.redAccent : const Color(0xFF8396C7),
-          fontWeight: isOverLimit ? FontWeight.w900 : FontWeight.w500,
+class _SupportNoteFieldState extends State<_SupportNoteField> {
+  late final FocusNode focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final limit = widget.maxWords;
+    final isOverLimit = limit != null && widget.wordCount > limit;
+    final countText = limit == null
+        ? '${widget.wordCount} words'
+        : '${widget.wordCount}/$limit';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: NoteTextInputTools(
+            controller: widget.controller,
+            focusNode: focusNode,
+            onChanged: widget.onChanged,
+          ),
         ),
-        alignLabelWithHint: true,
-        prefixIcon: const Icon(Icons.notes_outlined),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: widget.controller,
+          focusNode: focusNode,
+          autofocus: widget.autofocus,
+          minLines: widget.expanded ? 8 : 3,
+          maxLines: widget.expanded ? 18 : 7,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          scrollPadding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
+          ),
+          onChanged: widget.onChanged,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            hintText: widget.hint,
+            helperText: widget.helper,
+            counterText: countText,
+            counterStyle: TextStyle(
+              color: isOverLimit ? Colors.redAccent : const Color(0xFF8396C7),
+              fontWeight: isOverLimit ? FontWeight.w900 : FontWeight.w500,
+            ),
+            alignLabelWithHint: true,
+            prefixIcon: const Icon(Icons.notes_outlined),
+          ),
+        ),
+      ],
     );
   }
 }

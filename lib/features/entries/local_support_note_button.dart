@@ -12,6 +12,7 @@ import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
+import '../../shared/widgets/note_text_input_tools.dart';
 
 double _supportNoteSheetHeight(BuildContext context) {
   final screenHeight = MediaQuery.sizeOf(context).height;
@@ -89,6 +90,7 @@ class LocalSupportNoteSheet extends StatefulWidget {
 class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   final initialsController = TextEditingController();
   final noteController = TextEditingController();
+  final noteFocusNode = FocusNode();
   final GoogleDriveService driveService = GoogleDriveService();
 
   EntrySupportNoteStatus status = EntrySupportNoteStatus.incomplete;
@@ -115,6 +117,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     draftAutosaveTimer?.cancel();
     initialsController.dispose();
     noteController.dispose();
+    noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -757,8 +760,18 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               ),
             ),
             const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: NoteTextInputTools(
+                controller: noteController,
+                focusNode: noteFocusNode,
+                onChanged: (_) => _scheduleDraftAutosave(),
+              ),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: noteController,
+              focusNode: noteFocusNode,
               enabled: !busy,
               minLines: 8,
               maxLines: 14,
