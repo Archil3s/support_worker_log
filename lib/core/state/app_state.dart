@@ -351,7 +351,7 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<String> selectGoogleAccountForScope({
+  Future<void> selectGoogleAccountForScope({
     required GoogleExportAccountScope scope,
     required String email,
   }) async {
@@ -360,7 +360,6 @@ class AppState extends ChangeNotifier {
       email: email,
     );
     notifyListeners();
-    return connectGoogleDrive(scope: scope);
   }
 
   Future<void> warmGoogleExportAccount(GoogleExportAccountScope scope) async {

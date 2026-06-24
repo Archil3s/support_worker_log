@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
 import 'google_account_selector.dart';
+import 'google_session_countdown.dart';
 import 'section_card.dart';
 
 class GoogleAccountConnectionCard extends StatefulWidget {
@@ -140,6 +141,8 @@ class _GoogleAccountConnectionCardState
           ),
           const SizedBox(height: 10),
           GoogleAccountSelector(scope: widget.scope),
+          const SizedBox(height: 10),
+          const GoogleSessionCountdown(),
           const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: connecting ? null : _connect,

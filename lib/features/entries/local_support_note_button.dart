@@ -13,6 +13,16 @@ import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
 
+double _supportNoteSheetHeight(BuildContext context) {
+  final screenHeight = MediaQuery.sizeOf(context).height;
+  final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+  final visibleHeight = screenHeight - keyboardBottom - 24;
+  final maxHeight = screenHeight * 0.94;
+  final height = visibleHeight < maxHeight ? visibleHeight : maxHeight;
+
+  return height < 360 ? 360 : height;
+}
+
 class LocalSupportNoteButton extends StatefulWidget {
   const LocalSupportNoteButton({super.key, required this.entry});
 
@@ -655,203 +665,205 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   Widget build(BuildContext context) {
     final entry = widget.entry;
     final payeMode = context.watch<AppState>().isPayeMode;
+    final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Support Note',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardBottom),
+      child: SizedBox(
+        height: _supportNoteSheetHeight(context),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 220),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Support Note',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${entry.client} | ${entry.date.day}/${entry.date.month}/${entry.date.year}',
-            style: const TextStyle(color: Color(0xFF8396C7)),
-          ),
-          const SizedBox(height: 16),
-          GoogleDriveConnectionWarning(
-            scope: _currentGoogleScope(context.watch<AppState>()),
-            compact: true,
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: busy ? null : _chooseFolder,
-            icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Choose MR NOTES FOLDER'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: initialsController,
-            enabled: !busy,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              labelText: 'Person initials',
-              prefixIcon: Icon(Icons.badge_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: noteController,
-            enabled: !busy,
-            minLines: 8,
-            maxLines: 14,
-            decoration: const InputDecoration(
-              labelText: 'Support worker note',
-              alignLabelWithHint: true,
-              prefixIcon: Icon(Icons.notes_outlined),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text('Status', style: TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final item in EntrySupportNoteStatus.values)
-                FilterChip(
-                  label: Text(item.label),
-                  selected: status == item,
-                  selectedColor: _statusColor(item).withValues(alpha: 0.25),
-                  checkmarkColor: _statusColor(item),
-                  side: BorderSide(color: _statusColor(item)),
-                  onSelected: busy ? null : (_) => _changeStatus(item),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (meta != null)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  'Attached local file:\n${meta!.fileName}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ),
-          if (driveMeta != null)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  payeMode
-                      ? 'Google Docs note:\n${driveMeta!.fileName}'
-                      : 'Google Drive DOCX note:\n${driveMeta!.fileName}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ),
-          if (message != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              message!,
-              style: TextStyle(
-                color:
-                    message!.startsWith('Could') || message!.contains('failed')
-                    ? const Color(0xFFFF6B6B)
-                    : const Color(0xFF31E981),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: busy ? null : _save,
-            icon: const Icon(Icons.save_outlined),
-            label: Text(
-              payeMode
-                  ? 'Save PAYE Note'
-                  : meta == null
-                  ? 'Create Local Note File'
-                  : 'Update / Rename Local Note File',
-            ),
-          ),
-          if (payeMode) ...[
-            const SizedBox(height: 6),
-            const Text(
-              'This always saves the PAYE note in the app. Local DOCX and '
-              'Google Drive are optional copies.',
-              style: TextStyle(color: Color(0xFF8396C7), fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: busy ? null : _openFile,
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('Open Attached Local File'),
-          ),
-          const SizedBox(height: 8),
-          if (payeMode) ...[
-            OutlinedButton.icon(
-              onPressed: busy ? null : _testGoogleDocsSave,
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text('Test Google Docs Save & Remove'),
+              ],
             ),
             const SizedBox(height: 8),
-          ],
-          OutlinedButton.icon(
-            onPressed: busy ? null : _saveGoogleDriveNote,
-            icon: const Icon(Icons.cloud_upload_outlined),
-            label: Text(
-              driveMeta == null
-                  ? payeMode
-                        ? 'Save Google Docs Note'
-                        : 'Create Google Drive DOCX Note'
-                  : payeMode
-                  ? 'Update Google Docs Note'
-                  : 'Update Google Drive DOCX Note',
+            Text(
+              '${entry.client} | ${entry.date.day}/${entry.date.month}/${entry.date.year}',
+              style: const TextStyle(color: Color(0xFF8396C7)),
             ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: busy ? null : _saveDraftAndReturn,
-            icon: const Icon(Icons.drafts_outlined),
-            label: const Text('Save Draft & Return'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: busy ? null : _openGoogleDriveNote,
-            icon: const Icon(Icons.open_in_new_outlined),
-            label: Text(
+            const SizedBox(height: 16),
+            GoogleDriveConnectionWarning(
+              scope: _currentGoogleScope(context.watch<AppState>()),
+              compact: true,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: busy ? null : _chooseFolder,
+              icon: const Icon(Icons.folder_open_outlined),
+              label: const Text('Choose MR NOTES FOLDER'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: initialsController,
+              enabled: !busy,
+              textCapitalization: TextCapitalization.characters,
+              scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 140),
+              decoration: const InputDecoration(
+                labelText: 'Person initials',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              enabled: !busy,
+              minLines: 8,
+              maxLines: 14,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 220),
+              decoration: const InputDecoration(
+                labelText: 'Support worker note',
+                alignLabelWithHint: true,
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text('Status', style: TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in EntrySupportNoteStatus.values)
+                  FilterChip(
+                    label: Text(item.label),
+                    selected: status == item,
+                    selectedColor: _statusColor(item).withValues(alpha: 0.25),
+                    checkmarkColor: _statusColor(item),
+                    side: BorderSide(color: _statusColor(item)),
+                    onSelected: busy ? null : (_) => _changeStatus(item),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (meta != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SelectableText(
+                    'Attached local file:\n${meta!.fileName}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+            if (driveMeta != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SelectableText(
+                    payeMode
+                        ? 'Google Docs note:\n${driveMeta!.fileName}'
+                        : 'Google Drive DOCX note:\n${driveMeta!.fileName}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+            if (message != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                message!,
+                style: TextStyle(
+                  color:
+                      message!.startsWith('Could') ||
+                          message!.contains('failed')
+                      ? const Color(0xFFFF6B6B)
+                      : const Color(0xFF31E981),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: busy ? null : _save,
+              icon: const Icon(Icons.save_outlined),
+              label: Text(
+                payeMode ? 'Save PAYE Note in App' : 'Save Note in App',
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
               payeMode
-                  ? 'Open Google Docs Note'
-                  : 'Open Google Drive DOCX Note',
+                  ? 'This always saves the PAYE note in the app. Google Drive is optional.'
+                  : 'This always saves the note in the app. Google Drive is optional.',
+              style: const TextStyle(color: Color(0xFF8396C7), fontSize: 12),
             ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: busy ? null : _openGoogleDriveFolder,
-            icon: const Icon(Icons.folder_open_outlined),
-            label: Text(
-              context.watch<AppState>().isPayeMode
-                  ? 'Open PAYE Note Folder'
-                  : 'Load Client Folder',
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _openFile,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open Attached Local File'),
             ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Local notes stay attached to this entry card. Google copies are optional.',
-            style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-          ),
-        ],
+            const SizedBox(height: 8),
+            if (payeMode) ...[
+              OutlinedButton.icon(
+                onPressed: busy ? null : _testGoogleDocsSave,
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Test Google Docs Save & Remove'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: busy ? null : _saveGoogleDriveNote,
+              icon: const Icon(Icons.cloud_upload_outlined),
+              label: Text(
+                driveMeta == null
+                    ? payeMode
+                          ? 'Save Google Docs Note'
+                          : 'Create Google Drive DOCX Note'
+                    : payeMode
+                    ? 'Update Google Docs Note'
+                    : 'Update Google Drive DOCX Note',
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _saveDraftAndReturn,
+              icon: const Icon(Icons.drafts_outlined),
+              label: const Text('Save Draft & Return'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _openGoogleDriveNote,
+              icon: const Icon(Icons.open_in_new_outlined),
+              label: Text(
+                payeMode
+                    ? 'Open Google Docs Note'
+                    : 'Open Google Drive DOCX Note',
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _openGoogleDriveFolder,
+              icon: const Icon(Icons.folder_open_outlined),
+              label: Text(
+                context.watch<AppState>().isPayeMode
+                    ? 'Open PAYE Note Folder'
+                    : 'Load Client Folder',
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Local notes stay attached to this entry card. Google copies are optional.',
+              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+            ),
+          ],
+        ),
       ),
     );
   }

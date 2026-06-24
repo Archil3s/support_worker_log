@@ -93,7 +93,11 @@ class GoogleAccountSelector extends StatelessWidget {
       );
 
       messenger.showSnackBar(
-        SnackBar(content: Text('${scope.label} Google account selected.')),
+        SnackBar(
+          content: Text(
+            '${scope.label} Google account selected. Use Connect when you want to upload to Drive.',
+          ),
+        ),
       );
     } catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(_friendlyError(error))));
