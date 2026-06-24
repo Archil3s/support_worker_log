@@ -33,4 +33,10 @@ class LocalSupportNotesPlatform {
       'Opening files is only available on web or Windows.',
     );
   }
+
+  Future<bool> openFolder(String fileName) async {
+    throw UnsupportedError(
+      'Opening folders is only available on web or Windows.',
+    );
+  }
 }

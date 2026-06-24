@@ -42,6 +42,11 @@ class LocalSupportNotesPlatform {
     return true;
   }
 
+  Future<bool> openFolder(String fileName) async {
+    await _post('/open-folder', <String, dynamic>{'fileName': fileName});
+    return true;
+  }
+
   Future<void> _post(String path, Map<String, dynamic> body) async {
     html.HttpRequest response;
 

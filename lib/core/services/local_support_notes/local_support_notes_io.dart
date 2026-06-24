@@ -89,6 +89,28 @@ class LocalSupportNotesPlatform {
     );
   }
 
+  Future<bool> openFolder(String fileName) async {
+    if (Platform.isAndroid) {
+      await _post('/open-folder', <String, dynamic>{'fileName': fileName});
+      return true;
+    }
+
+    final file = await _fileForRelativePath(fileName);
+
+    if (!await file.exists()) {
+      throw StateError('Local note file does not exist: ${file.path}');
+    }
+
+    if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', file.parent.path]);
+      return true;
+    }
+
+    throw UnsupportedError(
+      'Opening folders is currently implemented for Windows only.',
+    );
+  }
+
   Future<File> _fileForRelativePath(String relativePath) async {
     final root = Directory(defaultRootPath);
     await root.create(recursive: true);

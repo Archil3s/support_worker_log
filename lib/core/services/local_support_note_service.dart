@@ -260,6 +260,10 @@ class LocalSupportNoteService {
     return _platform.openFile(meta.fileName);
   }
 
+  static Future<bool> openNoteFolder(EntrySupportNoteMeta meta) {
+    return _platform.openFolder(meta.fileName);
+  }
+
   static String defaultInitialsForEntry(WorkEntry entry) {
     final value = entry.client.trim();
 

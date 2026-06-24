@@ -557,6 +557,44 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
   }
 
+  Future<void> _openLocalFolder() async {
+    final current = meta;
+
+    if (current == null) {
+      setState(() {
+        message = 'Create the local note file first.';
+      });
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      message = 'Opening local note folder...';
+    });
+
+    try {
+      await LocalSupportNoteService.openNoteFolder(current);
+
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Opened folder for ${current.fileName}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not open note folder: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _openGoogleDriveNote() async {
     final current = driveMeta;
     final appState = context.read<AppState>();
@@ -808,6 +846,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               onPressed: busy ? null : _openFile,
               icon: const Icon(Icons.open_in_new),
               label: const Text('Open Attached Local File'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _openLocalFolder,
+              icon: const Icon(Icons.folder_open_outlined),
+              label: const Text('Open Local Note Folder'),
             ),
             const SizedBox(height: 8),
             if (payeMode) ...[
