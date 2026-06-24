@@ -450,6 +450,11 @@ String _cleanSupportNoteSection(String value) {
       .join('\n');
 }
 
+bool _isPayeOnlyNote(String value) {
+  return value.startsWith(_attendancePrefix) ||
+      value.startsWith(_supportTagPrefix);
+}
+
 String _joinLoggingLines(Iterable<String> values) {
   return values
       .map((value) => value.trim())
@@ -490,6 +495,7 @@ String _initialMainTopicText(Iterable<String> values) {
 
 List<String> _buildVisitNotes({
   required Iterable<String> selectedNotes,
+  required bool includePayeContext,
   String typedNote = '',
 }) {
   final tags = <String>[];
@@ -500,6 +506,7 @@ List<String> _buildVisitNotes({
   for (final rawNote in selectedNotes) {
     final note = rawNote.trim();
     if (note.isEmpty) continue;
+    if (!includePayeContext && _isPayeOnlyNote(note)) continue;
 
     if (note.startsWith(_supportTagPrefix)) {
       tags.add(note.replaceFirst(_supportTagPrefix, '').trim());
@@ -522,6 +529,19 @@ List<String> _buildVisitNotes({
   ];
 
   return notes;
+}
+
+@visibleForTesting
+List<String> buildQuickEntryVisitNotesForTest({
+  required Iterable<String> selectedNotes,
+  required bool includePayeContext,
+  String typedNote = '',
+}) {
+  return _buildVisitNotes(
+    selectedNotes: selectedNotes,
+    includePayeContext: includePayeContext,
+    typedNote: typedNote,
+  );
 }
 
 List<String> _orderedAttendance(Iterable<String> values) {
@@ -554,14 +574,30 @@ List<String> _orderedTags(Iterable<String> values) {
 
 List<String> _rawVisitNotes({
   required Iterable<String> selectedNotes,
+  required bool includePayeContext,
   String typedNote = '',
 }) {
   final values = [
-    ...selectedNotes.map((note) => note.trim()),
+    ...selectedNotes
+        .map((note) => note.trim())
+        .where((note) => includePayeContext || !_isPayeOnlyNote(note)),
     if (typedNote.trim().isNotEmpty) typedNote.trim(),
   ].where((note) => note.isNotEmpty).toSet().toList();
 
   return values;
+}
+
+@visibleForTesting
+List<String> rawQuickEntryVisitNotesForTest({
+  required Iterable<String> selectedNotes,
+  required bool includePayeContext,
+  String typedNote = '',
+}) {
+  return _rawVisitNotes(
+    selectedNotes: selectedNotes,
+    includePayeContext: includePayeContext,
+    typedNote: typedNote,
+  );
 }
 
 int _wordCount(String value) {
@@ -724,7 +760,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return;
     }
 
-    final notes = _rawVisitNotes(selectedNotes: selectedNotes);
+    final notes = _rawVisitNotes(
+      selectedNotes: selectedNotes,
+      includePayeContext: appState.isPayeMode,
+    );
     final startedAt = _startDateTimeForSelectedDate();
     final trackKilometres =
         !appState.isPayeMode && selectedType == EntryType.homeVisit;
@@ -771,6 +810,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     final notes = _rawVisitNotes(
       selectedNotes: [...activeVisit.notes, ...selectedNotes],
+      includePayeContext: appState.isPayeMode,
       typedNote: typedNote,
     );
 
@@ -818,6 +858,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final typedNote = noteController.text.trim();
     final notes = _buildVisitNotes(
       selectedNotes: [...activeVisit.notes, ...selectedNotes],
+      includePayeContext: appState.isPayeMode,
       typedNote: typedNote,
     );
     final previewMinutes = _minutesBetween(
@@ -1099,6 +1140,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
         elapsedText: _elapsedText(activeVisit.startedAt, null),
         startedAtText: _dateTimeText(context, activeVisit.startedAt),
         showKilometres: showKilometres,
+        showSupportTags: appState.isPayeMode,
         onNoteToggle: (note, selected) {
           setState(() {
             if (selected) {
@@ -1125,6 +1167,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       startOdometerController: startOdometerController,
       showKilometres: showKilometres,
       showAttendance: appState.isPayeMode,
+      showSupportTags: appState.isPayeMode,
       onClientSelected: (client) {
         setState(() => selectedClient = client);
       },
@@ -2807,6 +2850,7 @@ class _StartVisitView extends StatelessWidget {
     required this.startOdometerController,
     required this.showKilometres,
     required this.showAttendance,
+    required this.showSupportTags,
     required this.onClientSelected,
     required this.onTypeSelected,
     required this.onNoteToggle,
@@ -2824,6 +2868,7 @@ class _StartVisitView extends StatelessWidget {
   final TextEditingController startOdometerController;
   final bool showKilometres;
   final bool showAttendance;
+  final bool showSupportTags;
   final ValueChanged<String?> onClientSelected;
   final ValueChanged<EntryType> onTypeSelected;
   final void Function(String note, bool selected) onNoteToggle;
@@ -2992,6 +3037,7 @@ class _StartVisitView extends StatelessWidget {
           noteOptions: noteOptions,
           selectedNotes: selectedNotes,
           showAttendance: showAttendance,
+          showSupportTags: showSupportTags,
           showAgencies: selectedType == EntryType.professionalContact,
           onChanged: onNoteToggle,
         ),
@@ -3010,6 +3056,7 @@ class _ActiveVisitView extends StatelessWidget {
     required this.elapsedText,
     required this.startedAtText,
     required this.showKilometres,
+    required this.showSupportTags,
     required this.onNoteToggle,
     required this.onSaveStartOdometer,
     required this.onSaveDraft,
@@ -3025,6 +3072,7 @@ class _ActiveVisitView extends StatelessWidget {
   final String elapsedText;
   final String startedAtText;
   final bool showKilometres;
+  final bool showSupportTags;
   final void Function(String note, bool selected) onNoteToggle;
   final VoidCallback onSaveStartOdometer;
   final VoidCallback onSaveDraft;
@@ -3122,6 +3170,7 @@ class _ActiveVisitView extends StatelessWidget {
           noteOptions: noteOptions,
           selectedNotes: selectedNotes,
           showAttendance: context.watch<AppState>().isPayeMode,
+          showSupportTags: showSupportTags,
           showAgencies: activeVisit.type == EntryType.professionalContact,
           onChanged: onNoteToggle,
           footer: Column(
@@ -3369,6 +3418,7 @@ class _VisitContextTabs extends StatelessWidget {
     required this.selectedNotes,
     required this.showAgencies,
     required this.showAttendance,
+    required this.showSupportTags,
     required this.onChanged,
     this.footer,
   });
@@ -3377,6 +3427,7 @@ class _VisitContextTabs extends StatelessWidget {
   final Set<String> selectedNotes;
   final bool showAgencies;
   final bool showAttendance;
+  final bool showSupportTags;
   final void Function(String note, bool selected) onChanged;
   final Widget? footer;
 
@@ -3398,11 +3449,13 @@ class _VisitContextTabs extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
-            _SupportTagChips(
-              selectedNotes: selectedNotes,
-              onChanged: onChanged,
-            ),
-            const SizedBox(height: 12),
+            if (showSupportTags) ...[
+              _SupportTagChips(
+                selectedNotes: selectedNotes,
+                onChanged: onChanged,
+              ),
+              const SizedBox(height: 12),
+            ],
             TabBar(
               tabs: [
                 const Tab(
