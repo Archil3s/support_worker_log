@@ -461,6 +461,21 @@ String _buildTextNoteBreakdown({
   ].join('\n').trim();
 }
 
+@visibleForTesting
+String buildTextNoteBreakdownForTest({
+  required TextContactDirection direction,
+  required String summary,
+  required String nextActions,
+  required bool replyNeeded,
+}) {
+  return _buildTextNoteBreakdown(
+    direction: direction,
+    summary: summary,
+    nextActions: nextActions,
+    replyNeeded: replyNeeded,
+  );
+}
+
 String _cleanSupportNoteSection(String value) {
   return value
       .split(RegExp(r'\r?\n'))
@@ -1342,22 +1357,6 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
               : typedNextActions
         : '';
 
-    if (summary.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: const Text('Add the contact summary before saving.'),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        );
-      return;
-    }
-
     Navigator.of(context).pop(
       _TextNoteCloseOut(
         breakdown: _buildTextNoteBreakdown(
@@ -2152,7 +2151,7 @@ class _SupportNoteBreakdownSheetState
   Widget _safetyStep() {
     return _PromptStep(
       title: 'Safety Concerns',
-      subtitle: 'Complete the safety check before saving.',
+      subtitle: 'Add safety notes if needed.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

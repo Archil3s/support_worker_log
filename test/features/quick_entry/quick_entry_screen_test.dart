@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:support_worker_log/core/models/work_entry.dart';
 import 'package:support_worker_log/features/quick_entry/quick_entry_screen.dart';
 
 void main() {
@@ -71,5 +72,20 @@ void main() {
       note,
       contains('Safety concerns for sexual harm survivors and mental health'),
     );
+  });
+
+  test('empty written contact note still keeps the core note format', () {
+    final note = buildTextNoteBreakdownForTest(
+      direction: TextContactDirection.received,
+      summary: '',
+      nextActions: '',
+      replyNeeded: false,
+    );
+
+    expect(note, contains('Contact direction'));
+    expect(note, contains('Contact summary'));
+    expect(note, contains('Reply needed'));
+    expect(note, contains('No full reply needed'));
+    expect(note, contains('Next action(s)'));
   });
 }
