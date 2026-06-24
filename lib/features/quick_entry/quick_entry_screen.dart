@@ -469,6 +469,11 @@ String _cleanSupportNoteSection(String value) {
       .join('\n');
 }
 
+bool _isPayeOnlyNote(String value) {
+  return value.startsWith(_attendancePrefix) ||
+      value.startsWith(_supportTagPrefix);
+}
+
 String _joinLoggingLines(Iterable<String> values) {
   return values
       .map((value) => value.trim())
@@ -509,6 +514,7 @@ String _initialMainTopicText(Iterable<String> values) {
 
 List<String> _buildVisitNotes({
   required Iterable<String> selectedNotes,
+  required bool includePayeContext,
   String typedNote = '',
 }) {
   final tags = <String>[];
@@ -519,6 +525,7 @@ List<String> _buildVisitNotes({
   for (final rawNote in selectedNotes) {
     final note = rawNote.trim();
     if (note.isEmpty) continue;
+    if (!includePayeContext && _isPayeOnlyNote(note)) continue;
 
     if (note.startsWith(_supportTagPrefix)) {
       tags.add(note.replaceFirst(_supportTagPrefix, '').trim());
@@ -541,6 +548,19 @@ List<String> _buildVisitNotes({
   ];
 
   return notes;
+}
+
+@visibleForTesting
+List<String> buildQuickEntryVisitNotesForTest({
+  required Iterable<String> selectedNotes,
+  required bool includePayeContext,
+  String typedNote = '',
+}) {
+  return _buildVisitNotes(
+    selectedNotes: selectedNotes,
+    includePayeContext: includePayeContext,
+    typedNote: typedNote,
+  );
 }
 
 List<String> _orderedAttendance(Iterable<String> values) {
@@ -573,14 +593,30 @@ List<String> _orderedTags(Iterable<String> values) {
 
 List<String> _rawVisitNotes({
   required Iterable<String> selectedNotes,
+  required bool includePayeContext,
   String typedNote = '',
 }) {
   final values = [
-    ...selectedNotes.map((note) => note.trim()),
+    ...selectedNotes
+        .map((note) => note.trim())
+        .where((note) => includePayeContext || !_isPayeOnlyNote(note)),
     if (typedNote.trim().isNotEmpty) typedNote.trim(),
   ].where((note) => note.isNotEmpty).toSet().toList();
 
   return values;
+}
+
+@visibleForTesting
+List<String> rawQuickEntryVisitNotesForTest({
+  required Iterable<String> selectedNotes,
+  required bool includePayeContext,
+  String typedNote = '',
+}) {
+  return _rawVisitNotes(
+    selectedNotes: selectedNotes,
+    includePayeContext: includePayeContext,
+    typedNote: typedNote,
+  );
 }
 
 int _wordCount(String value) {
@@ -743,7 +779,10 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
       return;
     }
 
-    final notes = _rawVisitNotes(selectedNotes: selectedNotes);
+    final notes = _rawVisitNotes(
+      selectedNotes: selectedNotes,
+      includePayeContext: appState.isPayeMode,
+    );
     final startedAt = _startDateTimeForSelectedDate();
     final trackKilometres =
         !appState.isPayeMode && selectedType == EntryType.homeVisit;
@@ -790,6 +829,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
 
     final notes = _rawVisitNotes(
       selectedNotes: [...activeVisit.notes, ...selectedNotes],
+      includePayeContext: appState.isPayeMode,
       typedNote: typedNote,
     );
 
@@ -837,6 +877,7 @@ class _QuickEntryScreenState extends State<QuickEntryScreen> {
     final typedNote = noteController.text.trim();
     final notes = _buildVisitNotes(
       selectedNotes: [...activeVisit.notes, ...selectedNotes],
+      includePayeContext: appState.isPayeMode,
       typedNote: typedNote,
     );
     final previewMinutes = _minutesBetween(
