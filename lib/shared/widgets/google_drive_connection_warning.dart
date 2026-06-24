@@ -24,6 +24,7 @@ class GoogleDriveConnectionWarning extends StatefulWidget {
 class _GoogleDriveConnectionWarningState
     extends State<GoogleDriveConnectionWarning> {
   bool connecting = false;
+  late bool expanded = !widget.compact;
   String? message;
 
   Future<void> _connect() async {
@@ -70,6 +71,50 @@ class _GoogleDriveConnectionWarningState
               'Notes still save on this phone/web app first.'
         : 'Notes still save on this phone/web app first. Connect Drive before expecting files to upload.';
 
+    if (widget.compact && !expanded) {
+      return InkWell(
+        onTap: () => setState(() => expanded = true),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3A2812),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFFC857), width: 1.2),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.add_to_drive_outlined,
+                color: Color(0xFFFFC857),
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  signedIn
+                      ? 'Drive reconnect needed'
+                      : 'Drive optional - tap to connect',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFFFE7A3),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFFFFC857),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       margin: widget.compact
           ? EdgeInsets.zero
@@ -110,6 +155,18 @@ class _GoogleDriveConnectionWarningState
                   ],
                 ),
               ),
+              if (widget.compact) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Collapse Google Drive controls',
+                  onPressed: () => setState(() => expanded = false),
+                  icon: const Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    color: Color(0xFFFFC857),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
