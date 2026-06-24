@@ -43,4 +43,32 @@ void main() {
 
     expect(await service.hasRememberedUnlock(), isFalse);
   });
+
+  test('remembered local unlock is valid for one hour', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final service = AppLockService();
+
+    await service.rememberUnlock();
+
+    final validUntil = DateTime.fromMicrosecondsSinceEpoch(
+      prefs.getInt('app_lock_unlock_valid_until_v1')!,
+    );
+    final remaining = validUntil.difference(DateTime.now());
+
+    expect(remaining, greaterThan(const Duration(minutes: 59)));
+    expect(remaining, lessThanOrEqualTo(const Duration(hours: 1)));
+  });
+
+  test('remembered local unlock expires after one hour', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final service = AppLockService();
+    final expiredAt = DateTime.now()
+        .subtract(const Duration(minutes: 1))
+        .microsecondsSinceEpoch;
+
+    await prefs.setInt('app_lock_unlock_valid_until_v1', expiredAt);
+
+    expect(await service.hasRememberedUnlock(), isFalse);
+    expect(prefs.getInt('app_lock_unlock_valid_until_v1'), isNull);
+  });
 }

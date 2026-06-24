@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
+import 'google_account_selector.dart';
 import 'section_card.dart';
 
 class GoogleAccountConnectionCard extends StatefulWidget {
@@ -47,7 +48,10 @@ class _GoogleAccountConnectionCardState
     });
 
     try {
-      await context.read<AppState>().connectGoogleDrive(scope: widget.scope);
+      await context.read<AppState>().connectGoogleDrive(
+        scope: widget.scope,
+        forceRefresh: true,
+      );
 
       if (!mounted) return;
 
@@ -134,6 +138,8 @@ class _GoogleAccountConnectionCardState
                 : 'Not ready for Drive uploads. In-app notes still save locally.',
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
+          const SizedBox(height: 10),
+          GoogleAccountSelector(scope: widget.scope),
           const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: connecting ? null : _connect,

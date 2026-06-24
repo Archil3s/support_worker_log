@@ -114,6 +114,8 @@ class AppState extends ChangeNotifier {
   bool get payeGoogleAccountSignedIn => _googleExportAccountService
       .hasSignedInAccount(GoogleExportAccountScope.paye);
   bool get googleServicesConnected => workGoogleServicesConnected;
+  List<String> get rememberedGoogleAccountEmails =>
+      _googleExportAccountService.knownEmails;
 
   bool googleDriveConnectedForScope(GoogleExportAccountScope scope) {
     return switch (scope) {
@@ -137,6 +139,11 @@ class AppState extends ChangeNotifier {
       GoogleExportAccountScope.personal => personalGoogleAccountEmail,
       GoogleExportAccountScope.paye => payeGoogleAccountEmail,
     };
+  }
+
+  String? preferredGoogleAccountEmailForScope(GoogleExportAccountScope scope) {
+    return _googleExportAccountService.preferredEmailFor(scope) ??
+        googleAccountEmailForScope(scope);
   }
 
   String? get _workGoogleCalendarAccessToken {
@@ -195,6 +202,7 @@ class AppState extends ChangeNotifier {
     }
 
     notifyListeners();
+    unawaited(warmGoogleExportAccount(_googleScopeForMode(_appMode)));
   }
 
   Future<void> signIn({required String email, required String password}) async {
@@ -329,6 +337,18 @@ class AppState extends ChangeNotifier {
       scope: GoogleExportAccountScope.paye,
       forceRefresh: forceRefresh,
     );
+  }
+
+  Future<String> selectGoogleAccountForScope({
+    required GoogleExportAccountScope scope,
+    required String email,
+  }) async {
+    await _googleExportAccountService.setPreferredEmail(
+      scope: scope,
+      email: email,
+    );
+    notifyListeners();
+    return connectGoogleDrive(scope: scope);
   }
 
   Future<void> warmGoogleExportAccount(GoogleExportAccountScope scope) async {
@@ -685,6 +705,7 @@ class AppState extends ChangeNotifier {
 
     _appMode = mode;
     _persistAndNotify();
+    unawaited(warmGoogleExportAccount(_googleScopeForMode(mode)));
   }
 
   void startActiveVisit(ActiveVisit visit) {
@@ -1553,6 +1574,18 @@ class AppState extends ChangeNotifier {
       'paye' => AppMode.paye,
       'work' => AppMode.work,
       _ => null,
+    };
+  }
+
+  GoogleExportAccountScope _googleScopeForMode(AppMode mode) {
+    return switch (mode) {
+      AppMode.personal ||
+      AppMode.massage ||
+      AppMode.mood ||
+      AppMode.cleaning ||
+      AppMode.grocery => GoogleExportAccountScope.personal,
+      AppMode.paye => GoogleExportAccountScope.paye,
+      AppMode.work || AppMode.casework => GoogleExportAccountScope.work,
     };
   }
 

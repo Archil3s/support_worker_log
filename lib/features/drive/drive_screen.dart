@@ -8,6 +8,7 @@ import '../../core/models/google_drive_file.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/google_account_selector.dart';
 import '../../shared/widgets/section_card.dart';
 
 const _driveApiSetupUrl =
@@ -61,6 +62,7 @@ class _DriveScreenState extends State<DriveScreen> {
   Future<String> _connectDrive(GoogleExportAccountScope scope) async {
     final token = await context.read<AppState>().connectGoogleDrive(
       scope: scope,
+      forceRefresh: true,
     );
     return token;
   }
@@ -312,6 +314,8 @@ class _DriveScreenState extends State<DriveScreen> {
                     : const Color(0xFFFFC857),
               ),
               const SizedBox(height: 12),
+              const GoogleAccountSelector(scope: GoogleExportAccountScope.work),
+              const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: connecting || anyBusy ? null : _connect,
                 icon: connecting
@@ -411,6 +415,10 @@ class _DriveScreenState extends State<DriveScreen> {
                     : const Color(0xFFFFC857),
               ),
               const SizedBox(height: 12),
+              const GoogleAccountSelector(
+                scope: GoogleExportAccountScope.personal,
+              ),
+              const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: connectingPersonal || anyBusy
                     ? null
@@ -481,6 +489,8 @@ class _DriveScreenState extends State<DriveScreen> {
                     ? const Color(0xFF31E981)
                     : const Color(0xFFFFC857),
               ),
+              const SizedBox(height: 12),
+              const GoogleAccountSelector(scope: GoogleExportAccountScope.paye),
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: connectingPaye || anyBusy ? null : _connectPaye,
