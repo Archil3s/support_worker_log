@@ -712,7 +712,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       child: SizedBox(
         height: _supportNoteSheetHeight(context),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 220),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, keyboardBottom + 320),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
             Row(
@@ -764,7 +764,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               maxLines: 14,
               keyboardType: TextInputType.multiline,
               textInputAction: TextInputAction.newline,
-              scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 220),
+              scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 320),
               decoration: const InputDecoration(
                 labelText: 'Support worker note',
                 alignLabelWithHint: true,

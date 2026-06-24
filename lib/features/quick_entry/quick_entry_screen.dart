@@ -1554,7 +1554,14 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
               compact: true,
             ),
             const SizedBox(height: 12),
-            Expanded(child: SingleChildScrollView(child: _stepBody())),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: keyboardBottom + 260),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                child: _stepBody(),
+              ),
+            ),
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: _saveDraftAndClose,
@@ -2225,7 +2232,7 @@ class _SupportNoteBreakdownSheetState
             const SizedBox(height: 12),
             Expanded(
               child: SingleChildScrollView(
-                padding: EdgeInsets.only(bottom: keyboardBottom + 160),
+                padding: EdgeInsets.only(bottom: keyboardBottom + 260),
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: _stepBody(),
@@ -2436,7 +2443,7 @@ class _SupportNoteField extends StatelessWidget {
       scrollPadding: EdgeInsets.only(
         left: 20,
         right: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 180,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
       ),
       onChanged: onChanged,
       decoration: InputDecoration(
@@ -3137,6 +3144,11 @@ class _ActiveVisitView extends StatelessWidget {
                 controller: noteController,
                 minLines: 2,
                 maxLines: 4,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                scrollPadding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'Optional extra note',
                   hintText: 'Brief detail if the topics do not cover it',
