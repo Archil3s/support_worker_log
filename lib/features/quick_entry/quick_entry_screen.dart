@@ -98,9 +98,6 @@ List<NextActionItem> _nextActionsFromBreakdown(String value) {
   return actions;
 }
 
-const _mainTopicMaxWords = 200;
-const _outcomeMaxWords = 100;
-const _impressionMaxWords = 150;
 const _supportTagPrefix = 'Tag: ';
 const _attendancePrefix = 'Attendance: ';
 const _attendanceOptions = [
@@ -1765,18 +1762,6 @@ class _SupportNoteBreakdownSheetState
       return 'Add safety concerns or mark that none were noted.';
     }
 
-    if (_wordCount(mainTopic) > _mainTopicMaxWords) {
-      return 'Main topic is over $_mainTopicMaxWords words.';
-    }
-
-    if (_wordCount(outcomes) > _outcomeMaxWords) {
-      return 'Outcome is over $_outcomeMaxWords words.';
-    }
-
-    if (_wordCount(impression) > _impressionMaxWords) {
-      return 'Overall impression is over $_impressionMaxWords words.';
-    }
-
     return null;
   }
 
@@ -1864,7 +1849,6 @@ class _SupportNoteBreakdownSheetState
                 label: 'Main topic(s)',
                 hint: 'What support was provided?',
                 helper: 'Include the core support themes only.',
-                maxWords: _mainTopicMaxWords,
                 wordCount: _wordCount(mainTopicController.text),
                 autofocus: true,
                 expanded: true,
@@ -1882,7 +1866,6 @@ class _SupportNoteBreakdownSheetState
             label: 'Outcome(s)',
             hint: 'What changed, improved, or was completed?',
             helper: 'Keep the result specific and factual.',
-            maxWords: _outcomeMaxWords,
             wordCount: _wordCount(outcomesController.text),
             autofocus: true,
             expanded: true,
@@ -1937,7 +1920,6 @@ class _SupportNoteBreakdownSheetState
             label: 'Overall impression',
             hint: 'Brief professional impression of the interaction.',
             helper: 'Keep this factual and concise.',
-            maxWords: _impressionMaxWords,
             wordCount: _wordCount(impressionController.text),
             autofocus: true,
             expanded: true,
@@ -2447,7 +2429,6 @@ class _SupportNoteField extends StatelessWidget {
     required this.hint,
     required this.wordCount,
     this.helper,
-    this.maxWords,
     this.onChanged,
     this.autofocus = false,
     this.expanded = false,
@@ -2457,7 +2438,6 @@ class _SupportNoteField extends StatelessWidget {
   final String label;
   final String hint;
   final String? helper;
-  final int? maxWords;
   final int wordCount;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
@@ -2465,10 +2445,6 @@ class _SupportNoteField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final limit = maxWords;
-    final isOverLimit = limit != null && wordCount > limit;
-    final countText = limit == null ? '$wordCount words' : '$wordCount/$limit';
-
     return TextField(
       controller: controller,
       autofocus: autofocus,
@@ -2480,10 +2456,10 @@ class _SupportNoteField extends StatelessWidget {
         labelText: label,
         hintText: hint,
         helperText: helper,
-        counterText: countText,
-        counterStyle: TextStyle(
-          color: isOverLimit ? Colors.redAccent : const Color(0xFF8396C7),
-          fontWeight: isOverLimit ? FontWeight.w900 : FontWeight.w500,
+        counterText: '$wordCount words',
+        counterStyle: const TextStyle(
+          color: Color(0xFF8396C7),
+          fontWeight: FontWeight.w500,
         ),
         alignLabelWithHint: true,
         prefixIcon: const Icon(Icons.notes_outlined),

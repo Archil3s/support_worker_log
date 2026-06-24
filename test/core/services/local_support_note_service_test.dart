@@ -61,6 +61,51 @@ void main() {
     expect(restored?.noteText, longNote);
   });
 
+  test('Work draft keeps long support note text without trimming', () async {
+    final entry = WorkEntry(
+      id: 'work-note-long',
+      client: 'Jane Smith',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 6, 19),
+      startTime: const TimeOfDay(hour: 9, minute: 0),
+      minutes: 60,
+      notes: const [],
+    );
+    final longNote = [
+      'Main topic(s)',
+      List.generate(
+        260,
+        (index) => 'line ${index + 1}: detailed Work support note',
+      ).join('\n'),
+      '',
+      'Outcome(s)',
+      'Stored successfully.',
+      '',
+      'Next action(s)',
+      'None.',
+      '',
+      'Overall impression',
+      'Factual Work note retained in the normal support note format.',
+      '',
+      'Referrals',
+      'No referrals discussed or made this visit.',
+      '',
+      'Safety concerns for sexual harm survivors and mental health',
+      'No safety concerns noted.',
+    ].join('\n');
+
+    await LocalSupportNoteService.saveDraftMeta(
+      entry: entry,
+      initials: '',
+      status: EntrySupportNoteStatus.finished,
+      noteText: longNote,
+    );
+
+    final restored = await LocalSupportNoteService.loadMeta(entry.id);
+
+    expect(restored?.noteText, longNote);
+  });
+
   test('removeMeta deletes stored support note metadata', () async {
     final entry = WorkEntry(
       id: 'paye-note-remove',
