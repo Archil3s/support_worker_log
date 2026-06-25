@@ -76,10 +76,7 @@ class CloudStorageService {
     final startedAt = DateTime.fromMillisecondsSinceEpoch(startedAtMs);
     _sessionExpiresAt = startedAt.add(_sessionMaxAge);
     final expired = DateTime.now().difference(startedAt) >= _sessionMaxAge;
-    if (!expired) return false;
-
-    await signOut();
-    return true;
+    return expired;
   }
 
   Future<void> signOutAnonymousUserIfNeeded() async {
@@ -325,6 +322,10 @@ class CloudStorageService {
     await prefs.remove(_sessionStartedAtKey);
     _sessionExpiresAt = null;
     await _auth.signOut();
+  }
+
+  Future<void> renewSessionLockWindow() async {
+    await _recordSessionStart();
   }
 
   Future<void> _recordSessionStart() async {

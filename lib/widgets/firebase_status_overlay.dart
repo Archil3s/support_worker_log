@@ -32,7 +32,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     _sessionCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {});
-      _signOutIfSessionExpired();
+      _lockIfSessionExpired();
     });
   }
 
@@ -139,7 +139,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     }
   }
 
-  Future<void> _signOutIfSessionExpired() async {
+  Future<void> _lockIfSessionExpired() async {
     if (_sessionExpiryRunning || !mounted) return;
 
     final appState = context.read<AppState>();
@@ -187,17 +187,17 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     if (expiresAt == null || !appState.isSignedIn) return null;
 
     final remaining = expiresAt.difference(DateTime.now());
-    if (remaining <= Duration.zero) return 'Auto logout now';
+    if (remaining <= Duration.zero) return 'App lock now';
 
     final hours = remaining.inHours;
     final minutes = remaining.inMinutes.remainder(60);
     final seconds = remaining.inSeconds.remainder(60);
 
     if (hours > 0) {
-      return 'Auto logout in ${hours}h ${minutes.toString().padLeft(2, '0')}m';
+      return 'App locks in ${hours}h ${minutes.toString().padLeft(2, '0')}m';
     }
 
-    return 'Auto logout in ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+    return 'App locks in ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
   Widget _actionButton({

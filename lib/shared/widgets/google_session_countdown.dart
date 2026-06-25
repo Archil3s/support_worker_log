@@ -46,16 +46,16 @@ class GoogleSessionCountdown extends StatelessWidget {
     if (!appState.isSignedIn || expiresAt == null) return null;
 
     final remaining = expiresAt.difference(DateTime.now());
-    if (remaining <= Duration.zero) return 'Google session logging out now';
+    if (remaining <= Duration.zero) return 'App lock now';
 
     final hours = remaining.inHours;
     final minutes = remaining.inMinutes.remainder(60);
     final seconds = remaining.inSeconds.remainder(60);
 
     if (hours > 0) {
-      return 'Google session logout in ${hours}h ${minutes.toString().padLeft(2, '0')}m';
+      return 'App locks in ${hours}h ${minutes.toString().padLeft(2, '0')}m';
     }
 
-    return 'Google session logout in ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+    return 'App locks in ${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 }

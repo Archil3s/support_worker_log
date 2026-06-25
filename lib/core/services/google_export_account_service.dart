@@ -221,7 +221,8 @@ class GoogleExportAccountService {
         'login_hint': loginHint.trim(),
       if (forceRefresh)
         'prompt': 'consent select_account'
-      else if (shouldChooseAccount || !hasCurrentUser)
+      else if (shouldChooseAccount ||
+          (!hasCurrentUser && (loginHint == null || loginHint.trim().isEmpty)))
         'prompt': 'select_account',
     };
     final provider = GoogleAuthProvider()

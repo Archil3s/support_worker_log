@@ -611,10 +611,9 @@ class AppState extends ChangeNotifier {
     final expired = await _cloudStorageService.signOutIfSessionExpired();
     if (!expired) return false;
 
-    await _stopCloudDataSubscription();
-    await _googleExportAccountService.signOutAll();
+    if (!_appUnlocked) return false;
+
     await _appLockService.clearRememberedUnlock();
-    _cloudSyncReady = false;
     _appUnlocked = false;
     _cloudSyncError = null;
     notifyListeners();
@@ -625,8 +624,10 @@ class AppState extends ChangeNotifier {
     if (_appUnlocked) return;
 
     await _appLockService.rememberUnlock();
+    await _cloudStorageService.renewSessionLockWindow();
     _appUnlocked = true;
     notifyListeners();
+    unawaited(_syncLocalAndCloudSafely());
   }
 
   void lockApp() {
