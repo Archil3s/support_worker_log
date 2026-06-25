@@ -46,6 +46,7 @@ class AppState extends ChangeNotifier {
   ActiveVisit? _activeVisit;
 
   final List<String> _clients = [];
+  final List<String> _payeClients = [];
   final List<WorkEntry> _entries = [];
   final List<WorkEntry> _payeEntries = [];
   final List<GeneralActionItem> _generalActions = [];
@@ -54,6 +55,7 @@ class AppState extends ChangeNotifier {
   final Map<String, double> _invoiceBaselineTotals = {};
 
   late final List<String> _clientsView = UnmodifiableListView(_clients);
+  late final List<String> _payeClientsView = UnmodifiableListView(_payeClients);
   late final List<WorkEntry> _workEntriesView = UnmodifiableListView(_entries);
   late final List<WorkEntry> _payeEntriesView = UnmodifiableListView(
     _payeEntries,
@@ -83,8 +85,10 @@ class AppState extends ChangeNotifier {
   AppSettings get settings => _settings;
   AppMode get appMode => _appMode;
   ActiveVisit? get activeVisit => _activeVisit;
-  List<String> get clients => _clientsView;
   bool get isPayeMode => _appMode == AppMode.paye;
+  List<String> get clients => isPayeMode ? _payeClientsView : _clientsView;
+  List<String> get workClients => _clientsView;
+  List<String> get payeClients => _payeClientsView;
   List<WorkEntry> get workEntries => _workEntriesView;
   List<WorkEntry> get entries =>
       isPayeMode ? _payeEntriesView : _workEntriesView;
@@ -692,6 +696,7 @@ class AppState extends ChangeNotifier {
     _clients
       ..clear()
       ..addAll(['Client A', 'Client B', 'Client C']);
+    _payeClients.clear();
 
     _entries.clear();
     _payeEntries.clear();
@@ -714,7 +719,11 @@ class AppState extends ChangeNotifier {
   void setAppMode(AppMode mode) {
     if (_appMode == mode) return;
 
+    final wasPayeMode = isPayeMode;
     _appMode = mode;
+    if (wasPayeMode || isPayeMode) {
+      _activeVisit = null;
+    }
     _persistAndNotify();
     unawaited(warmGoogleExportAccount(_googleScopeForMode(mode)));
   }
@@ -913,20 +922,20 @@ class AppState extends ChangeNotifier {
   bool addClient(String client) {
     final trimmed = client.trim();
     if (trimmed.isEmpty) return false;
-    if (_clients.contains(trimmed)) return false;
 
-    _clients.add(trimmed);
-    _clients.sort();
+    final activeClients = isPayeMode ? _payeClients : _clients;
+    if (activeClients.contains(trimmed)) return false;
+
+    activeClients.add(trimmed);
+    activeClients.sort();
     _persistAndNotify();
 
     return true;
   }
 
   int clientUsageCount(String client) {
-    return [
-      ..._entries,
-      ..._payeEntries,
-    ].where((entry) => entry.client == client).length;
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    return activeEntries.where((entry) => entry.client == client).length;
   }
 
   bool isClientUsed(String client) {
@@ -934,12 +943,14 @@ class AppState extends ChangeNotifier {
   }
 
   bool canRemoveClient(String client) {
+    if (isPayeMode) return _payeClients.contains(client);
     if (_clients.length <= 1) return false;
     return !isClientUsed(client);
   }
 
   bool removeClientFromList(String client) {
-    final removed = _clients.remove(client);
+    final activeClients = isPayeMode ? _payeClients : _clients;
+    final removed = activeClients.remove(client);
     if (!removed) return false;
 
     if (_activeVisit?.client == client) {
@@ -951,10 +962,11 @@ class AppState extends ChangeNotifier {
   }
 
   int clearClientList() {
-    final count = _clients.length;
+    final activeClients = isPayeMode ? _payeClients : _clients;
+    final count = activeClients.length;
     if (count == 0) return 0;
 
-    _clients.clear();
+    activeClients.clear();
     _activeVisit = null;
     _persistAndNotify();
 
@@ -1084,27 +1096,21 @@ class AppState extends ChangeNotifier {
 
     if (trimmed.isEmpty) return false;
     if (oldName == trimmed) return true;
-    if (_clients.contains(trimmed)) return false;
 
-    final clientIndex = _clients.indexOf(oldName);
+    final activeClients = isPayeMode ? _payeClients : _clients;
+    final clientIndex = activeClients.indexOf(oldName);
     if (clientIndex == -1) return false;
+    if (activeClients.contains(trimmed)) return false;
 
-    _clients[clientIndex] = trimmed;
-    _clients.sort();
+    activeClients[clientIndex] = trimmed;
+    activeClients.sort();
 
-    for (var index = 0; index < _entries.length; index++) {
-      final entry = _entries[index];
-
-      if (entry.client == oldName) {
-        _entries[index] = entry.copyWith(client: trimmed);
-      }
-    }
-
-    for (var index = 0; index < _payeEntries.length; index++) {
-      final entry = _payeEntries[index];
+    final activeEntries = isPayeMode ? _payeEntries : _entries;
+    for (var index = 0; index < activeEntries.length; index++) {
+      final entry = activeEntries[index];
 
       if (entry.client == oldName) {
-        _payeEntries[index] = entry.copyWith(client: trimmed);
+        activeEntries[index] = entry.copyWith(client: trimmed);
       }
     }
 
@@ -1112,15 +1118,17 @@ class AppState extends ChangeNotifier {
       _activeVisit = _activeVisit!.copyWith(client: trimmed);
     }
 
-    for (var index = 0; index < _generalActions.length; index++) {
-      final action = _generalActions[index];
-      if (action.client == oldName) {
-        _generalActions[index] = action.copyWith(client: trimmed);
+    if (!isPayeMode) {
+      for (var index = 0; index < _generalActions.length; index++) {
+        final action = _generalActions[index];
+        if (action.client == oldName) {
+          _generalActions[index] = action.copyWith(client: trimmed);
+        }
       }
     }
 
     _persistAndNotify();
-    _scheduleDriveInvoiceSync();
+    if (!isPayeMode) _scheduleDriveInvoiceSync();
 
     return true;
   }
@@ -1522,6 +1530,10 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(data.clients.isEmpty ? ['Client A'] : data.clients)
       ..sort();
+    _payeClients
+      ..clear()
+      ..addAll(_payeClientListFrom(data))
+      ..sort();
 
     final cleanedEntries = _dedupeEntries(data.entries);
     _entries
@@ -1544,6 +1556,11 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(data.invoiceBaselineTotals);
     _appMode = data.appMode;
+
+    final activeClients = isPayeMode ? _payeClients : _clients;
+    if (_activeVisit != null && !activeClients.contains(_activeVisit!.client)) {
+      _activeVisit = null;
+    }
   }
 
   void _applyLaunchAppModeOverride() {
@@ -1608,6 +1625,10 @@ class AppState extends ChangeNotifier {
       ...cloudData.clients,
       ...localData.clients,
     }.where((client) => client.trim().isNotEmpty).toList()..sort();
+    final mergedPayeClients = {
+      ..._payeClientListFrom(cloudData),
+      ..._payeClientListFrom(localData),
+    }.where((client) => client.trim().isNotEmpty).toList()..sort();
 
     final mergedEntries = _dedupeEntries([
       ...cloudData.entries,
@@ -1629,6 +1650,7 @@ class AppState extends ChangeNotifier {
     return StoredAppData(
       settings: cloudData.settings,
       clients: mergedClients.isEmpty ? ['Client A'] : mergedClients,
+      payeClients: mergedPayeClients,
       entries: mergedEntries,
       payeEntries: mergedPayeEntries,
       activeVisit: cloudData.activeVisit ?? localData.activeVisit,
@@ -1650,6 +1672,7 @@ class AppState extends ChangeNotifier {
     return StoredAppData(
       settings: _settings,
       clients: _clients,
+      payeClients: _payeClients,
       entries: _entries,
       payeEntries: _payeEntries,
       activeVisit: _activeVisit,
@@ -1659,6 +1682,15 @@ class AppState extends ChangeNotifier {
       appMode: _appMode,
       personalLogEntries: _personalLogEntries,
     );
+  }
+
+  List<String> _payeClientListFrom(StoredAppData data) {
+    return data.payeClients
+        .map((client) => client.trim())
+        .where((client) => client.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
   }
 
   List<WorkEntry> _dedupeEntries(List<WorkEntry> entries) {

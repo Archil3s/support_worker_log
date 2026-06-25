@@ -15,6 +15,7 @@ class StoredAppData {
     required this.settings,
     required this.clients,
     required this.entries,
+    this.payeClients = const [],
     this.payeEntries = const [],
     this.activeVisit,
     this.generalActions = const [],
@@ -26,6 +27,7 @@ class StoredAppData {
 
   final AppSettings settings;
   final List<String> clients;
+  final List<String> payeClients;
   final List<WorkEntry> entries;
   final List<WorkEntry> payeEntries;
   final ActiveVisit? activeVisit;
@@ -47,6 +49,7 @@ class StoredAppData {
     return {
       'settings': settings.toJson(),
       'clients': clients,
+      'payeClients': payeClients,
       'entries': entries.map((entry) => entry.toJson()).toList(),
       'payeEntries': payeEntries.map((entry) => entry.toJson()).toList(),
       'activeVisit': activeVisit?.toJson(),
@@ -71,6 +74,13 @@ class StoredAppData {
     final rawClients = json['clients'];
     final clients = rawClients is List
         ? rawClients
+              .whereType<String>()
+              .where((client) => client.trim().isNotEmpty)
+              .toList()
+        : <String>[];
+    final rawPayeClients = json['payeClients'];
+    final storedPayeClients = rawPayeClients is List
+        ? rawPayeClients
               .whereType<String>()
               .where((client) => client.trim().isNotEmpty)
               .toList()
@@ -104,6 +114,15 @@ class StoredAppData {
         }
       }
     }
+    final payeClients =
+        rawPayeClients is List
+              ? storedPayeClients
+              : payeEntries
+                    .map((entry) => entry.client.trim())
+                    .where((client) => client.isNotEmpty)
+                    .toSet()
+                    .toList()
+          ..sort();
 
     final invoiceStatuses = <String, InvoiceStatus>{};
     final rawGeneralActions = json['generalActions'];
@@ -180,6 +199,7 @@ class StoredAppData {
     return StoredAppData(
       settings: settings,
       clients: clients.isEmpty ? ['Client A'] : clients,
+      payeClients: payeClients,
       entries: entries,
       payeEntries: payeEntries,
       activeVisit: activeVisit,

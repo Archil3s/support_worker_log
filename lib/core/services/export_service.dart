@@ -65,11 +65,15 @@ class ExportService {
     required List<WorkEntry> entries,
     required List<String> clients,
     required AppSettings settings,
+    List<String> payeClients = const [],
+    List<WorkEntry> payeEntries = const [],
   }) {
     final data = StoredAppData(
       settings: settings,
       clients: clients,
+      payeClients: payeClients,
       entries: entries,
+      payeEntries: payeEntries,
     );
 
     const encoder = JsonEncoder.withIndent('  ');

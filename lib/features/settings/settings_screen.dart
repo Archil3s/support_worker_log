@@ -366,9 +366,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final appState = context.read<AppState>();
 
     final backup = _exportService.buildJsonBackup(
-      entries: appState.entries,
-      clients: appState.clients,
+      entries: appState.workEntries,
+      clients: appState.workClients,
       settings: appState.settings,
+      payeClients: appState.payeClients,
+      payeEntries: appState.payeEntries,
     );
 
     await Clipboard.setData(ClipboardData(text: backup));
@@ -384,9 +386,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final appState = context.read<AppState>();
 
     final backup = _exportService.buildJsonBackup(
-      entries: appState.entries,
-      clients: appState.clients,
+      entries: appState.workEntries,
+      clients: appState.workClients,
       settings: appState.settings,
+      payeClients: appState.payeClients,
+      payeEntries: appState.payeEntries,
     );
 
     await _showPreviewDialog(

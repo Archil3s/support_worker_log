@@ -98,6 +98,7 @@ void main() {
     final data = StoredAppData(
       settings: const AppSettings(),
       clients: const ['AB'],
+      payeClients: const ['PAYE job'],
       entries: [
         WorkEntry(
           id: 'work-1',
@@ -125,12 +126,71 @@ void main() {
 
     final restored = StoredAppData.fromJson(data.toJson());
 
+    expect(restored.clients, ['AB']);
+    expect(restored.payeClients, ['PAYE job']);
     expect(restored.entries, hasLength(1));
     expect(restored.entries.single.client, 'AB');
     expect(restored.payeEntries, hasLength(1));
     expect(restored.payeEntries.single.client, 'PAYE job');
     expect(restored.payeEntries.single.minutes, 0);
     expect(restored.appMode, AppMode.paye);
+  });
+
+  test('legacy data derives PAYE people only from PAYE entries', () {
+    final restored = StoredAppData.fromJson({
+      'settings': const AppSettings().toJson(),
+      'clients': ['Contractor A', 'Contractor B'],
+      'entries': [
+        WorkEntry(
+          id: 'work-1',
+          client: 'Contractor A',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 7),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const [],
+        ).toJson(),
+      ],
+      'payeEntries': [
+        WorkEntry(
+          id: 'paye-1',
+          client: 'PAYE person',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 8),
+          startTime: const TimeOfDay(hour: 8, minute: 30),
+          minutes: 0,
+          notes: const [],
+        ).toJson(),
+      ],
+      'appMode': AppMode.paye.name,
+    });
+
+    expect(restored.clients, ['Contractor A', 'Contractor B']);
+    expect(restored.payeClients, ['PAYE person']);
+  });
+
+  test('explicit empty PAYE people list stays empty', () {
+    final restored = StoredAppData.fromJson({
+      'settings': const AppSettings().toJson(),
+      'clients': ['Contractor A'],
+      'payeClients': <String>[],
+      'entries': <Map<String, dynamic>>[],
+      'payeEntries': [
+        WorkEntry(
+          id: 'paye-1',
+          client: 'Old PAYE person',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 8),
+          startTime: const TimeOfDay(hour: 8, minute: 30),
+          minutes: 0,
+          notes: const [],
+        ).toJson(),
+      ],
+      'appMode': AppMode.paye.name,
+    });
+
+    expect(restored.clients, ['Contractor A']);
+    expect(restored.payeClients, isEmpty);
   });
 
   test('persists massage app mode', () {
