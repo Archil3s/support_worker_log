@@ -8,12 +8,16 @@ class NoteTextInputTools extends StatefulWidget {
     super.key,
     required this.controller,
     required this.focusNode,
+    required this.title,
     this.onChanged,
+    this.showFullscreenButton = true,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
+  final String title;
   final ValueChanged<String>? onChanged;
+  final bool showFullscreenButton;
 
   @override
   State<NoteTextInputTools> createState() => _NoteTextInputToolsState();
@@ -90,6 +94,20 @@ class _NoteTextInputToolsState extends State<NoteTextInputTools> {
     widget.onChanged?.call('');
   }
 
+  Future<void> _openFullscreen() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _FullScreenNoteEditor(
+          controller: widget.controller,
+          title: widget.title,
+          onChanged: widget.onChanged,
+        ),
+      ),
+    );
+  }
+
   void _insertText(String text) {
     final value = widget.controller.value;
     final current = value.text;
@@ -155,6 +173,12 @@ class _NoteTextInputToolsState extends State<NoteTextInputTools> {
       runSpacing: 8,
       alignment: WrapAlignment.end,
       children: [
+        if (widget.showFullscreenButton)
+          _ToolButton(
+            icon: Icons.open_in_full_outlined,
+            label: 'Full screen',
+            onPressed: _openFullscreen,
+          ),
         _ToolButton(
           icon: Icons.keyboard_alt_outlined,
           label: 'Keyboard',
@@ -182,6 +206,121 @@ class _NoteTextInputToolsState extends State<NoteTextInputTools> {
           onPressed: _clear,
         ),
       ],
+    );
+  }
+}
+
+class _FullScreenNoteEditor extends StatefulWidget {
+  const _FullScreenNoteEditor({
+    required this.controller,
+    required this.title,
+    this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String title;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  State<_FullScreenNoteEditor> createState() => _FullScreenNoteEditorState();
+}
+
+class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
+  late final FocusNode focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    focusNode = FocusNode();
+    widget.controller.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_refresh);
+    focusNode.dispose();
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  int get _wordCount {
+    return RegExp(
+      r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?",
+    ).allMatches(widget.controller.text).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '$_wordCount words',
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: NoteTextInputTools(
+                      controller: widget.controller,
+                      focusNode: focusNode,
+                      title: widget.title,
+                      onChanged: widget.onChanged,
+                      showFullscreenButton: false,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: focusNode,
+                  expands: true,
+                  minLines: null,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  textAlignVertical: TextAlignVertical.top,
+                  scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 260),
+                  onChanged: widget.onChanged,
+                  decoration: InputDecoration(
+                    labelText: widget.title,
+                    alignLabelWithHint: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

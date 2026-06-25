@@ -765,6 +765,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               child: NoteTextInputTools(
                 controller: noteController,
                 focusNode: noteFocusNode,
+                title: 'Support worker note',
                 onChanged: (_) => _scheduleDraftAutosave(),
               ),
             ),

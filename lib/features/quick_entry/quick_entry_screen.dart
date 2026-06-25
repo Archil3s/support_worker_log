@@ -2463,6 +2463,7 @@ class _SupportNoteFieldState extends State<_SupportNoteField> {
           child: NoteTextInputTools(
             controller: widget.controller,
             focusNode: focusNode,
+            title: widget.label,
             onChanged: widget.onChanged,
           ),
         ),
