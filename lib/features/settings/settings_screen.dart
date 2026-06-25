@@ -212,7 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true) return;
 
     final removed = payeMode
-        ? context.read<AppState>().removeClientFromList(client)
+        ? context.read<AppState>().removePayeClientFromList(client)
         : context.read<AppState>().removeClient(client);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -256,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed != true) return;
 
-    final count = context.read<AppState>().clearClientList();
+    final count = context.read<AppState>().clearPayeClientList();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Removed $count PAYE people from the list')),

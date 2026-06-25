@@ -9,11 +9,11 @@ import 'storage_service.dart';
 
 class CloudStorageService {
   CloudStorageService({FirebaseAuth? auth, FirebaseFirestore? firestore})
-    : _auth = auth ?? FirebaseAuth.instance,
-      _firestore = firestore ?? FirebaseFirestore.instance;
+    : _authOverride = auth,
+      _firestoreOverride = firestore;
 
-  final FirebaseAuth _auth;
-  final FirebaseFirestore _firestore;
+  final FirebaseAuth? _authOverride;
+  final FirebaseFirestore? _firestoreOverride;
   String? _googleCalendarAccessToken;
   String? _googleDriveAccessToken;
   DateTime? _sessionExpiresAt;
@@ -26,7 +26,19 @@ class CloudStorageService {
   @visibleForTesting
   static Duration get sessionMaxAgeForTesting => _sessionMaxAge;
 
-  User? get currentUser => _auth.currentUser;
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
+
+  FirebaseFirestore get _firestore =>
+      _firestoreOverride ?? FirebaseFirestore.instance;
+
+  User? get currentUser {
+    try {
+      return _auth.currentUser;
+    } on FirebaseException catch (error) {
+      if (error.code == 'no-app') return null;
+      rethrow;
+    }
+  }
 
   String? get userId => currentUser?.uid;
 

@@ -32,6 +32,9 @@ class RemovedEntry {
 enum CalendarEntryExportResult { created, draftOpened }
 
 class AppState extends ChangeNotifier {
+  AppState({bool warmGoogleAccounts = true})
+    : _warmGoogleAccounts = warmGoogleAccounts;
+
   final StorageService _storageService = StorageService();
   final AppLockService _appLockService = AppLockService();
   final CloudStorageService _cloudStorageService = CloudStorageService();
@@ -81,6 +84,7 @@ class AppState extends ChangeNotifier {
   bool _cloudSyncReady = false;
   bool _appUnlocked = false;
   String? _cloudSyncError;
+  final bool _warmGoogleAccounts;
 
   AppSettings get settings => _settings;
   AppMode get appMode => _appMode;
@@ -218,7 +222,9 @@ class AppState extends ChangeNotifier {
     }
 
     notifyListeners();
-    unawaited(warmGoogleExportAccount(_googleScopeForMode(_appMode)));
+    if (_warmGoogleAccounts) {
+      unawaited(warmGoogleExportAccount(_googleScopeForMode(_appMode)));
+    }
   }
 
   Future<void> signIn({required String email, required String password}) async {
@@ -725,7 +731,9 @@ class AppState extends ChangeNotifier {
       _activeVisit = null;
     }
     _persistAndNotify();
-    unawaited(warmGoogleExportAccount(_googleScopeForMode(mode)));
+    if (_warmGoogleAccounts) {
+      unawaited(warmGoogleExportAccount(_googleScopeForMode(mode)));
+    }
   }
 
   void startActiveVisit(ActiveVisit visit) {
@@ -961,6 +969,18 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  bool removePayeClientFromList(String client) {
+    final removed = _payeClients.remove(client);
+    if (!removed) return false;
+
+    if (isPayeMode && _activeVisit?.client == client) {
+      _activeVisit = null;
+    }
+
+    _persistAndNotify();
+    return true;
+  }
+
   int clearClientList() {
     final activeClients = isPayeMode ? _payeClients : _clients;
     final count = activeClients.length;
@@ -968,6 +988,19 @@ class AppState extends ChangeNotifier {
 
     activeClients.clear();
     _activeVisit = null;
+    _persistAndNotify();
+
+    return count;
+  }
+
+  int clearPayeClientList() {
+    final count = _payeClients.length;
+    if (count == 0) return 0;
+
+    _payeClients.clear();
+    if (isPayeMode) {
+      _activeVisit = null;
+    }
     _persistAndNotify();
 
     return count;
