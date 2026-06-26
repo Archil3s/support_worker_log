@@ -247,7 +247,7 @@ void main() {
     expect(meta, isNotNull);
     expect(meta!.fileId, 'paye-note');
     expect(meta.fileName, '2026-06-07_Jane_Smith.docx');
-    expect(meta.status, EntrySupportNoteStatus.finished);
+    expect(meta.status, EntrySupportNoteStatus.submitted);
     expect(meta.parentFolderId, 'year-folder');
     expect(meta.openLink, 'https://drive.example/paye-note');
     expect(meta.googleAccountEmail, 'paye@example.com');
@@ -313,6 +313,69 @@ void main() {
         _googleDocsMimeType,
         _docxMimeType,
       ]);
+      expect(matches.map((meta) => meta.status).toSet(), {
+        EntrySupportNoteStatus.submitted,
+      });
+    },
+  );
+
+  test(
+    'findSupportNoteInDrive returns existing submitted Google Doc',
+    () async {
+      final api = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'client-folder',
+              name: 'AB',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'client-folder': [
+            const GoogleDriveFile(
+              id: 'period-folder',
+              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'period-folder': [
+            const GoogleDriveFile(
+              id: 'type-folder',
+              name: 'Professional Contacts',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'type-folder': [
+            const GoogleDriveFile(
+              id: 'drive-note',
+              name: '2026-06-09_AB_submitted',
+              mimeType: _googleDocsMimeType,
+              webViewLink: 'https://drive.example/submitted-note',
+            ),
+          ],
+        },
+      );
+      final service = GoogleDriveService(api: api);
+
+      final meta = await service.findSupportNoteInDrive(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entry: WorkEntry(
+          id: 'entry-1',
+          client: 'AB',
+          type: EntryType.professionalContact,
+          date: DateTime(2026, 6, 9),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 30,
+          notes: const [],
+        ),
+      );
+
+      expect(meta, isNotNull);
+      expect(meta!.fileId, 'drive-note');
+      expect(meta.status, EntrySupportNoteStatus.submitted);
+      expect(meta.mimeType, _googleDocsMimeType);
+      expect(meta.openLink, 'https://drive.example/submitted-note');
     },
   );
 

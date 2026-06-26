@@ -205,7 +205,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
           fallback: loaded.initials,
         );
         noteController.text = loaded.noteText;
-        status = loaded.status;
+        status = _preferredStatus(loaded.status, loadedDrive?.status);
       }
       draftAutosaveReady = true;
     });
@@ -1061,6 +1061,20 @@ int _supportNoteStatusRank(EntrySupportNoteStatus status) {
     EntrySupportNoteStatus.finished => 2,
     EntrySupportNoteStatus.submitted => 3,
   };
+}
+
+EntrySupportNoteStatus _preferredStatus(
+  EntrySupportNoteStatus? current,
+  EntrySupportNoteStatus? incoming,
+) {
+  if (current == null) {
+    return incoming ?? EntrySupportNoteStatus.incomplete;
+  }
+  if (incoming == null) return current;
+
+  return _supportNoteStatusRank(incoming) > _supportNoteStatusRank(current)
+      ? incoming
+      : current;
 }
 
 GoogleExportAccountScope _currentGoogleScope(AppState appState) {

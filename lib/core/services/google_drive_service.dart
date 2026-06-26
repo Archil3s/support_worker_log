@@ -474,8 +474,8 @@ class GoogleDriveService {
             .where(
               (file) =>
                   file.name.startsWith(datePrefix) &&
-                  file.name.endsWith('.docx') &&
-                  file.mimeType == _docxMimeType,
+                  (file.mimeType == _docxMimeType ||
+                      file.mimeType == _googleDocsMimeType),
             )
             .toList()
           ..sort((a, b) => b.name.compareTo(a.name));
@@ -556,7 +556,7 @@ class GoogleDriveService {
           (file) => EntryDriveSupportNoteMeta(
             entryId: entry.id,
             initials: LocalSupportNoteService.personNameForEntry(entry),
-            status: EntrySupportNoteStatus.finished,
+            status: EntrySupportNoteStatus.submitted,
             fileId: file.id,
             fileName: file.name,
             noteText: '',
@@ -680,8 +680,8 @@ class GoogleDriveService {
       final hasMatchingFile = files.any(
         (file) =>
             file.name.startsWith(datePrefix) &&
-            file.name.endsWith('.docx') &&
-            file.mimeType == _docxMimeType,
+            (file.mimeType == _docxMimeType ||
+                file.mimeType == _googleDocsMimeType),
       );
       if (hasMatchingFile) return folder;
     }
@@ -1052,13 +1052,13 @@ class GoogleDriveService {
 
   EntrySupportNoteStatus _statusFromSupportNoteFileName(String fileName) {
     final lower = fileName.toLowerCase();
-    if (lower.contains('_submitted.docx')) {
+    if (lower.contains('_submitted')) {
       return EntrySupportNoteStatus.submitted;
     }
-    if (lower.contains('_finished.docx')) {
+    if (lower.contains('_finished')) {
       return EntrySupportNoteStatus.finished;
     }
-    if (lower.contains('_in-progress.docx')) {
+    if (lower.contains('_in-progress')) {
       return EntrySupportNoteStatus.inProgress;
     }
     return EntrySupportNoteStatus.incomplete;

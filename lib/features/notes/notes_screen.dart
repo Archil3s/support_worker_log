@@ -31,13 +31,7 @@ String _noteTitleForEntry({
 }
 
 String _personNameForNote(WorkEntry entry, {String? fallback}) {
-  final appName = entry.client.trim();
-  if (appName.isNotEmpty) return appName;
-
-  final fallbackName = fallback?.trim();
-  if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
-
-  return LocalSupportNoteService.defaultInitialsForEntry(entry);
+  return LocalSupportNoteService.personNameForEntry(entry, fallback: fallback);
 }
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -820,14 +814,31 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
   Future<void> _load() async {
     final appState = context.read<AppState>();
-    final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
-    final savedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
+    final googleAccountEmail = _currentGoogleAccountEmail(appState);
+    final localMeta = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    final loaded = _preferredEntrySupportNoteMeta(
+      localMeta,
+      appState.supportNoteMetaFor(widget.entry.id),
+    );
+    final savedDrive = _driveMetaForAccount(
+      await driveService.loadSupportNoteMeta(widget.entry.id),
+      googleAccountEmail,
+    );
+    final syncedDrive = _driveMetaForAccount(
+      appState.driveSupportNoteMetaFor(widget.entry.id),
+      googleAccountEmail,
+    );
     final loadedDrive =
-        _driveMetaForAccount(
-          savedDrive,
-          _currentGoogleAccountEmail(appState),
-        ) ??
+        _preferredDriveSupportNoteMeta(savedDrive, syncedDrive) ??
         await appState.findEntryNoteInCurrentDrive(widget.entry);
+
+    if (loaded != null) {
+      appState.upsertSupportNoteMeta(loaded);
+    }
+
+    if (loadedDrive != null) {
+      appState.upsertDriveSupportNoteMeta(loadedDrive);
+    }
 
     if (!mounted) return;
 
@@ -935,8 +946,7 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
   Widget build(BuildContext context) {
     final filter = widget.statusFilter;
 
-    final status =
-        meta?.status ?? driveMeta?.status ?? EntrySupportNoteStatus.incomplete;
+    final status = _preferredStatus(meta?.status, driveMeta?.status);
 
     if (filter != null && status != filter) {
       return const SizedBox.shrink();
@@ -1135,14 +1145,31 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   Future<void> _load() async {
     final appState = context.read<AppState>();
-    final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
-    final savedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
+    final googleAccountEmail = _currentGoogleAccountEmail(appState);
+    final localMeta = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    final loaded = _preferredEntrySupportNoteMeta(
+      localMeta,
+      appState.supportNoteMetaFor(widget.entry.id),
+    );
+    final savedDrive = _driveMetaForAccount(
+      await driveService.loadSupportNoteMeta(widget.entry.id),
+      googleAccountEmail,
+    );
+    final syncedDrive = _driveMetaForAccount(
+      appState.driveSupportNoteMetaFor(widget.entry.id),
+      googleAccountEmail,
+    );
     final loadedDrive =
-        _driveMetaForAccount(
-          savedDrive,
-          _currentGoogleAccountEmail(appState),
-        ) ??
+        _preferredDriveSupportNoteMeta(savedDrive, syncedDrive) ??
         await appState.findEntryNoteInCurrentDrive(widget.entry);
+
+    if (loaded != null) {
+      appState.upsertSupportNoteMeta(loaded);
+    }
+
+    if (loadedDrive != null) {
+      appState.upsertDriveSupportNoteMeta(loadedDrive);
+    }
 
     if (!mounted) return;
 
@@ -1178,7 +1205,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           fallback: loaded.initials,
         );
         noteController.text = loaded.noteText;
-        status = loaded.status;
+        status = _preferredStatus(loaded.status, loadedDrive?.status);
       }
     });
 
@@ -1242,6 +1269,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         meta = updated;
         message = 'Saved locally as ${updated.fileName}';
       });
+      appState.upsertSupportNoteMeta(updated);
       _updatePayeEntry(appState);
     } catch (error) {
       if (!mounted) return;
@@ -1262,6 +1290,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     String nextMessage, {
     bool showMessage = true,
   }) async {
+    final appState = context.read<AppState>();
     final updated = await LocalSupportNoteService.saveDraftMeta(
       entry: widget.entry,
       initials: initialsController.text,
@@ -1275,7 +1304,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       meta = updated;
       if (showMessage) message = nextMessage;
     });
-    _updatePayeEntry(context.read<AppState>());
+    appState.upsertSupportNoteMeta(updated);
+    _updatePayeEntry(appState);
   }
 
   void _updatePayeEntry(AppState appState) {
@@ -1349,7 +1379,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         );
         final updated =
             discovered?.copyWith(
-              initials: initialsController.text.trim().toUpperCase(),
+              initials: _personNameForNote(
+                widget.entry,
+                fallback: initialsController.text,
+              ),
               status: status,
               fileId: file.id,
               fileName: file.name,
@@ -1360,7 +1393,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             ) ??
             EntryDriveSupportNoteMeta(
               entryId: widget.entry.id,
-              initials: initialsController.text.trim().toUpperCase(),
+              initials: _personNameForNote(
+                widget.entry,
+                fallback: initialsController.text,
+              ),
               status: status,
               fileId: file.id,
               fileName: file.name,
@@ -1372,6 +1408,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               googleAccountEmail: appState.payeGoogleAccountEmail,
             );
         await driveService.saveSupportNoteMeta(updated);
+        appState.upsertDriveSupportNoteMeta(updated);
 
         if (!mounted) return;
 
@@ -1403,6 +1440,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         driveMeta = updated;
         message = 'Saved to Google Drive as ${updated.fileName}';
       });
+      appState.upsertDriveSupportNoteMeta(updated);
     } catch (error) {
       if (!mounted) return;
 
@@ -1498,6 +1536,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               status: next,
             );
       suppressAutoSave = false;
+      await _saveDraftOnly('Draft status saved.', showMessage: false);
       return;
     }
 
@@ -1518,11 +1557,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     try {
       EntrySupportNoteMeta? updatedLocal;
       EntryDriveSupportNoteMeta? updatedDrive;
-      final appState = driveMeta == null ? null : context.read<AppState>();
+      final appState = context.read<AppState>();
 
       if (meta != null) {
-        final payeMode = context.read<AppState>().isPayeMode;
-        updatedLocal = payeMode
+        updatedLocal = appState.isPayeMode
             ? await LocalSupportNoteService.savePayeNote(
                 entry: widget.entry,
                 initials: initialsController.text,
@@ -1537,7 +1575,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               );
       }
 
-      if (driveMeta != null && appState != null) {
+      if (driveMeta != null) {
         if (appState.isPayeMode) {
           final updatedEntry = widget.entry.copyWith(
             supportNoteBreakdown: noteController.text,
@@ -1549,7 +1587,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
           updatedDrive =
               discovered?.copyWith(
-                initials: initialsController.text.trim().toUpperCase(),
+                initials: _personNameForNote(
+                  widget.entry,
+                  fallback: initialsController.text,
+                ),
                 status: status,
                 fileId: file.id,
                 fileName: file.name,
@@ -1560,7 +1601,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               ) ??
               EntryDriveSupportNoteMeta(
                 entryId: widget.entry.id,
-                initials: initialsController.text.trim().toUpperCase(),
+                initials: _personNameForNote(
+                  widget.entry,
+                  fallback: initialsController.text,
+                ),
                 status: status,
                 fileId: file.id,
                 fileName: file.name,
@@ -1597,6 +1641,12 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         driveMeta = updatedDrive ?? driveMeta;
         message = 'Auto-saved attached note files.';
       });
+      if (updatedLocal != null) {
+        appState.upsertSupportNoteMeta(updatedLocal);
+      }
+      if (updatedDrive != null) {
+        appState.upsertDriveSupportNoteMeta(updatedDrive);
+      }
     } catch (error) {
       if (!mounted || version != autoSaveVersion) return;
 
@@ -1955,6 +2005,77 @@ EntryDriveSupportNoteMeta? _driveMetaForAccount(
   if (saved == null || saved.isEmpty) return null;
 
   return saved == selected ? meta : null;
+}
+
+EntrySupportNoteMeta? _preferredEntrySupportNoteMeta(
+  EntrySupportNoteMeta? current,
+  EntrySupportNoteMeta? incoming,
+) {
+  if (current == null) return incoming;
+  if (incoming == null) return current;
+
+  final currentRank = _supportNoteStatusRank(current.status);
+  final incomingRank = _supportNoteStatusRank(incoming.status);
+  if (incomingRank != currentRank) {
+    return incomingRank > currentRank ? incoming : current;
+  }
+
+  if (current.noteText.trim().isEmpty && incoming.noteText.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  if (current.fileName.trim().isEmpty && incoming.fileName.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  return incoming;
+}
+
+EntryDriveSupportNoteMeta? _preferredDriveSupportNoteMeta(
+  EntryDriveSupportNoteMeta? current,
+  EntryDriveSupportNoteMeta? incoming,
+) {
+  if (current == null) return incoming;
+  if (incoming == null) return current;
+
+  final currentRank = _supportNoteStatusRank(current.status);
+  final incomingRank = _supportNoteStatusRank(incoming.status);
+  if (incomingRank != currentRank) {
+    return incomingRank > currentRank ? incoming : current;
+  }
+
+  if (current.noteText.trim().isEmpty && incoming.noteText.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  if (current.fileId.trim().isEmpty && incoming.fileId.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  return incoming;
+}
+
+int _supportNoteStatusRank(EntrySupportNoteStatus status) {
+  return switch (status) {
+    EntrySupportNoteStatus.incomplete => 0,
+    EntrySupportNoteStatus.inProgress => 1,
+    EntrySupportNoteStatus.finished => 2,
+    EntrySupportNoteStatus.submitted => 3,
+  };
+}
+
+EntrySupportNoteStatus _preferredStatus(
+  EntrySupportNoteStatus? current,
+  EntrySupportNoteStatus? incoming,
+) {
+  if (current == null) {
+    return incoming ?? EntrySupportNoteStatus.incomplete;
+  }
+  if (incoming == null) return current;
+
+  return _supportNoteStatusRank(incoming) > _supportNoteStatusRank(current)
+      ? incoming
+      : current;
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {
