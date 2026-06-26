@@ -26,12 +26,18 @@ String _noteTitleForEntry({
   required WorkEntry entry,
   required EntrySupportNoteStatus status,
 }) {
-  final initials = LocalSupportNoteService.defaultInitialsForEntry(entry);
-  return LocalSupportNoteService.noteTitle(
-    entry: entry,
-    initials: initials,
-    status: status,
-  );
+  final person = entry.client.trim().isEmpty ? 'Unknown Client' : entry.client;
+  return '$person | ${formatDate(entry.date)} | ${status.label}';
+}
+
+String _personNameForNote(WorkEntry entry, {String? fallback}) {
+  final appName = entry.client.trim();
+  if (appName.isNotEmpty) return appName;
+
+  final fallbackName = fallback?.trim();
+  if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
+
+  return LocalSupportNoteService.defaultInitialsForEntry(entry);
 }
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -1147,7 +1153,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       driveMeta = loadedDrive;
 
       if (loaded == null && loadedDrive != null) {
-        initialsController.text = loadedDrive.initials;
+        initialsController.text = _personNameForNote(
+          widget.entry,
+          fallback: loadedDrive.initials,
+        );
         noteController.text = loadedDrive.noteText.trim().isNotEmpty
             ? loadedDrive.noteText
             : _defaultNoteText(
@@ -1157,15 +1166,17 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               );
         status = loadedDrive.status;
       } else if (loaded == null) {
-        initialsController.text =
-            LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
+        initialsController.text = _personNameForNote(widget.entry);
         noteController.text = _defaultNoteText(
           appState: appState,
           entry: widget.entry,
           status: status,
         );
       } else {
-        initialsController.text = loaded.initials;
+        initialsController.text = _personNameForNote(
+          widget.entry,
+          fallback: loaded.initials,
+        );
         noteController.text = loaded.noteText;
         status = loaded.status;
       }
@@ -1719,10 +1730,11 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           TextField(
             controller: initialsController,
             enabled: !busy,
-            textCapitalization: TextCapitalization.characters,
+            textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
-              labelText: 'Person initials',
-              prefixIcon: Icon(Icons.badge_outlined),
+              labelText: 'Person name',
+              helperText: 'Uses the app person name on saved notes.',
+              prefixIcon: Icon(Icons.person_outline),
             ),
           ),
           const SizedBox(height: 12),

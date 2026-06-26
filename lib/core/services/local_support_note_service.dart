@@ -331,7 +331,8 @@ Referrals
     required String initials,
     required EntrySupportNoteStatus status,
   }) {
-    return '${initials.trim().toUpperCase()} | ${formatDate(entry.date)} | ${status.label}';
+    final person = entry.client.trim().isEmpty ? initials.trim() : entry.client;
+    return '$person | ${formatDate(entry.date)} | ${status.label}';
   }
 
   static String noteFileName({
