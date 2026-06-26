@@ -7,6 +7,8 @@ import 'package:support_worker_log/core/models/general_action.dart';
 import 'package:support_worker_log/core/models/invoice_status.dart';
 import 'package:support_worker_log/core/models/personal_log_entry.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
+import 'package:support_worker_log/core/services/google_drive_service.dart';
+import 'package:support_worker_log/core/services/local_support_note_service.dart';
 import 'package:support_worker_log/core/services/storage_service.dart';
 
 void main() {
@@ -134,6 +136,52 @@ void main() {
     expect(restored.payeEntries.single.client, 'PAYE job');
     expect(restored.payeEntries.single.minutes, 0);
     expect(restored.appMode, AppMode.paye);
+  });
+
+  test('persists support note metadata for Firebase sync', () {
+    const data = StoredAppData(
+      settings: AppSettings(),
+      clients: ['Brad Roberts'],
+      entries: [],
+      supportNoteMetas: {
+        'entry-1': EntrySupportNoteMeta(
+          entryId: 'entry-1',
+          initials: 'Brad Roberts',
+          status: EntrySupportNoteStatus.submitted,
+          fileName: 'Brad Roberts/2026-06-26_Brad Roberts_submitted.docx',
+          noteText: 'Submitted support note text.',
+        ),
+      },
+      driveSupportNoteMetas: {
+        'entry-1': EntryDriveSupportNoteMeta(
+          entryId: 'entry-1',
+          initials: 'Brad Roberts',
+          status: EntrySupportNoteStatus.submitted,
+          fileId: 'drive-file-1',
+          fileName: 'Brad Roberts | 26/06/2026 | Submitted',
+          noteText: 'Submitted support note text.',
+          parentFolderId: 'drive-folder-1',
+          webViewLink: 'https://docs.google.com/document/d/drive-file-1/edit',
+          googleAccountEmail: 'brad@example.com',
+        ),
+      },
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(
+      restored.supportNoteMetas['entry-1']?.status,
+      EntrySupportNoteStatus.submitted,
+    );
+    expect(restored.supportNoteMetas['entry-1']?.initials, 'Brad Roberts');
+    expect(
+      restored.driveSupportNoteMetas['entry-1']?.status,
+      EntrySupportNoteStatus.submitted,
+    );
+    expect(
+      restored.driveSupportNoteMetas['entry-1']?.webViewLink,
+      'https://docs.google.com/document/d/drive-file-1/edit',
+    );
   });
 
   test('legacy data derives PAYE people only from PAYE entries', () {

@@ -136,25 +136,48 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final appState = context.read<AppState>();
     EntrySupportNoteMeta? loaded;
     EntryDriveSupportNoteMeta? loadedDrive;
+    final googleAccountEmail = _currentGoogleAccountEmail(appState);
 
     try {
       loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+      loaded = _preferredEntrySupportNoteMeta(
+        loaded,
+        appState.supportNoteMetaFor(widget.entry.id),
+      );
     } catch (_) {
-      loaded = null;
+      loaded = appState.supportNoteMetaFor(widget.entry.id);
     }
 
     try {
       final savedDrive = await driveService.loadSupportNoteMeta(
         widget.entry.id,
       );
-      loadedDrive =
-          _driveMetaForAccount(
-            savedDrive,
-            _currentGoogleAccountEmail(appState),
-          ) ??
-          await appState.findEntryNoteInCurrentDrive(widget.entry);
+      final savedDriveForAccount = _driveMetaForAccount(
+        savedDrive,
+        googleAccountEmail,
+      );
+      final syncedDriveForAccount = _driveMetaForAccount(
+        appState.driveSupportNoteMetaFor(widget.entry.id),
+        googleAccountEmail,
+      );
+      loadedDrive = _preferredDriveSupportNoteMeta(
+        savedDriveForAccount,
+        syncedDriveForAccount,
+      );
+      loadedDrive ??= await appState.findEntryNoteInCurrentDrive(widget.entry);
     } catch (_) {
-      loadedDrive = null;
+      loadedDrive = _driveMetaForAccount(
+        appState.driveSupportNoteMetaFor(widget.entry.id),
+        googleAccountEmail,
+      );
+    }
+
+    if (loaded != null) {
+      appState.upsertSupportNoteMeta(loaded);
+    }
+
+    if (loadedDrive != null) {
+      appState.upsertDriveSupportNoteMeta(loadedDrive);
     }
 
     if (!mounted) return;
@@ -264,6 +287,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             ? 'PAYE note saved in the app and as ${updated.fileName}'
             : 'Saved locally as ${updated.fileName}';
       });
+      context.read<AppState>().upsertSupportNoteMeta(updated);
     } catch (error) {
       if (!mounted) return;
 
@@ -283,6 +307,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     String nextMessage, {
     bool showMessage = true,
   }) async {
+    final appState = context.read<AppState>();
     final updated = await LocalSupportNoteService.saveDraftMeta(
       entry: widget.entry,
       initials: initialsController.text,
@@ -296,7 +321,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       meta = updated;
       if (showMessage) message = nextMessage;
     });
-    _updatePayeEntry(context.read<AppState>());
+    appState.upsertSupportNoteMeta(updated);
+    _updatePayeEntry(appState);
   }
 
   void _updatePayeEntry(AppState appState) {
@@ -414,6 +440,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               googleAccountEmail: appState.payeGoogleAccountEmail,
             );
         await driveService.saveSupportNoteMeta(updated);
+        appState.upsertDriveSupportNoteMeta(updated);
 
         if (!mounted) return;
 
@@ -445,6 +472,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         driveMeta = updated;
         message = 'Saved to Google Drive as ${updated.fileName}';
       });
+      appState.upsertDriveSupportNoteMeta(updated);
     } catch (error) {
       if (!mounted) return;
 
@@ -529,7 +557,6 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     setState(() {
       status = next;
     });
-    _scheduleDraftAutosave();
 
     if (meta == null) {
       noteController.text = _defaultNoteText(
@@ -537,6 +564,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         entry: widget.entry,
         status: next,
       );
+      await _saveDraftOnly('Draft status saved.', showMessage: false);
       return;
     }
 
@@ -701,6 +729,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
       final updatedMeta = current.copyWith(parentFolderId: folder.id);
       await driveService.saveSupportNoteMeta(updatedMeta);
+      appState.upsertDriveSupportNoteMeta(updatedMeta);
 
       if (!mounted) return;
 
@@ -975,6 +1004,63 @@ EntryDriveSupportNoteMeta? _driveMetaForAccount(
   if (saved == null || saved.isEmpty) return null;
 
   return saved == selected ? meta : null;
+}
+
+EntrySupportNoteMeta? _preferredEntrySupportNoteMeta(
+  EntrySupportNoteMeta? current,
+  EntrySupportNoteMeta? incoming,
+) {
+  if (current == null) return incoming;
+  if (incoming == null) return current;
+
+  final currentRank = _supportNoteStatusRank(current.status);
+  final incomingRank = _supportNoteStatusRank(incoming.status);
+  if (incomingRank != currentRank) {
+    return incomingRank > currentRank ? incoming : current;
+  }
+
+  if (current.noteText.trim().isEmpty && incoming.noteText.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  if (current.fileName.trim().isEmpty && incoming.fileName.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  return incoming;
+}
+
+EntryDriveSupportNoteMeta? _preferredDriveSupportNoteMeta(
+  EntryDriveSupportNoteMeta? current,
+  EntryDriveSupportNoteMeta? incoming,
+) {
+  if (current == null) return incoming;
+  if (incoming == null) return current;
+
+  final currentRank = _supportNoteStatusRank(current.status);
+  final incomingRank = _supportNoteStatusRank(incoming.status);
+  if (incomingRank != currentRank) {
+    return incomingRank > currentRank ? incoming : current;
+  }
+
+  if (current.noteText.trim().isEmpty && incoming.noteText.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  if (current.fileId.trim().isEmpty && incoming.fileId.trim().isNotEmpty) {
+    return incoming;
+  }
+
+  return incoming;
+}
+
+int _supportNoteStatusRank(EntrySupportNoteStatus status) {
+  return switch (status) {
+    EntrySupportNoteStatus.incomplete => 0,
+    EntrySupportNoteStatus.inProgress => 1,
+    EntrySupportNoteStatus.finished => 2,
+    EntrySupportNoteStatus.submitted => 3,
+  };
 }
 
 GoogleExportAccountScope _currentGoogleScope(AppState appState) {

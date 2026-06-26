@@ -56,6 +56,8 @@ class AppState extends ChangeNotifier {
   final List<PersonalLogEntry> _personalLogEntries = [];
   final Map<String, InvoiceStatus> _invoiceStatuses = {};
   final Map<String, double> _invoiceBaselineTotals = {};
+  final Map<String, EntrySupportNoteMeta> _supportNoteMetas = {};
+  final Map<String, EntryDriveSupportNoteMeta> _driveSupportNoteMetas = {};
 
   late final List<String> _clientsView = UnmodifiableListView(_clients);
   late final List<String> _payeClientsView = UnmodifiableListView(_payeClients);
@@ -101,6 +103,13 @@ class AppState extends ChangeNotifier {
   List<PersonalLogEntry> get personalLogEntries => _personalLogEntriesView;
   Map<String, InvoiceStatus> get invoiceStatuses => _invoiceStatusesView;
   Map<String, double> get invoiceBaselineTotals => _invoiceBaselineTotalsView;
+  EntrySupportNoteMeta? supportNoteMetaFor(String entryId) {
+    return _supportNoteMetas[entryId];
+  }
+
+  EntryDriveSupportNoteMeta? driveSupportNoteMetaFor(String entryId) {
+    return _driveSupportNoteMetas[entryId];
+  }
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get appUnlocked => _appUnlocked;
@@ -204,6 +213,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final localData = await _storageService.load();
     _replaceInMemory(localData);
+    await _migrateLocalSupportNoteMetadata();
     _applyLaunchAppModeOverride();
 
     try {
@@ -470,6 +480,9 @@ class AppState extends ChangeNotifier {
   Future<void> deleteStoredSupportNoteData(String entryId) async {
     await LocalSupportNoteService.removeMeta(entryId);
     await _googleDriveService.removeSupportNoteMeta(entryId);
+    _supportNoteMetas.remove(entryId);
+    _driveSupportNoteMetas.remove(entryId);
+    _persistAndNotify();
   }
 
   Future<List<String>> deletePayeDriveNoteForEntry(WorkEntry entry) async {
@@ -654,6 +667,22 @@ class AppState extends ChangeNotifier {
     _scheduleDriveInvoiceSync();
     _scheduleDrivePersonalSync();
     notifyListeners();
+  }
+
+  void upsertSupportNoteMeta(EntrySupportNoteMeta meta) {
+    final id = meta.entryId.trim();
+    if (id.isEmpty) return;
+
+    _supportNoteMetas[id] = meta;
+    _persistAndNotify();
+  }
+
+  void upsertDriveSupportNoteMeta(EntryDriveSupportNoteMeta meta) {
+    final id = meta.entryId.trim();
+    if (id.isEmpty) return;
+
+    _driveSupportNoteMetas[id] = meta;
+    _persistAndNotify();
   }
 
   InvoiceStatus invoiceStatusForKey(String key) {
@@ -1598,6 +1627,12 @@ class AppState extends ChangeNotifier {
     _invoiceBaselineTotals
       ..clear()
       ..addAll(data.invoiceBaselineTotals);
+    _supportNoteMetas
+      ..clear()
+      ..addAll(data.supportNoteMetas);
+    _driveSupportNoteMetas
+      ..clear()
+      ..addAll(data.driveSupportNoteMetas);
     _appMode = data.appMode;
 
     final activeClients = isPayeMode ? _payeClients : _clients;
@@ -1660,6 +1695,40 @@ class AppState extends ChangeNotifier {
     };
   }
 
+  Future<void> _migrateLocalSupportNoteMetadata() async {
+    final entryIds = {
+      for (final entry in _entries) entry.id,
+      for (final entry in _payeEntries) entry.id,
+    }.where((id) => id.trim().isNotEmpty);
+    var changed = false;
+
+    for (final entryId in entryIds) {
+      final localMeta = await LocalSupportNoteService.loadMeta(entryId);
+      if (localMeta != null) {
+        final current = _supportNoteMetas[entryId];
+        final next = _preferredSupportNoteMeta(current, localMeta);
+        if (current != next) {
+          _supportNoteMetas[entryId] = next;
+          changed = true;
+        }
+      }
+
+      final driveMeta = await _googleDriveService.loadSupportNoteMeta(entryId);
+      if (driveMeta != null) {
+        final current = _driveSupportNoteMetas[entryId];
+        final next = _preferredDriveSupportNoteMeta(current, driveMeta);
+        if (current != next) {
+          _driveSupportNoteMetas[entryId] = next;
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await _storageService.save(_currentStoredData());
+    }
+  }
+
   StoredAppData _mergeStoredData({
     required StoredAppData localData,
     required StoredAppData cloudData,
@@ -1689,6 +1758,14 @@ class AppState extends ChangeNotifier {
       ...cloudData.personalLogEntries,
       ...localData.personalLogEntries,
     ]);
+    final mergedSupportNoteMetas = _mergeSupportNoteMetas(
+      cloudData.supportNoteMetas,
+      localData.supportNoteMetas,
+    );
+    final mergedDriveSupportNoteMetas = _mergeDriveSupportNoteMetas(
+      cloudData.driveSupportNoteMetas,
+      localData.driveSupportNoteMetas,
+    );
 
     return StoredAppData(
       settings: cloudData.settings,
@@ -1708,6 +1785,8 @@ class AppState extends ChangeNotifier {
       },
       appMode: localData.appMode,
       personalLogEntries: mergedPersonalLogs,
+      supportNoteMetas: mergedSupportNoteMetas,
+      driveSupportNoteMetas: mergedDriveSupportNoteMetas,
     );
   }
 
@@ -1724,7 +1803,99 @@ class AppState extends ChangeNotifier {
       invoiceBaselineTotals: _invoiceBaselineTotals,
       appMode: _appMode,
       personalLogEntries: _personalLogEntries,
+      supportNoteMetas: _supportNoteMetas,
+      driveSupportNoteMetas: _driveSupportNoteMetas,
     );
+  }
+
+  Map<String, EntrySupportNoteMeta> _mergeSupportNoteMetas(
+    Map<String, EntrySupportNoteMeta> cloud,
+    Map<String, EntrySupportNoteMeta> local,
+  ) {
+    final result = <String, EntrySupportNoteMeta>{...cloud};
+
+    for (final entry in local.entries) {
+      result[entry.key] = _preferredSupportNoteMeta(
+        result[entry.key],
+        entry.value,
+      );
+    }
+
+    return result;
+  }
+
+  Map<String, EntryDriveSupportNoteMeta> _mergeDriveSupportNoteMetas(
+    Map<String, EntryDriveSupportNoteMeta> cloud,
+    Map<String, EntryDriveSupportNoteMeta> local,
+  ) {
+    final result = <String, EntryDriveSupportNoteMeta>{...cloud};
+
+    for (final entry in local.entries) {
+      result[entry.key] = _preferredDriveSupportNoteMeta(
+        result[entry.key],
+        entry.value,
+      );
+    }
+
+    return result;
+  }
+
+  EntrySupportNoteMeta _preferredSupportNoteMeta(
+    EntrySupportNoteMeta? current,
+    EntrySupportNoteMeta incoming,
+  ) {
+    if (current == null) return incoming;
+
+    final currentRank = _supportNoteStatusRank(current.status);
+    final incomingRank = _supportNoteStatusRank(incoming.status);
+    if (incomingRank != currentRank) {
+      return incomingRank > currentRank ? incoming : current;
+    }
+
+    if (current.noteText.trim().isEmpty &&
+        incoming.noteText.trim().isNotEmpty) {
+      return incoming;
+    }
+
+    if (current.fileName.trim().isEmpty &&
+        incoming.fileName.trim().isNotEmpty) {
+      return incoming;
+    }
+
+    return incoming;
+  }
+
+  EntryDriveSupportNoteMeta _preferredDriveSupportNoteMeta(
+    EntryDriveSupportNoteMeta? current,
+    EntryDriveSupportNoteMeta incoming,
+  ) {
+    if (current == null) return incoming;
+
+    final currentRank = _supportNoteStatusRank(current.status);
+    final incomingRank = _supportNoteStatusRank(incoming.status);
+    if (incomingRank != currentRank) {
+      return incomingRank > currentRank ? incoming : current;
+    }
+
+    if (current.noteText.trim().isEmpty &&
+        incoming.noteText.trim().isNotEmpty) {
+      return incoming;
+    }
+
+    if (current.fileId.trim().isEmpty && incoming.fileId.trim().isNotEmpty) {
+      return incoming;
+    }
+
+    return incoming;
+  }
+
+  int _supportNoteStatusRank(EntrySupportNoteStatus status) {
+    return switch (status) {
+      EntrySupportNoteStatus.incomplete => 0,
+      EntrySupportNoteStatus.inProgress => 1,
+      EntrySupportNoteStatus.finished => 2,
+      EntrySupportNoteStatus.submitted => 3,
+    };
   }
 
   List<String> _payeClientListFrom(StoredAppData data) {

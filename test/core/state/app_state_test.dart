@@ -1,6 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:support_worker_log/core/models/app_mode.dart';
+import 'package:support_worker_log/core/models/app_settings.dart';
+import 'package:support_worker_log/core/models/entry_type.dart';
+import 'package:support_worker_log/core/models/work_entry.dart';
+import 'package:support_worker_log/core/services/local_support_note_service.dart';
+import 'package:support_worker_log/core/services/storage_service.dart';
 import 'package:support_worker_log/core/state/app_state.dart';
 
 void main() {
@@ -42,4 +50,46 @@ void main() {
     expect(state.workClients, ['Work client']);
     expect(state.payeClients, isEmpty);
   });
+
+  test(
+    'load migrates local support note status into synced app data',
+    () async {
+      final entry = WorkEntry(
+        id: 'entry-1',
+        client: 'Brad Roberts',
+        type: EntryType.professionalContact,
+        date: DateTime(2026, 6, 26),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 14,
+        notes: const [],
+      );
+      final storedData = StoredAppData(
+        settings: const AppSettings(),
+        clients: const ['Brad Roberts'],
+        entries: [entry],
+      );
+      const noteMeta = EntrySupportNoteMeta(
+        entryId: 'entry-1',
+        initials: 'Brad Roberts',
+        status: EntrySupportNoteStatus.submitted,
+        fileName: 'Brad Roberts/2026-06-26_Brad Roberts_submitted.docx',
+        noteText: 'Submitted note text.',
+      );
+      SharedPreferences.setMockInitialValues({
+        'support_worker_log_data_v1': jsonEncode(storedData.toJson()),
+        'entry_local_support_note_entry-1': jsonEncode(noteMeta.toJson()),
+      });
+
+      final state = AppState(warmGoogleAccounts: false);
+      addTearDown(state.dispose);
+
+      await state.load();
+
+      expect(
+        state.supportNoteMetaFor('entry-1')?.status,
+        EntrySupportNoteStatus.submitted,
+      );
+      expect(state.supportNoteMetaFor('entry-1')?.initials, 'Brad Roberts');
+    },
+  );
 }

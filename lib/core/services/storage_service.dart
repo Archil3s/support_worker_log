@@ -9,6 +9,8 @@ import '../models/general_action.dart';
 import '../models/invoice_status.dart';
 import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
+import 'google_drive_service.dart';
+import 'local_support_note_service.dart';
 
 class StoredAppData {
   const StoredAppData({
@@ -23,6 +25,8 @@ class StoredAppData {
     this.invoiceBaselineTotals = const {},
     this.appMode = AppMode.work,
     this.personalLogEntries = const [],
+    this.supportNoteMetas = const {},
+    this.driveSupportNoteMetas = const {},
   });
 
   final AppSettings settings;
@@ -36,6 +40,8 @@ class StoredAppData {
   final Map<String, double> invoiceBaselineTotals;
   final AppMode appMode;
   final List<PersonalLogEntry> personalLogEntries;
+  final Map<String, EntrySupportNoteMeta> supportNoteMetas;
+  final Map<String, EntryDriveSupportNoteMeta> driveSupportNoteMetas;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -62,6 +68,12 @@ class StoredAppData {
       'personalLogEntries': personalLogEntries
           .map((entry) => entry.toJson())
           .toList(),
+      'supportNoteMetas': supportNoteMetas.map(
+        (key, meta) => MapEntry(key, meta.toJson()),
+      ),
+      'driveSupportNoteMetas': driveSupportNoteMetas.map(
+        (key, meta) => MapEntry(key, meta.toJson()),
+      ),
     };
   }
 
@@ -145,7 +157,11 @@ class StoredAppData {
 
     final rawInvoiceStatuses = json['invoiceStatuses'];
     final rawPersonalLogEntries = json['personalLogEntries'];
+    final rawSupportNoteMetas = json['supportNoteMetas'];
+    final rawDriveSupportNoteMetas = json['driveSupportNoteMetas'];
     final personalLogEntries = <PersonalLogEntry>[];
+    final supportNoteMetas = <String, EntrySupportNoteMeta>{};
+    final driveSupportNoteMetas = <String, EntryDriveSupportNoteMeta>{};
 
     if (rawPersonalLogEntries is List) {
       for (final rawItem in rawPersonalLogEntries) {
@@ -169,6 +185,38 @@ class StoredAppData {
         if (key.trim().isEmpty) continue;
 
         invoiceStatuses[key] = invoiceStatusFromName(entry.value?.toString());
+      }
+    }
+
+    if (rawSupportNoteMetas is Map) {
+      for (final entry in rawSupportNoteMetas.entries) {
+        final key = entry.key?.toString() ?? '';
+        final value = entry.value;
+        if (key.trim().isEmpty || value is! Map<String, dynamic>) continue;
+
+        try {
+          final meta = EntrySupportNoteMeta.fromJson(value);
+          final id = meta.entryId.trim().isEmpty ? key : meta.entryId;
+          if (id.trim().isNotEmpty) supportNoteMetas[id] = meta;
+        } catch (_) {
+          // Strip malformed note metadata during load/import.
+        }
+      }
+    }
+
+    if (rawDriveSupportNoteMetas is Map) {
+      for (final entry in rawDriveSupportNoteMetas.entries) {
+        final key = entry.key?.toString() ?? '';
+        final value = entry.value;
+        if (key.trim().isEmpty || value is! Map<String, dynamic>) continue;
+
+        try {
+          final meta = EntryDriveSupportNoteMeta.fromJson(value);
+          final id = meta.entryId.trim().isEmpty ? key : meta.entryId;
+          if (id.trim().isNotEmpty) driveSupportNoteMetas[id] = meta;
+        } catch (_) {
+          // Strip malformed Drive note metadata during load/import.
+        }
       }
     }
 
@@ -208,6 +256,8 @@ class StoredAppData {
       invoiceBaselineTotals: invoiceBaselineTotals,
       appMode: appModeFromName(json['appMode'] as String?),
       personalLogEntries: personalLogEntries,
+      supportNoteMetas: supportNoteMetas,
+      driveSupportNoteMetas: driveSupportNoteMetas,
     );
   }
 }
