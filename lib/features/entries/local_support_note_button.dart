@@ -164,9 +164,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       driveMeta = loadedDrive;
 
       if (loaded == null) {
-        initialsController.text = loadedDrive?.initials.isNotEmpty == true
-            ? loadedDrive!.initials
-            : LocalSupportNoteService.defaultInitialsForEntry(widget.entry);
+        initialsController.text = _personNameForNote(
+          widget.entry,
+          fallback: loadedDrive?.initials,
+        );
         noteController.text = loadedDrive?.noteText.trim().isNotEmpty == true
             ? loadedDrive!.noteText
             : _defaultNoteText(
@@ -176,7 +177,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               );
         status = loadedDrive?.status ?? status;
       } else {
-        initialsController.text = loaded.initials;
+        initialsController.text = _personNameForNote(
+          widget.entry,
+          fallback: loaded.initials,
+        );
         noteController.text = loaded.noteText;
         status = loaded.status;
       }
@@ -776,11 +780,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             TextField(
               controller: initialsController,
               enabled: !busy,
-              textCapitalization: TextCapitalization.characters,
+              textCapitalization: TextCapitalization.words,
               scrollPadding: EdgeInsets.only(bottom: keyboardBottom + 140),
               decoration: const InputDecoration(
-                labelText: 'Person initials',
-                prefixIcon: Icon(Icons.badge_outlined),
+                labelText: 'Person name',
+                helperText: 'Uses the app person name on saved notes.',
+                prefixIcon: Icon(Icons.person_outline),
               ),
             ),
             const SizedBox(height: 12),
@@ -970,6 +975,16 @@ GoogleExportAccountScope _currentGoogleScope(AppState appState) {
   return appState.isPayeMode
       ? GoogleExportAccountScope.paye
       : GoogleExportAccountScope.work;
+}
+
+String _personNameForNote(WorkEntry entry, {String? fallback}) {
+  final appName = entry.client.trim();
+  if (appName.isNotEmpty) return appName;
+
+  final fallbackName = fallback?.trim();
+  if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
+
+  return LocalSupportNoteService.defaultInitialsForEntry(entry);
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {

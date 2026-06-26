@@ -888,7 +888,7 @@ class GoogleDriveService {
     final cleanedInitials = initials.trim().toUpperCase();
 
     if (cleanedInitials.isEmpty) {
-      throw StateError('Enter initials first.');
+      throw StateError('Enter person name first.');
     }
 
     final driveFileName = _supportNoteDriveFileName(entry, status);

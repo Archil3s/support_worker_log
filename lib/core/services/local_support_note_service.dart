@@ -130,7 +130,7 @@ class LocalSupportNoteService {
     final cleanedInitials = initials.trim().toUpperCase();
 
     if (cleanedInitials.isEmpty) {
-      throw StateError('Enter initials first.');
+      throw StateError('Enter person name first.');
     }
 
     final existing = await loadMeta(entry.id);
@@ -187,7 +187,7 @@ class LocalSupportNoteService {
     final cleanedInitials = initials.trim().toUpperCase();
 
     if (cleanedInitials.isEmpty) {
-      throw StateError('Enter initials first.');
+      throw StateError('Enter person name first.');
     }
 
     final existing = await loadMeta(entry.id);
