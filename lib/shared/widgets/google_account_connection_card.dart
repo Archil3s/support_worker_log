@@ -27,6 +27,7 @@ class GoogleAccountConnectionCard extends StatefulWidget {
 
 class _GoogleAccountConnectionCardState
     extends State<GoogleAccountConnectionCard> {
+  bool checkingSession = true;
   bool connecting = false;
   String? message;
   bool messageIsError = false;
@@ -39,13 +40,33 @@ class _GoogleAccountConnectionCardState
     });
   }
 
+  @override
+  void didUpdateWidget(GoogleAccountConnectionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scope != widget.scope) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _warmGoogleAccount();
+      });
+    }
+  }
+
   Future<void> _warmGoogleAccount() async {
     if (!mounted) return;
+
+    setState(() {
+      checkingSession = true;
+      message = null;
+      messageIsError = false;
+    });
 
     try {
       await context.read<AppState>().warmGoogleExportAccount(widget.scope);
     } catch (_) {
       // Connect reports real sign-in errors when the button is tapped.
+    } finally {
+      if (mounted) {
+        setState(() => checkingSession = false);
+      }
     }
   }
 
@@ -107,6 +128,8 @@ class _GoogleAccountConnectionCardState
         : const Color(0xFFFFC857);
     final statusText = connected
         ? email ?? 'Connected'
+        : checkingSession
+        ? 'Checking saved Google session...'
         : signedIn
         ? '${email ?? 'Signed in'} - Drive permission missing'
         : 'Not connected';
@@ -152,17 +175,30 @@ class _GoogleAccountConnectionCardState
           const SizedBox(height: 10),
           const GoogleSessionCountdown(),
           const SizedBox(height: 10),
+          if (checkingSession && !connected) ...[
+            const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            const Text(
+              'Checking the saved Google login. No popup is needed for this step.',
+              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+            ),
+            const SizedBox(height: 10),
+          ],
           FilledButton.icon(
-            onPressed: connecting ? null : _connect,
-            icon: connecting
+            onPressed: checkingSession || connecting ? null : _connect,
+            icon: checkingSession || connecting
                 ? const SizedBox.square(
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.login_outlined),
             label: Text(
-              connecting
+              checkingSession
+                  ? 'Checking Saved Google Login'
+                  : connecting
                   ? 'Connecting ${widget.scope.label} Google'
+                  : signedIn
+                  ? 'Allow ${widget.scope.label} Drive Access'
                   : 'Choose ${widget.scope.label} Google Account',
             ),
           ),
