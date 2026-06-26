@@ -328,8 +328,18 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   void _updatePayeEntry(AppState appState) {
     if (!appState.isPayeMode) return;
 
-    appState.updatePayeEntry(
-      widget.entry.copyWith(supportNoteBreakdown: noteController.text.trim()),
+    appState.updatePayeEntry(_payeEntryWithCurrentNote(trimNote: true));
+  }
+
+  WorkEntry _payeEntryWithCurrentNote({bool trimNote = false}) {
+    return widget.entry.copyWith(
+      client: _personNameForNote(
+        widget.entry,
+        fallback: initialsController.text,
+      ),
+      supportNoteBreakdown: trimNote
+          ? noteController.text.trim()
+          : noteController.text,
     );
   }
 
@@ -401,9 +411,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       final appState = context.read<AppState>();
       await _saveDraftOnly('Note saved in the app.', showMessage: false);
       if (appState.isPayeMode) {
-        final updatedEntry = widget.entry.copyWith(
-          supportNoteBreakdown: noteController.text,
-        );
+        final updatedEntry = _payeEntryWithCurrentNote();
         appState.updatePayeEntry(updatedEntry);
         final file = await appState.savePayeNoteToDrive(updatedEntry);
         final discovered = await appState.findEntryNoteInCurrentDrive(
@@ -498,9 +506,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     try {
       final appState = context.read<AppState>();
       await _saveDraftOnly('Note saved in the app.', showMessage: false);
-      final updatedEntry = widget.entry.copyWith(
-        supportNoteBreakdown: noteController.text,
-      );
+      final updatedEntry = _payeEntryWithCurrentNote();
       appState.updatePayeEntry(updatedEntry);
 
       final file = await appState.saveTemporaryPayeNoteToDrive(updatedEntry);
@@ -759,6 +765,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final scope = _currentGoogleScope(appState);
     final payeMode = appState.isPayeMode;
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+    final displayName = _personNameForNote(
+      entry,
+      fallback: _bestPersonNameFallback(meta, driveMeta),
+    );
 
     if (!appState.notesStorageReadyForScope(scope)) {
       return SizedBox(
@@ -797,7 +807,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${entry.client} | ${entry.date.day}/${entry.date.month}/${entry.date.year}',
+              '$displayName | ${entry.date.day}/${entry.date.month}/${entry.date.year}',
               style: const TextStyle(color: Color(0xFF8396C7)),
             ),
             const SizedBox(height: 16),
@@ -1085,6 +1095,27 @@ GoogleExportAccountScope _currentGoogleScope(AppState appState) {
 
 String _personNameForNote(WorkEntry entry, {String? fallback}) {
   return LocalSupportNoteService.personNameForEntry(entry, fallback: fallback);
+}
+
+String? _bestPersonNameFallback(
+  EntrySupportNoteMeta? localMeta,
+  EntryDriveSupportNoteMeta? driveMeta,
+) {
+  final names = [localMeta?.initials, driveMeta?.initials]
+      .whereType<String>()
+      .map((name) => name.trim())
+      .where((name) => name.isNotEmpty)
+      .toList();
+  if (names.isEmpty) return null;
+
+  return names.firstWhere(_looksLikeFullName, orElse: () => names.first);
+}
+
+bool _looksLikeFullName(String name) {
+  if (name.contains(RegExp(r'\s'))) return true;
+
+  final cleaned = name.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  return cleaned.length > 4;
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {

@@ -25,13 +25,35 @@ import '../../shared/widgets/support_note_breakdown_text.dart';
 String _noteTitleForEntry({
   required WorkEntry entry,
   required EntrySupportNoteStatus status,
+  String? fallbackName,
 }) {
-  final person = entry.client.trim().isEmpty ? 'Unknown Client' : entry.client;
+  final person = _personNameForNote(entry, fallback: fallbackName);
   return '$person | ${formatDate(entry.date)} | ${status.label}';
 }
 
 String _personNameForNote(WorkEntry entry, {String? fallback}) {
   return LocalSupportNoteService.personNameForEntry(entry, fallback: fallback);
+}
+
+String? _bestPersonNameFallback(
+  EntrySupportNoteMeta? localMeta,
+  EntryDriveSupportNoteMeta? driveMeta,
+) {
+  final names = [localMeta?.initials, driveMeta?.initials]
+      .whereType<String>()
+      .map((name) => name.trim())
+      .where((name) => name.isNotEmpty)
+      .toList();
+  if (names.isEmpty) return null;
+
+  return names.firstWhere(_looksLikeFullName, orElse: () => names.first);
+}
+
+bool _looksLikeFullName(String name) {
+  if (name.contains(RegExp(r'\s'))) return true;
+
+  final cleaned = name.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  return cleaned.length > 4;
 }
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -898,7 +920,14 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
   Future<void> _deleteEntry() async {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await _confirmDeleteEntry(context, widget.entry);
+    final confirmed = await _confirmDeleteEntry(
+      context,
+      widget.entry,
+      displayName: _personNameForNote(
+        widget.entry,
+        fallback: _bestPersonNameFallback(meta, driveMeta),
+      ),
+    );
 
     if (!confirmed) return;
 
@@ -954,6 +983,11 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
     final hasLocal = meta?.fileName.isNotEmpty == true;
     final hasDriveNote = driveMeta?.openLink?.isNotEmpty == true;
+    final fallbackName = _bestPersonNameFallback(meta, driveMeta);
+    final displayName = _personNameForNote(
+      widget.entry,
+      fallback: fallbackName,
+    );
 
     return Card(
       child: Padding(
@@ -971,10 +1005,14 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                 ),
               ),
               title: Text(
-                _noteTitleForEntry(entry: widget.entry, status: status),
+                _noteTitleForEntry(
+                  entry: widget.entry,
+                  status: status,
+                  fallbackName: fallbackName,
+                ),
               ),
               subtitle: Text(
-                '${widget.entry.client} | ${widget.entry.type.label} | ${widget.entry.baseMinutes} min | ${widget.entry.hours.toStringAsFixed(2)}h',
+                '$displayName | ${widget.entry.type.label} | ${widget.entry.baseMinutes} min | ${widget.entry.hours.toStringAsFixed(2)}h',
               ),
               trailing: _StatusPill(status: status),
             ),
@@ -1311,8 +1349,18 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   void _updatePayeEntry(AppState appState) {
     if (!appState.isPayeMode) return;
 
-    appState.updatePayeEntry(
-      widget.entry.copyWith(supportNoteBreakdown: noteController.text.trim()),
+    appState.updatePayeEntry(_payeEntryWithCurrentNote(trimNote: true));
+  }
+
+  WorkEntry _payeEntryWithCurrentNote({bool trimNote = false}) {
+    return widget.entry.copyWith(
+      client: _personNameForNote(
+        widget.entry,
+        fallback: initialsController.text,
+      ),
+      supportNoteBreakdown: trimNote
+          ? noteController.text.trim()
+          : noteController.text,
     );
   }
 
@@ -1369,9 +1417,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       final appState = context.read<AppState>();
       if (appState.isPayeMode) {
         await _saveDraftOnly('Note saved in the app.', showMessage: false);
-        final updatedEntry = widget.entry.copyWith(
-          supportNoteBreakdown: noteController.text,
-        );
+        final updatedEntry = _payeEntryWithCurrentNote();
         appState.updatePayeEntry(updatedEntry);
         final file = await appState.savePayeNoteToDrive(updatedEntry);
         final discovered = await appState.findEntryNoteInCurrentDrive(
@@ -1465,9 +1511,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     try {
       final appState = context.read<AppState>();
       await _saveDraftOnly('Note saved in the app.', showMessage: false);
-      final updatedEntry = widget.entry.copyWith(
-        supportNoteBreakdown: noteController.text,
-      );
+      final updatedEntry = _payeEntryWithCurrentNote();
       appState.updatePayeEntry(updatedEntry);
 
       final file = await appState.saveTemporaryPayeNoteToDrive(updatedEntry);
@@ -1577,9 +1621,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
       if (driveMeta != null) {
         if (appState.isPayeMode) {
-          final updatedEntry = widget.entry.copyWith(
-            supportNoteBreakdown: noteController.text,
-          );
+          final updatedEntry = _payeEntryWithCurrentNote();
           final file = await appState.savePayeNoteToDrive(updatedEntry);
           final discovered = await appState.findEntryNoteInCurrentDrive(
             updatedEntry,
@@ -1736,6 +1778,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   Widget build(BuildContext context) {
     final entry = widget.entry;
     final payeMode = context.watch<AppState>().isPayeMode;
+    final fallbackName = _bestPersonNameFallback(meta, driveMeta);
+    final displayName = _personNameForNote(entry, fallback: fallbackName);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1751,7 +1795,11 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             children: [
               Expanded(
                 child: Text(
-                  _noteTitleForEntry(entry: entry, status: status),
+                  _noteTitleForEntry(
+                    entry: entry,
+                    status: status,
+                    fallbackName: fallbackName,
+                  ),
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                 ),
               ),
@@ -1763,7 +1811,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           ),
           const SizedBox(height: 8),
           Text(
-            '${entry.client} | ${formatDate(entry.date)}',
+            '$displayName | ${formatDate(entry.date)}',
             style: const TextStyle(color: Color(0xFF8396C7)),
           ),
           const SizedBox(height: 16),
@@ -1961,8 +2009,15 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
+Future<bool> _confirmDeleteEntry(
+  BuildContext context,
+  WorkEntry entry, {
+  String? displayName,
+}) async {
   final payeMode = context.read<AppState>().isPayeMode;
+  final person = displayName?.trim().isNotEmpty == true
+      ? displayName!.trim()
+      : _personNameForNote(entry);
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) {
@@ -1970,9 +2025,9 @@ Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
             title: const Text('Delete this note?'),
             content: Text(
               payeMode
-                  ? 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+                  ? 'Delete $person on ${formatDate(entry.date)} from the app? '
                         'Any matching PAYE Google Doc under this Google account will be permanently deleted, not moved to bin.'
-                  : 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
+                  : 'Delete $person on ${formatDate(entry.date)} from the app? '
                         'Local saved note metadata will be permanently removed. This cannot be undone.',
             ),
             actions: [

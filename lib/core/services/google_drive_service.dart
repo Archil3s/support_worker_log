@@ -894,19 +894,20 @@ class GoogleDriveService {
       throw StateError('Enter person name first.');
     }
 
-    final driveFileName = _supportNoteDriveFileName(entry, status);
+    final displayEntry = entry.copyWith(client: cleanedInitials);
+    final driveFileName = _supportNoteDriveFileName(displayEntry, status);
     final periodFolder = await findOrCreateSupportNoteFolder(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
-      entry: entry,
+      entry: displayEntry,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
     final bytes = await LocalSupportNoteService.buildNoteDocx(
-      entry: entry,
+      entry: displayEntry,
       initials: cleanedInitials,
       status: status,
       noteText: noteText,
-      clientDisplayName: _folderName(entry.client),
+      clientDisplayName: _folderName(displayEntry.client),
     );
     final existingFileId = existingMeta?.fileId.trim();
     final existingParentFolderId = existingMeta?.parentFolderId?.trim();

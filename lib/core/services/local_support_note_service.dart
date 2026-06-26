@@ -290,12 +290,32 @@ class LocalSupportNoteService {
 
   static String personNameForEntry(WorkEntry entry, {String? fallback}) {
     final appName = entry.client.trim();
-    if (appName.isNotEmpty) return appName;
-
     final fallbackName = fallback?.trim();
+
+    if (_shouldPreferFallbackName(appName, fallbackName)) {
+      return fallbackName!;
+    }
+
+    if (appName.isNotEmpty) return appName;
     if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
 
     return defaultInitialsForEntry(entry);
+  }
+
+  static bool _shouldPreferFallbackName(String appName, String? fallbackName) {
+    if (fallbackName == null || fallbackName.isEmpty) return false;
+    if (appName.isEmpty) return true;
+    if (appName.toLowerCase() == fallbackName.toLowerCase()) return false;
+
+    return _looksLikeInitialsCode(appName) &&
+        !_looksLikeInitialsCode(fallbackName);
+  }
+
+  static bool _looksLikeInitialsCode(String value) {
+    final cleaned = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (cleaned.isEmpty || cleaned.length > 4) return false;
+
+    return !value.trim().contains(RegExp(r'\s'));
   }
 
   static String defaultNoteTextForEntry({
@@ -339,7 +359,7 @@ Referrals
     required String initials,
     required EntrySupportNoteStatus status,
   }) {
-    final person = entry.client.trim().isEmpty ? initials.trim() : entry.client;
+    final person = personNameForEntry(entry, fallback: initials);
     return '$person | ${formatDate(entry.date)} | ${status.label}';
   }
 

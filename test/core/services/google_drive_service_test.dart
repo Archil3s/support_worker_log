@@ -137,6 +137,37 @@ void main() {
     },
   );
 
+  test('saveSupportNote prefers full name over initials code', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-full-name',
+        client: 'BR',
+        type: EntryType.homeVisit,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 60,
+        notes: const [],
+      ),
+      initials: 'Brad Roberts',
+      status: EntrySupportNoteStatus.submitted,
+      noteText: 'Main topic(s)\nFull name shown.',
+    );
+
+    final noteUpload = api.uploads.singleWhere(
+      (upload) => upload.name == '2026-06-02_Brad_Roberts_submitted.docx',
+    );
+    final documentText = _docxText(noteUpload.bytes);
+
+    expect(noteUpload.parentId, contains('client-notes/Brad Roberts'));
+    expect(documentText, contains('Name of client: Brad Roberts'));
+    expect(documentText, isNot(contains('Name of client: BR')));
+  });
+
   test(
     'findSupportNoteInDrive returns existing docx from current folder',
     () async {
