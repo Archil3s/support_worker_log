@@ -146,7 +146,6 @@ void main() {
       contains('invoices/Invoice 23 - 2026-05-30 to 2026-06-12'),
     );
   });
-
   test('createInvoicePeriodTotalFolder uploads full period file set', () async {
     final driveService = _FakeGoogleDriveService();
     final syncService = DriveInvoiceCycleSyncService(

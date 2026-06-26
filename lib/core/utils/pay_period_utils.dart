@@ -16,21 +16,22 @@ class PayPeriodRange {
   }
 
   PayPeriodRange shiftFortnights(int count) {
-    final offset = Duration(days: invoicePeriodDays * count);
-
-    return PayPeriodRange(start: start.add(offset), end: end.add(offset));
+    return PayPeriodRange(
+      start: addCalendarDays(start, invoicePeriodDays * count),
+      end: addCalendarDays(end, invoicePeriodDays * count),
+    );
   }
 
   PayPeriodRange get previous => shiftFortnights(-1);
   PayPeriodRange get next => shiftFortnights(1);
 
   DateTime get weekOneStart => start;
-  DateTime get weekOneEnd => start.add(const Duration(days: 6));
-  DateTime get weekTwoStart => start.add(const Duration(days: 7));
+  DateTime get weekOneEnd => addCalendarDays(start, 6);
+  DateTime get weekTwoStart => addCalendarDays(start, 7);
   DateTime get weekTwoEnd => end;
 
   int get daysInclusive {
-    return end.difference(start).inDays + 1;
+    return calendarDaysBetween(start, end) + 1;
   }
 }
 
@@ -44,14 +45,25 @@ PayPeriodRange fortnightForDate(DateTime date, {DateTime? anchorDate}) {
   final rawAnchor = anchorDate ?? defaultPayPeriodAnchorDate;
   final anchor = DateTime(rawAnchor.year, rawAnchor.month, rawAnchor.day);
 
-  final daysSinceAnchor = normalizedDate.difference(anchor).inDays;
+  final daysSinceAnchor = calendarDaysBetween(anchor, normalizedDate);
   final periodOffset = _floorDivide(daysSinceAnchor, invoicePeriodDays);
-  final start = anchor.add(Duration(days: periodOffset * invoicePeriodDays));
+  final start = addCalendarDays(anchor, periodOffset * invoicePeriodDays);
 
   return PayPeriodRange(
     start: start,
-    end: start.add(const Duration(days: invoicePeriodDays - 1)),
+    end: addCalendarDays(start, invoicePeriodDays - 1),
   );
+}
+
+int calendarDaysBetween(DateTime start, DateTime end) {
+  final startDate = DateTime.utc(start.year, start.month, start.day);
+  final endDate = DateTime.utc(end.year, end.month, end.day);
+
+  return endDate.difference(startDate).inDays;
+}
+
+DateTime addCalendarDays(DateTime date, int days) {
+  return DateTime(date.year, date.month, date.day + days);
 }
 
 int _floorDivide(int value, int divisor) {

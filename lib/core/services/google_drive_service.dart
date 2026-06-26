@@ -256,7 +256,10 @@ class GoogleDriveService {
     DateTime? payPeriodAnchorDate,
   }) async {
     final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
-    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(range);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
+      range,
+      anchorDate: payPeriodAnchorDate,
+    );
     final clientFolder = await findOrCreateFolder(
       accessToken: accessToken,
       parentId: clientNotesFolderId,
@@ -635,7 +638,10 @@ class GoogleDriveService {
     DateTime? payPeriodAnchorDate,
   }) async {
     final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
-    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(range);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
+      range,
+      anchorDate: payPeriodAnchorDate,
+    );
     final clientFolder = await _findChild(
       accessToken: accessToken,
       parentId: clientNotesFolderId,

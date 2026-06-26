@@ -164,8 +164,10 @@ class DriveInvoiceCycleSyncService {
     required _InvoicePeriodEntries item,
     required AppSettings settings,
   }) async {
-    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
+    final invoiceNumber = item.invoiceNumber;
+    await InvoicePdfService.rememberInvoiceNumberForPeriod(
       item.range,
+      invoiceNumber,
     );
     final invoiceFolder = await _driveService.findOrCreateFolder(
       accessToken: accessToken,
@@ -314,7 +316,11 @@ class DriveInvoiceCycleSyncService {
 
       grouped.putIfAbsent(
         key,
-        () => _InvoicePeriodEntries(range: range, entries: <WorkEntry>[]),
+        () => _InvoicePeriodEntries(
+          invoiceNumber: 0,
+          range: range,
+          entries: <WorkEntry>[],
+        ),
       );
       grouped[key]!.entries.add(entry);
     }
@@ -327,7 +333,27 @@ class DriveInvoiceCycleSyncService {
 
     items.sort((a, b) => a.range.start.compareTo(b.range.start));
 
-    return items;
+    if (items.isEmpty) return items;
+
+    final anchorRange = fortnightForDate(
+      anchorDate ?? defaultPayPeriodAnchorDate,
+      anchorDate: anchorDate,
+    );
+    final firstStart = items.first.range.start.isBefore(anchorRange.start)
+        ? items.first.range.start
+        : anchorRange.start;
+
+    return [
+      for (final item in items)
+        _InvoicePeriodEntries(
+          invoiceNumber:
+              InvoicePdfService.firstInvoiceNumber +
+              (calendarDaysBetween(firstStart, item.range.start) ~/
+                  invoicePeriodDays),
+          range: item.range,
+          entries: item.entries,
+        ),
+    ];
   }
 
   List<_ThreeMonthEntries> _groupEntriesByThreeMonthPeriod(
@@ -704,8 +730,13 @@ class DriveInvoiceCycleSyncService {
 }
 
 class _InvoicePeriodEntries {
-  _InvoicePeriodEntries({required this.range, required this.entries});
+  _InvoicePeriodEntries({
+    required this.invoiceNumber,
+    required this.range,
+    required this.entries,
+  });
 
+  final int invoiceNumber;
   final PayPeriodRange range;
   final List<WorkEntry> entries;
 }
