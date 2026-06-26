@@ -8,9 +8,17 @@ import 'google_session_countdown.dart';
 import 'section_card.dart';
 
 class GoogleAccountConnectionCard extends StatefulWidget {
-  const GoogleAccountConnectionCard({super.key, required this.scope});
+  const GoogleAccountConnectionCard({
+    super.key,
+    required this.scope,
+    this.disconnectedText =
+        'Notes are locked until Firebase sync and Drive are connected.',
+    this.connectedServiceText,
+  });
 
   final GoogleExportAccountScope scope;
+  final String disconnectedText;
+  final String? connectedServiceText;
 
   @override
   State<GoogleAccountConnectionCard> createState() =>
@@ -51,7 +59,7 @@ class _GoogleAccountConnectionCardState
     try {
       await context.read<AppState>().connectGoogleDrive(
         scope: widget.scope,
-        forceRefresh: true,
+        forceRefresh: false,
       );
 
       if (!mounted) return;
@@ -135,8 +143,8 @@ class _GoogleAccountConnectionCardState
           const SizedBox(height: 8),
           Text(
             connected
-                ? _serviceText
-                : 'Notes are locked until Firebase sync and Drive are connected.',
+                ? widget.connectedServiceText ?? _serviceText
+                : widget.disconnectedText,
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
           const SizedBox(height: 10),

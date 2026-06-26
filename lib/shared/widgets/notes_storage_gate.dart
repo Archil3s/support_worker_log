@@ -15,12 +15,22 @@ class NotesStorageGate extends StatefulWidget {
     this.scope,
     this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 24),
     this.scrollable = true,
+    this.title = 'Notes Locked',
+    this.message =
+        'Notes are hidden until Firebase sync and Google Drive are both connected.',
+    this.disconnectedText =
+        'Notes are locked until Firebase sync and Drive are connected.',
+    this.connectedServiceText,
   });
 
   final Widget child;
   final GoogleExportAccountScope? scope;
   final EdgeInsets padding;
   final bool scrollable;
+  final String title;
+  final String message;
+  final String disconnectedText;
+  final String? connectedServiceText;
 
   @override
   State<NotesStorageGate> createState() => _NotesStorageGateState();
@@ -70,14 +80,14 @@ class _NotesStorageGateState extends State<NotesStorageGate> {
 
     final children = [
       SectionCard(
-        title: 'Notes Locked',
+        title: widget.title,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Icon(Icons.lock_outline, size: 38, color: Color(0xFFFFC857)),
             const SizedBox(height: 10),
-            const Text(
-              'Notes are hidden until Firebase sync and Google Drive are both connected.',
+            Text(
+              widget.message,
               style: TextStyle(color: Color(0xFFFFD98C), height: 1.35),
             ),
             if (reasons.isNotEmpty) ...[
@@ -136,7 +146,11 @@ class _NotesStorageGateState extends State<NotesStorageGate> {
         ),
       ),
       const SizedBox(height: 12),
-      GoogleAccountConnectionCard(scope: scope),
+      GoogleAccountConnectionCard(
+        scope: scope,
+        disconnectedText: widget.disconnectedText,
+        connectedServiceText: widget.connectedServiceText,
+      ),
     ];
 
     if (!widget.scrollable) {
