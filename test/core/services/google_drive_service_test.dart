@@ -466,44 +466,48 @@ void main() {
     expect(noteUpload.parentId, contains('/Phone Calls'));
   });
 
-  test(
-    'saveSupportNote replaces legacy converted Docs metadata with docx',
-    () async {
-      final api = _FakeGoogleDriveApi(children: const []);
-      final service = GoogleDriveService(api: api);
+  test('saveSupportNote updates existing Google Docs notes in place', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
 
-      final meta = await service.saveSupportNote(
-        accessToken: 'token',
-        clientNotesFolderId: 'client-notes',
-        entry: WorkEntry(
-          id: 'entry-1',
-          client: 'AB',
-          type: EntryType.homeVisit,
-          date: DateTime(2026, 6, 2),
-          startTime: const TimeOfDay(hour: 9, minute: 0),
-          minutes: 60,
-          notes: const [],
-        ),
+    final meta = await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.homeVisit,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 60,
+        notes: const [],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: 'Main topic(s)\nTest note',
+      existingMeta: const EntryDriveSupportNoteMeta(
+        entryId: 'entry-1',
         initials: 'AB',
-        status: EntrySupportNoteStatus.inProgress,
-        noteText: 'Main topic(s)\nTest note',
-        existingMeta: const EntryDriveSupportNoteMeta(
-          entryId: 'entry-1',
-          initials: 'AB',
-          status: EntrySupportNoteStatus.inProgress,
-          fileId: 'legacy-google-doc',
-          fileName: '2026-06-02_AB_in-progress.docx',
-          noteText: 'Old note',
-          mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
-        ),
-      );
+        status: EntrySupportNoteStatus.incomplete,
+        fileId: 'legacy-google-doc',
+        fileName: '2026-06-02_AB_incomplete',
+        noteText: 'Old note',
+        mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
+      ),
+    );
 
-      expect(api.updatedFileIds, isNot(contains('legacy-google-doc')));
-      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
-      expect(meta.mimeType, _docxMimeType);
-      expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
-    },
-  );
+    final update = api.updates.single;
+    expect(api.uploadedNames, isEmpty);
+    expect(api.updatedFileIds, contains('legacy-google-doc'));
+    expect(update.fileId, 'legacy-google-doc');
+    expect(update.name, '2026-06-02_AB_in-progress');
+    expect(update.mimeType, _googleDocsMimeType);
+    expect(update.contentMimeType, _docxMimeType);
+    expect(_docxText(update.bytes), contains('Test note'));
+    expect(meta.fileName, '2026-06-02_AB_in-progress');
+    expect(meta.mimeType, _googleDocsMimeType);
+    expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
+  });
 
   test('saveSupportNote moves an existing docx into the type folder', () async {
     final api = _FakeGoogleDriveApi(children: const []);
@@ -793,6 +797,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final List<GoogleDriveFile> children;
   final Map<String, List<GoogleDriveFile>> childrenByParent;
   final uploads = <_Upload>[];
+  final updates = <_Update>[];
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
@@ -851,6 +856,15 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     String? contentMimeType,
   }) async {
     updatedFileIds.add(fileId);
+    updates.add(
+      _Update(
+        fileId: fileId,
+        name: name,
+        mimeType: mimeType,
+        contentMimeType: contentMimeType,
+        bytes: bytes,
+      ),
+    );
     return GoogleDriveFile(id: fileId, name: name, mimeType: mimeType);
   }
 
@@ -890,6 +904,22 @@ class _Upload {
   });
 
   final String parentId;
+  final String name;
+  final String mimeType;
+  final String? contentMimeType;
+  final List<int> bytes;
+}
+
+class _Update {
+  const _Update({
+    required this.fileId,
+    required this.name,
+    required this.mimeType,
+    required this.contentMimeType,
+    required this.bytes,
+  });
+
+  final String fileId;
   final String name;
   final String mimeType;
   final String? contentMimeType;

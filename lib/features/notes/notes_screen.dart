@@ -1515,7 +1515,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
         setState(() {
           driveMeta = updated;
-          message = 'Saved to Google Drive as ${updated.fileName}';
+          message = 'Saved to Google Docs as ${updated.fileName}';
         });
         return;
       }
@@ -1539,7 +1539,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
       setState(() {
         driveMeta = updated;
-        message = 'Saved to Google Drive as ${updated.fileName}';
+        message =
+            updated.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType
+            ? 'Saved to Google Docs as ${updated.fileName}'
+            : 'Saved to Google Drive as ${updated.fileName}';
       });
       appState.upsertDriveSupportNoteMeta(updated);
     } catch (error) {
@@ -1656,22 +1659,29 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     try {
       EntrySupportNoteMeta? updatedLocal;
       EntryDriveSupportNoteMeta? updatedDrive;
+      Object? localError;
+      StackTrace? localStackTrace;
       final appState = context.read<AppState>();
 
       if (meta != null) {
-        updatedLocal = appState.isPayeMode
-            ? await LocalSupportNoteService.savePayeNote(
-                entry: widget.entry,
-                initials: initialsController.text,
-                status: status,
-                noteText: noteController.text,
-              )
-            : await LocalSupportNoteService.saveNote(
-                entry: widget.entry,
-                initials: initialsController.text,
-                status: status,
-                noteText: noteController.text,
-              );
+        try {
+          updatedLocal = appState.isPayeMode
+              ? await LocalSupportNoteService.savePayeNote(
+                  entry: widget.entry,
+                  initials: initialsController.text,
+                  status: status,
+                  noteText: noteController.text,
+                )
+              : await LocalSupportNoteService.saveNote(
+                  entry: widget.entry,
+                  initials: initialsController.text,
+                  status: status,
+                  noteText: noteController.text,
+                );
+        } catch (error, stackTrace) {
+          localError = error;
+          localStackTrace = stackTrace;
+        }
       }
 
       if (driveMeta != null) {
@@ -1729,6 +1739,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             googleAccountEmail: googleAccountEmail,
           );
         }
+      }
+
+      if (updatedLocal == null && updatedDrive == null && localError != null) {
+        Error.throwWithStackTrace(localError, localStackTrace!);
       }
 
       if (!mounted || version != autoSaveVersion) return;
@@ -1834,6 +1848,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     final entry = widget.entry;
     final appState = context.watch<AppState>();
     final payeMode = appState.isPayeMode;
+    final driveIsGoogleDoc =
+        driveMeta?.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType;
     final fallbackName = _bestPersonNameFallback(
       entry,
       meta,
@@ -1944,6 +1960,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
                 child: SelectableText(
                   payeMode
                       ? 'Google Docs note:\n${driveMeta!.fileName}'
+                      : driveIsGoogleDoc
+                      ? 'Google Docs note:\n${driveMeta!.fileName}'
                       : 'Attached Google Drive file:\n${driveMeta!.fileName}',
                   style: const TextStyle(fontSize: 13),
                 ),
@@ -2012,6 +2030,8 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
                         : 'Create Google Drive Note File'
                   : payeMode
                   ? 'Update Google Docs Note'
+                  : driveIsGoogleDoc
+                  ? 'Update Google Docs Note'
                   : 'Create Updated Google Drive Note File',
             ),
           ),
@@ -2026,7 +2046,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             onPressed: busy ? null : _openDriveFile,
             icon: const Icon(Icons.open_in_new),
             label: Text(
-              payeMode ? 'Open Google Docs Note' : 'Open Google Drive File',
+              payeMode || driveIsGoogleDoc
+                  ? 'Open Google Docs Note'
+                  : 'Open Google Drive File',
             ),
           ),
           const SizedBox(height: 12),

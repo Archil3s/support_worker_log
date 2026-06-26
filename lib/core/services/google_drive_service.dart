@@ -920,17 +920,19 @@ class GoogleDriveService {
             existingGoogleAccountEmail.isNotEmpty &&
             existingGoogleAccountEmail.toLowerCase() ==
                 currentGoogleAccountEmail.toLowerCase());
-    final canUpdateExistingDocx =
+    final existingMimeType = existingMeta?.mimeType;
+    final canUpdateExistingDriveFile =
         sameGoogleAccount &&
-        existingMeta?.mimeType == _docxMimeType &&
+        (existingMimeType == _docxMimeType ||
+            existingMimeType == _googleDocsMimeType) &&
         existingFileId != null &&
         existingFileId.isNotEmpty;
-    final shouldMoveExistingDocx =
-        canUpdateExistingDocx &&
+    final shouldMoveExistingDriveFile =
+        canUpdateExistingDriveFile &&
         existingParentFolderId != null &&
         existingParentFolderId.isNotEmpty &&
         existingParentFolderId != periodFolder.id;
-    if (shouldMoveExistingDocx) {
+    if (shouldMoveExistingDriveFile) {
       await _api.moveFile(
         accessToken: accessToken,
         fileId: existingFileId,
@@ -939,13 +941,17 @@ class GoogleDriveService {
       );
     }
 
-    final file = canUpdateExistingDocx
+    final isGoogleDoc = existingMimeType == _googleDocsMimeType;
+    final file = canUpdateExistingDriveFile
         ? await _api.updateFile(
             accessToken: accessToken,
             fileId: existingFileId,
-            name: driveFileName,
-            mimeType: _docxMimeType,
+            name: isGoogleDoc
+                ? _supportNoteGoogleDocName(displayEntry, status)
+                : driveFileName,
+            mimeType: isGoogleDoc ? _googleDocsMimeType : _docxMimeType,
             bytes: bytes,
+            contentMimeType: isGoogleDoc ? _docxMimeType : null,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,
@@ -1037,6 +1043,16 @@ class GoogleDriveService {
   ) {
     final person = _folderName(entry.client).replaceAll(' ', '_');
     return '${_dateKey(entry.date)}_${person}_${status.fileSlug}.docx';
+  }
+
+  String _supportNoteGoogleDocName(
+    WorkEntry entry,
+    EntrySupportNoteStatus status,
+  ) {
+    final fileName = _supportNoteDriveFileName(entry, status);
+    return fileName.endsWith('.docx')
+        ? fileName.substring(0, fileName.length - 5)
+        : fileName;
   }
 
   String _payeNoteGoogleDocName(WorkEntry entry) {
