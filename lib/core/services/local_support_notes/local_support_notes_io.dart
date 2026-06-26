@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 class LocalSupportNotesPlatform {
-  static const String defaultRootPath = r'C:\Users\Danie\MR NOTES FOLDER';
+  static const String defaultRootPath =
+      r'C:\Users\Danie\OneDrive\Desktop\MR notes to submit';
   static const String _androidWriterUrl = 'http://10.0.2.2:51239';
 
   bool hasFolder() {

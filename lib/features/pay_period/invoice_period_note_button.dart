@@ -143,7 +143,8 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
   Future<void> _chooseFolder() async {
     setState(() {
       busy = true;
-      message = 'Choose C:\\Users\\Danie\\MR NOTES FOLDER in Chrome.';
+      message =
+          'Choose C:\\Users\\Danie\\OneDrive\\Desktop\\MR notes to submit in Chrome.';
     });
 
     try {
@@ -234,6 +235,21 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
     draftAutosaveTimer?.cancel();
     draftAutosaveTimer = Timer(const Duration(milliseconds: 900), () async {
       try {
+        if (initialsController.text.trim().isNotEmpty) {
+          final updated = await InvoicePeriodNoteService.saveNote(
+            invoiceNumber: widget.invoiceNumber,
+            range: widget.range,
+            entries: widget.entries,
+            settings: widget.settings,
+            initials: initialsController.text,
+            status: status,
+            noteText: noteController.text,
+          );
+          if (!mounted) return;
+          setState(() => meta = updated);
+          return;
+        }
+
         await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
       } catch (_) {
         // Explicit save buttons show errors.
@@ -362,7 +378,7 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
           FilledButton.icon(
             onPressed: busy ? null : _chooseFolder,
             icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Choose MR NOTES FOLDER'),
+            label: const Text('Choose MR notes to submit'),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -453,7 +469,7 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Local only. This note is attached to this 2-week invoice period row and saved only to the local folder you select.',
+            'Local only. This note is attached to this 2-week invoice period row and saved to the local notes folder as you edit.',
             style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],

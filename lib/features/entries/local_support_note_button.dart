@@ -235,7 +235,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   Future<void> _chooseFolder() async {
     setState(() {
       busy = true;
-      message = 'Choose C:\\Users\\Danie\\MR NOTES FOLDER in Chrome.';
+      message =
+          'Choose C:\\Users\\Danie\\OneDrive\\Desktop\\MR notes to submit in Chrome.';
     });
 
     try {
@@ -834,7 +835,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             FilledButton.icon(
               onPressed: busy ? null : _chooseFolder,
               icon: const Icon(Icons.folder_open_outlined),
-              label: const Text('Choose MR NOTES FOLDER'),
+              label: const Text('Choose MR notes to submit'),
             ),
             const SizedBox(height: 12),
             TextField(

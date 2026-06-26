@@ -123,7 +123,7 @@ if (-not (Test-Writer)) {
 }
 
 Write-Host "Local notes writer is running."
-Write-Host "Notes folder: C:\Users\Danie\MR NOTES FOLDER"
+Write-Host "Notes folder: C:\Users\Danie\OneDrive\Desktop\MR notes to submit"
 Write-Host ""
 
 if (-not (Test-RentalScraper)) {
