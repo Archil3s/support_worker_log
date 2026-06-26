@@ -385,7 +385,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         );
         final updated =
             discovered?.copyWith(
-              initials: initialsController.text.trim().toUpperCase(),
+              initials: _personNameForNote(
+                widget.entry,
+                fallback: initialsController.text,
+              ),
               status: status,
               fileId: file.id,
               fileName: file.name,
@@ -396,7 +399,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             ) ??
             EntryDriveSupportNoteMeta(
               entryId: widget.entry.id,
-              initials: initialsController.text.trim().toUpperCase(),
+              initials: _personNameForNote(
+                widget.entry,
+                fallback: initialsController.text,
+              ),
               status: status,
               fileId: file.id,
               fileName: file.name,
@@ -978,13 +984,7 @@ GoogleExportAccountScope _currentGoogleScope(AppState appState) {
 }
 
 String _personNameForNote(WorkEntry entry, {String? fallback}) {
-  final appName = entry.client.trim();
-  if (appName.isNotEmpty) return appName;
-
-  final fallbackName = fallback?.trim();
-  if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
-
-  return LocalSupportNoteService.defaultInitialsForEntry(entry);
+  return LocalSupportNoteService.personNameForEntry(entry, fallback: fallback);
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {

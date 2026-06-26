@@ -29,7 +29,7 @@ void main() {
     );
     final restored = await LocalSupportNoteService.loadMeta(entry.id);
 
-    expect(saved.initials, 'JS');
+    expect(saved.initials, 'Jane Smith');
     expect(restored?.noteText, 'Attendance: Jane and support worker.');
     expect(restored?.status, EntrySupportNoteStatus.finished);
   });
@@ -126,9 +126,29 @@ void main() {
 
     final restored = await LocalSupportNoteService.loadMeta(entry.id);
 
-    expect(restored?.initials, 'JS');
+    expect(restored?.initials, 'Jane Smith');
     expect(restored?.noteText, '');
     expect(restored?.status, EntrySupportNoteStatus.inProgress);
+  });
+
+  test('support note title uses the app client name, not initials', () {
+    final entry = WorkEntry(
+      id: 'work-note-title',
+      client: 'Brad Roberts',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 6, 26),
+      startTime: const TimeOfDay(hour: 9, minute: 0),
+      minutes: 60,
+      notes: const [],
+    );
+
+    final title = LocalSupportNoteService.noteTitle(
+      entry: entry,
+      initials: 'BR',
+      status: EntrySupportNoteStatus.incomplete,
+    );
+
+    expect(title, 'Brad Roberts | 26/06/2026 | Incomplete');
   });
 
   test('removeMeta deletes stored support note metadata', () async {

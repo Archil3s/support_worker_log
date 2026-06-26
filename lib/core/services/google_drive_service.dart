@@ -485,7 +485,7 @@ class GoogleDriveService {
     final file = matches.first;
     return EntryDriveSupportNoteMeta(
       entryId: entry.id,
-      initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
+      initials: LocalSupportNoteService.personNameForEntry(entry),
       status: _statusFromSupportNoteFileName(file.name),
       fileId: file.id,
       fileName: file.name,
@@ -555,7 +555,7 @@ class GoogleDriveService {
         .map(
           (file) => EntryDriveSupportNoteMeta(
             entryId: entry.id,
-            initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
+            initials: LocalSupportNoteService.personNameForEntry(entry),
             status: EntrySupportNoteStatus.finished,
             fileId: file.id,
             fileName: file.name,
@@ -885,7 +885,10 @@ class GoogleDriveService {
     EntryDriveSupportNoteMeta? existingMeta,
     String? googleAccountEmail,
   }) async {
-    final cleanedInitials = initials.trim().toUpperCase();
+    final cleanedInitials = LocalSupportNoteService.personNameForEntry(
+      entry,
+      fallback: initials,
+    );
 
     if (cleanedInitials.isEmpty) {
       throw StateError('Enter person name first.');

@@ -127,7 +127,7 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
     required String noteText,
   }) async {
-    final cleanedInitials = initials.trim().toUpperCase();
+    final cleanedInitials = personNameForEntry(entry, fallback: initials);
 
     if (cleanedInitials.isEmpty) {
       throw StateError('Enter person name first.');
@@ -184,7 +184,7 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
     required String noteText,
   }) async {
-    final cleanedInitials = initials.trim().toUpperCase();
+    final cleanedInitials = personNameForEntry(entry, fallback: initials);
 
     if (cleanedInitials.isEmpty) {
       throw StateError('Enter person name first.');
@@ -235,9 +235,7 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
     required String noteText,
   }) async {
-    final cleanedInitials = initials.trim().toUpperCase().isEmpty
-        ? defaultInitialsForEntry(entry)
-        : initials.trim().toUpperCase();
+    final cleanedInitials = personNameForEntry(entry, fallback: initials);
     final meta = EntrySupportNoteMeta(
       entryId: entry.id,
       initials: cleanedInitials,
@@ -288,6 +286,16 @@ class LocalSupportNoteService {
         .take(2)
         .map((part) => part.substring(0, 1).toUpperCase())
         .join();
+  }
+
+  static String personNameForEntry(WorkEntry entry, {String? fallback}) {
+    final appName = entry.client.trim();
+    if (appName.isNotEmpty) return appName;
+
+    final fallbackName = fallback?.trim();
+    if (fallbackName != null && fallbackName.isNotEmpty) return fallbackName;
+
+    return defaultInitialsForEntry(entry);
   }
 
   static String defaultNoteTextForEntry({
@@ -364,7 +372,7 @@ Referrals
         bytes: bytes,
         clientInitials: clientDisplayName?.trim().isNotEmpty == true
             ? clientDisplayName!.trim()
-            : initials.trim().toUpperCase(),
+            : personNameForEntry(entry, fallback: initials),
         dateText: formatDate(entry.date),
         interactionText: 'Interaction: ${entry.type.label}',
         fallbackNoteText: defaultNoteTextForEntry(entry: entry, status: status),
