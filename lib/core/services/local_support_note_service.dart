@@ -351,6 +351,7 @@ Referrals
     required String initials,
     required EntrySupportNoteStatus status,
     required String noteText,
+    String? clientDisplayName,
   }) async {
     try {
       final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
@@ -360,7 +361,9 @@ Referrals
       );
       return _docxFromTemplate(
         bytes: bytes,
-        clientInitials: initials.trim().toUpperCase(),
+        clientInitials: clientDisplayName?.trim().isNotEmpty == true
+            ? clientDisplayName!.trim()
+            : initials.trim().toUpperCase(),
         dateText: formatDate(entry.date),
         interactionText: 'Interaction: ${entry.type.label}',
         fallbackNoteText: defaultNoteTextForEntry(entry: entry, status: status),

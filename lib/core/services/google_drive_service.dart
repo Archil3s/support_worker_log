@@ -485,7 +485,7 @@ class GoogleDriveService {
     final file = matches.first;
     return EntryDriveSupportNoteMeta(
       entryId: entry.id,
-      initials: _initialsFromSupportNoteFileName(file.name, entry.date),
+      initials: LocalSupportNoteService.defaultInitialsForEntry(entry),
       status: _statusFromSupportNoteFileName(file.name),
       fileId: file.id,
       fileName: file.name,
@@ -891,12 +891,7 @@ class GoogleDriveService {
       throw StateError('Enter initials first.');
     }
 
-    final localFileName = LocalSupportNoteService.noteFileName(
-      entry: entry,
-      initials: cleanedInitials,
-      status: status,
-    );
-    final driveFileName = localFileName.split('/').last;
+    final driveFileName = _supportNoteDriveFileName(entry, status);
     final periodFolder = await findOrCreateSupportNoteFolder(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
@@ -908,6 +903,7 @@ class GoogleDriveService {
       initials: cleanedInitials,
       status: status,
       noteText: noteText,
+      clientDisplayName: _folderName(entry.client),
     );
     final existingFileId = existingMeta?.fileId.trim();
     final existingParentFolderId = existingMeta?.parentFolderId?.trim();
@@ -1031,6 +1027,14 @@ class GoogleDriveService {
     return '${_dateKey(entry.date)}_$person.docx';
   }
 
+  String _supportNoteDriveFileName(
+    WorkEntry entry,
+    EntrySupportNoteStatus status,
+  ) {
+    final person = _folderName(entry.client).replaceAll(' ', '_');
+    return '${_dateKey(entry.date)}_${person}_${status.fileSlug}.docx';
+  }
+
   String _payeNoteGoogleDocName(WorkEntry entry) {
     final fileName = _payeNoteFileName(entry);
     return fileName.endsWith('.docx')
@@ -1041,23 +1045,6 @@ class GoogleDriveService {
   String _temporaryPayeNoteGoogleDocName(WorkEntry entry) {
     final stamp = DateTime.now().millisecondsSinceEpoch;
     return 'TEST_${_payeNoteGoogleDocName(entry)}_$stamp';
-  }
-
-  String _initialsFromSupportNoteFileName(String fileName, DateTime date) {
-    final datePrefix = '${_dateKey(date)}_';
-    final withoutDate = fileName.startsWith(datePrefix)
-        ? fileName.substring(datePrefix.length)
-        : fileName;
-    final withoutExtension = withoutDate.replaceFirst(
-      RegExp(r'\.docx$', caseSensitive: false),
-      '',
-    );
-    final withoutStatus = withoutExtension.replaceFirst(
-      RegExp(r'_(incomplete|in-progress|finished|submitted)$'),
-      '',
-    );
-    final initials = withoutStatus.replaceAll('_', '').trim().toUpperCase();
-    return initials.isEmpty ? 'NA' : initials;
   }
 
   EntrySupportNoteStatus _statusFromSupportNoteFileName(String fileName) {

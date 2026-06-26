@@ -60,7 +60,7 @@ void main() {
         clientNotesFolderId: 'client-notes',
         entry: WorkEntry(
           id: 'entry-1',
-          client: 'AB',
+          client: 'Jane Smith',
           type: EntryType.homeVisit,
           date: DateTime(2026, 6, 2),
           startTime: const TimeOfDay(hour: 9, minute: 0),
@@ -81,7 +81,7 @@ void main() {
       );
 
       final noteUpload = api.uploads.singleWhere(
-        (upload) => upload.name.endsWith('_AB_in-progress.docx'),
+        (upload) => upload.name == '2026-06-02_Jane_Smith_in-progress.docx',
       );
       final documentXml = _docxXml(noteUpload.bytes);
       final documentText = _docxText(noteUpload.bytes);
@@ -93,12 +93,16 @@ void main() {
         meta.folderOpenLink,
         startsWith('https://drive.google.com/drive/folders/'),
       );
-      expect(meta.folderOpenLink, contains('client-notes%2FAB%2FInvoice%2010'));
+      expect(
+        meta.folderOpenLink,
+        contains('client-notes%2FJane%20Smith%2FInvoice%2010'),
+      );
       expect(meta.folderOpenLink, contains('Home%20Visits'));
       expect(noteUpload.mimeType, _docxMimeType);
       expect(noteUpload.contentMimeType, isNull);
+      expect(noteUpload.parentId, contains('client-notes/Jane Smith'));
       expect(noteUpload.parentId, contains('/Home Visits'));
-      expect(documentText, contains('Name of client: AB'));
+      expect(documentText, contains('Name of client: Jane Smith'));
       expect(documentText, contains('Interaction: Home Visit'));
       expect(documentText, isNot(contains('Date/time/length')));
       expect(documentText, isNot(contains('9:00')));
