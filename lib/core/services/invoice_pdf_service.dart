@@ -13,7 +13,7 @@ import '../utils/totals.dart';
 class InvoicePdfService {
   const InvoicePdfService._();
 
-  static const int _firstInvoiceNumber = 10;
+  static const int firstInvoiceNumber = 10;
   static const String _lastInvoiceNumberKey = 'invoice_pdf_last_number_v1';
 
   static Future<void> exportInvoice({
@@ -22,24 +22,33 @@ class InvoicePdfService {
     required List<WorkEntry> entries,
     required AppSettings settings,
   }) async {
-    final actualInvoiceNumber = await invoiceNumberForPeriod(period);
+    await rememberInvoiceNumberForPeriod(period, invoiceNumber);
 
     final bytes = await buildInvoicePdf(
-      invoiceNumber: actualInvoiceNumber,
+      invoiceNumber: invoiceNumber,
       period: period,
       entries: entries,
       settings: settings,
     );
 
-    final fileName = 'Invoice $actualInvoiceNumber.pdf';
+    final fileName = 'Invoice $invoiceNumber.pdf';
 
     await Printing.sharePdf(bytes: bytes, filename: fileName);
   }
 
-  static Future<int> invoiceNumberForPeriod(PayPeriodRange period) async {
+  static Future<int> invoiceNumberForPeriod(
+    PayPeriodRange period, {
+    DateTime? anchorDate,
+  }) async {
+    if (anchorDate != null) {
+      return rememberInvoiceNumberForPeriod(
+        period,
+        invoiceNumberForPeriodAnchor(period, anchorDate: anchorDate),
+      );
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    final periodKey =
-        'invoice_pdf_number_${_fileDate(period.start)}_${_fileDate(period.end)}';
+    final periodKey = _periodInvoiceNumberKey(period);
 
     final existing = prefs.getInt(periodKey);
     if (existing != null) {
@@ -47,15 +56,48 @@ class InvoicePdfService {
     }
 
     final lastNumber = prefs.getInt(_lastInvoiceNumberKey);
-
-    final nextNumber = lastNumber == null
-        ? _firstInvoiceNumber
-        : lastNumber + 1;
+    final nextNumber = lastNumber == null ? firstInvoiceNumber : lastNumber + 1;
 
     await prefs.setInt(periodKey, nextNumber);
     await prefs.setInt(_lastInvoiceNumberKey, nextNumber);
 
     return nextNumber;
+  }
+
+  static int invoiceNumberForPeriodAnchor(
+    PayPeriodRange period, {
+    DateTime? anchorDate,
+  }) {
+    final anchorRange = fortnightForDate(
+      anchorDate ?? defaultPayPeriodAnchorDate,
+      anchorDate: anchorDate,
+    );
+    final periodOffset =
+        calendarDaysBetween(anchorRange.start, period.start) ~/
+        invoicePeriodDays;
+
+    return firstInvoiceNumber + periodOffset;
+  }
+
+  static Future<int> rememberInvoiceNumberForPeriod(
+    PayPeriodRange period,
+    int invoiceNumber,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final periodKey = _periodInvoiceNumberKey(period);
+    final lastNumber = prefs.getInt(_lastInvoiceNumberKey);
+
+    await prefs.setInt(periodKey, invoiceNumber);
+
+    if (lastNumber == null || invoiceNumber > lastNumber) {
+      await prefs.setInt(_lastInvoiceNumberKey, invoiceNumber);
+    }
+
+    return invoiceNumber;
+  }
+
+  static String _periodInvoiceNumberKey(PayPeriodRange period) {
+    return 'invoice_pdf_number_${_fileDate(period.start)}_${_fileDate(period.end)}';
   }
 
   static Future<Uint8List> buildInvoicePdf({

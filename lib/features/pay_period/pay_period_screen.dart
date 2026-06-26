@@ -98,7 +98,7 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     }
 
     final periodOffset =
-        selectedRange.start.difference(rows.first.range.start).inDays ~/
+        calendarDaysBetween(rows.first.range.start, selectedRange.start) ~/
         invoicePeriodDays;
 
     return rows.first.index + periodOffset;
@@ -389,8 +389,9 @@ List<_InvoicePeriodRow> _invoicePeriodRows(
     }
   }
 
-  lastStart = lastStart.add(
-    const Duration(days: invoicePeriodDays * futureInvoicePeriodsToDisplay),
+  lastStart = addCalendarDays(
+    lastStart,
+    invoicePeriodDays * futureInvoicePeriodsToDisplay,
   );
 
   final rows = <_InvoicePeriodRow>[];
@@ -413,13 +414,13 @@ List<_InvoicePeriodRow> _invoicePeriodRows(
         index: invoiceNumber,
         range: PayPeriodRange(
           start: start,
-          end: start.add(const Duration(days: invoicePeriodDays - 1)),
+          end: addCalendarDays(start, invoicePeriodDays - 1),
         ),
         entries: periodEntries,
       ),
     );
 
-    start = start.add(const Duration(days: invoicePeriodDays));
+    start = addCalendarDays(start, invoicePeriodDays);
     invoiceNumber++;
   }
 
@@ -441,7 +442,7 @@ int _invoiceNumberForRange(
   }
 
   final periodOffset =
-      selectedRange.start.difference(rows.first.range.start).inDays ~/
+      calendarDaysBetween(rows.first.range.start, selectedRange.start) ~/
       invoicePeriodDays;
 
   return rows.first.index + periodOffset;

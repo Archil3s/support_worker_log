@@ -96,6 +96,56 @@ void main() {
       );
     },
   );
+
+  test('sync uses tab invoice number for anchored invoice periods', () async {
+    final driveService = _FakeGoogleDriveService();
+    final syncService = DriveInvoiceCycleSyncService(
+      driveService: driveService,
+    );
+
+    await syncService.syncInvoiceCycles(
+      accessToken: 'token',
+      rootFolderId: 'root',
+      clientNotesFolderId: 'client-notes',
+      invoicesFolderId: 'invoices',
+      entries: [
+        WorkEntry(
+          id: 'entry-1',
+          client: 'AB',
+          type: EntryType.homeVisit,
+          date: DateTime(2025, 11, 29),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const ['Anchor period'],
+          odometerStart: 100,
+          odometerEnd: 101,
+        ),
+        WorkEntry(
+          id: 'entry-2',
+          client: 'CD',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 5, 30),
+          startTime: const TimeOfDay(hour: 10, minute: 0),
+          minutes: 60,
+          notes: const ['Invoice 23 period'],
+          odometerStart: 200,
+          odometerEnd: 201,
+        ),
+      ],
+      settings: AppSettings(payPeriodAnchorDate: DateTime(2025, 11, 29)),
+    );
+
+    expect(
+      driveService.uploads.map((upload) => upload.name),
+      contains('Invoice_23_2026-05-30_2026-06-12.pdf'),
+    );
+    expect(
+      driveService.uploads
+          .where((upload) => upload.name.endsWith('.pdf'))
+          .map((upload) => upload.parentId),
+      contains('invoices/Invoice 23 - 2026-05-30 to 2026-06-12'),
+    );
+  });
 }
 
 String _docxText(List<int> bytes) {
