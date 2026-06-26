@@ -13,6 +13,7 @@ import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
+import '../../shared/widgets/notes_storage_gate.dart';
 
 double _supportNoteSheetHeight(BuildContext context) {
   final screenHeight = MediaQuery.sizeOf(context).height;
@@ -65,15 +66,25 @@ class _LocalSupportNoteButtonState extends State<LocalSupportNoteButton> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final locked = !appState.notesStorageReadyForScope(
+      _currentGoogleScope(appState),
+    );
     final status = meta?.status;
 
     return TextButton.icon(
       onPressed: _openSheet,
       icon: Icon(
-        Icons.note_alt_outlined,
-        color: status == null ? null : _statusColor(status),
+        locked ? Icons.lock_outline : Icons.note_alt_outlined,
+        color: locked || status == null ? null : _statusColor(status),
       ),
-      label: Text(status == null ? 'Support Note' : status.label),
+      label: Text(
+        locked
+            ? 'Notes Locked'
+            : status == null
+            ? 'Support Note'
+            : status.label,
+      ),
     );
   }
 }
@@ -705,8 +716,21 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
-    final payeMode = context.watch<AppState>().isPayeMode;
+    final appState = context.watch<AppState>();
+    final scope = _currentGoogleScope(appState);
+    final payeMode = appState.isPayeMode;
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
+    if (!appState.notesStorageReadyForScope(scope)) {
+      return SizedBox(
+        height: _supportNoteSheetHeight(context),
+        child: NotesStorageGate(
+          scope: scope,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: const SizedBox.shrink(),
+        ),
+      );
+    }
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -851,8 +875,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             const SizedBox(height: 6),
             Text(
               payeMode
-                  ? 'This always saves the PAYE note in the app. Google Drive is optional.'
-                  : 'This always saves the note in the app. Google Drive is optional.',
+                  ? 'This saves the PAYE note after Firebase sync and Google Drive are connected.'
+                  : 'This saves the note after Firebase sync and Google Drive are connected.',
               style: const TextStyle(color: Color(0xFF8396C7), fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -917,7 +941,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Local notes stay attached to this entry card. Google copies are optional.',
+              'Notes stay locked unless Firebase sync and Google Drive are connected.',
               style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
             ),
           ],

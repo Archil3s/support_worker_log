@@ -8,13 +8,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/active_visit.dart';
 import '../../core/models/entry_type.dart';
-import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/google_account_connection_card.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
+import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/support_note_breakdown_text.dart';
 import '../entries/local_support_note_button.dart';
 
@@ -1527,7 +1527,20 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final scope = appState.notesGoogleScope;
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
+    if (!appState.notesStorageReadyForScope(scope)) {
+      return SizedBox(
+        height: _keyboardAwareSheetHeight(context, maxFraction: 0.9),
+        child: NotesStorageGate(
+          scope: scope,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: const SizedBox.shrink(),
+        ),
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1548,12 +1561,7 @@ class _TextNoteBreakdownSheetState extends State<_TextNoteBreakdownSheet> {
               onClose: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 12),
-            GoogleDriveConnectionWarning(
-              scope: context.watch<AppState>().isPayeMode
-                  ? GoogleExportAccountScope.paye
-                  : GoogleExportAccountScope.work,
-              compact: true,
-            ),
+            GoogleDriveConnectionWarning(scope: scope, compact: true),
             const SizedBox(height: 12),
             Expanded(
               child: SingleChildScrollView(
@@ -2203,7 +2211,20 @@ class _SupportNoteBreakdownSheetState
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final scope = appState.notesGoogleScope;
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
+
+    if (!appState.notesStorageReadyForScope(scope)) {
+      return SizedBox(
+        height: _keyboardAwareSheetHeight(context, maxFraction: 0.9),
+        child: NotesStorageGate(
+          scope: scope,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: const SizedBox.shrink(),
+        ),
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.only(
@@ -2224,12 +2245,7 @@ class _SupportNoteBreakdownSheetState
               onClose: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: 12),
-            GoogleDriveConnectionWarning(
-              scope: context.watch<AppState>().isPayeMode
-                  ? GoogleExportAccountScope.paye
-                  : GoogleExportAccountScope.work,
-              compact: true,
-            ),
+            GoogleDriveConnectionWarning(scope: scope, compact: true),
             const SizedBox(height: 12),
             Expanded(
               child: SingleChildScrollView(
@@ -2251,7 +2267,7 @@ class _SupportNoteBreakdownSheetState
               isLast: stepIndex == _lastStepIndex,
               onBack: _previousStep,
               onNext: _nextStep,
-              saveLabel: context.watch<AppState>().isPayeMode
+              saveLabel: appState.isPayeMode
                   ? 'Finish & Save PAYE Note'
                   : 'Save Visit',
             ),
@@ -2887,6 +2903,7 @@ class _StartVisitView extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final noteOptions = appState.settings.noteOptions;
+    final scope = appState.notesGoogleScope;
     final availableTypes = entryTypesForMode(payeMode: appState.isPayeMode);
     final showClientSelector = selectedType.requiresClientSelection;
     final showOptionalClientTag = selectedType.allowsOptionalClientTag;
@@ -2901,11 +2918,7 @@ class _StartVisitView extends StatelessWidget {
           icon: Icons.play_arrow_rounded,
         ),
         const SizedBox(height: 12),
-        GoogleAccountConnectionCard(
-          scope: appState.isPayeMode
-              ? GoogleExportAccountScope.paye
-              : GoogleExportAccountScope.work,
-        ),
+        GoogleAccountConnectionCard(scope: scope),
         const SizedBox(height: 12),
         _Panel(
           title: 'Visit Date',
@@ -3039,12 +3052,17 @@ class _StartVisitView extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        _VisitContextTabs(
-          noteOptions: noteOptions,
-          selectedNotes: selectedNotes,
-          showAttendance: showAttendance,
-          showAgencies: selectedType == EntryType.professionalContact,
-          onChanged: onNoteToggle,
+        NotesStorageGate(
+          scope: scope,
+          scrollable: false,
+          padding: EdgeInsets.zero,
+          child: _VisitContextTabs(
+            noteOptions: noteOptions,
+            selectedNotes: selectedNotes,
+            showAttendance: showAttendance,
+            showAgencies: selectedType == EntryType.professionalContact,
+            onChanged: onNoteToggle,
+          ),
         ),
       ],
     );
@@ -3084,7 +3102,9 @@ class _ActiveVisitView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<AppState>().settings;
+    final appState = context.watch<AppState>();
+    final settings = appState.settings;
+    final scope = appState.notesGoogleScope;
     final noteOptions = settings.noteOptions;
     final minutes = _previewMinutes(activeVisit.startedAt);
     final gross = (minutes / 60) * settings.hourlyRate;
@@ -3169,36 +3189,41 @@ class _ActiveVisitView extends StatelessWidget {
           ),
         if (showKilometres && activeVisit.type == EntryType.homeVisit)
           const SizedBox(height: 12),
-        _VisitContextTabs(
-          noteOptions: noteOptions,
-          selectedNotes: selectedNotes,
-          showAttendance: context.watch<AppState>().isPayeMode,
-          showAgencies: activeVisit.type == EntryType.professionalContact,
-          onChanged: onNoteToggle,
-          footer: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: noteController,
-                minLines: 2,
-                maxLines: 4,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                scrollPadding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
+        NotesStorageGate(
+          scope: scope,
+          scrollable: false,
+          padding: EdgeInsets.zero,
+          child: _VisitContextTabs(
+            noteOptions: noteOptions,
+            selectedNotes: selectedNotes,
+            showAttendance: appState.isPayeMode,
+            showAgencies: activeVisit.type == EntryType.professionalContact,
+            onChanged: onNoteToggle,
+            footer: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  scrollPadding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Optional extra note',
+                    hintText: 'Brief detail if the topics do not cover it',
+                  ),
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'Optional extra note',
-                  hintText: 'Brief detail if the topics do not cover it',
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onSaveDraft,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save Draft Notes'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onSaveDraft,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Save Draft Notes'),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 14),

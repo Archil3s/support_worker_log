@@ -136,7 +136,7 @@ class _GoogleAccountConnectionCardState
           Text(
             connected
                 ? _serviceText
-                : 'Not ready for Drive uploads. In-app notes still save locally.',
+                : 'Notes are locked until Firebase sync and Drive are connected.',
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
           const SizedBox(height: 10),

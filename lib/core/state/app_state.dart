@@ -134,6 +134,8 @@ class AppState extends ChangeNotifier {
   bool get payeGoogleAccountSignedIn => _googleExportAccountService
       .hasSignedInAccount(GoogleExportAccountScope.paye);
   bool get googleServicesConnected => workGoogleServicesConnected;
+  GoogleExportAccountScope get notesGoogleScope =>
+      _googleScopeForMode(_appMode);
   List<String> get rememberedGoogleAccountEmails =>
       _googleExportAccountService.knownEmails;
 
@@ -143,6 +145,13 @@ class AppState extends ChangeNotifier {
       GoogleExportAccountScope.personal => personalGoogleServicesConnected,
       GoogleExportAccountScope.paye => payeGoogleServicesConnected,
     };
+  }
+
+  bool notesStorageReadyForScope(GoogleExportAccountScope scope) {
+    return isSignedIn &&
+        _cloudSyncReady &&
+        _cloudSyncError == null &&
+        googleDriveConnectedForScope(scope);
   }
 
   bool googleAccountSignedInForScope(GoogleExportAccountScope scope) {

@@ -16,6 +16,7 @@ import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
@@ -106,27 +107,29 @@ class _NotesScreenState extends State<NotesScreen> {
       ...allEntries.map((entry) => entry.client),
     }.where((client) => client.trim().isNotEmpty).toList()..sort();
     final entries = _filtered(allEntries);
-    return _NotesListTab(
-      entries: entries,
-      statusFilter: statusFilter,
-      searchController: searchController,
-      search: search,
-      clients: clients,
-      clientFilter: clientFilter,
-      onSearchChanged: (value) => setState(() => search = value),
-      onClearSearch: () {
-        setState(() {
-          searchController.clear();
-          search = '';
-        });
-      },
-      onClientFilterChanged: (value) {
-        setState(() => clientFilter = value);
-      },
-      onStatusFilterChanged: (value) {
-        setState(() => statusFilter = value);
-      },
-      onChooseFolder: _chooseFolder,
+    return NotesStorageGate(
+      child: _NotesListTab(
+        entries: entries,
+        statusFilter: statusFilter,
+        searchController: searchController,
+        search: search,
+        clients: clients,
+        clientFilter: clientFilter,
+        onSearchChanged: (value) => setState(() => search = value),
+        onClearSearch: () {
+          setState(() {
+            searchController.clear();
+            search = '';
+          });
+        },
+        onClientFilterChanged: (value) {
+          setState(() => clientFilter = value);
+        },
+        onStatusFilterChanged: (value) {
+          setState(() => statusFilter = value);
+        },
+        onChooseFolder: _chooseFolder,
+      ),
     );
   }
 }

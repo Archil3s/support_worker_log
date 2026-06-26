@@ -68,8 +68,8 @@ class _GoogleDriveConnectionWarningState
         : 'Google Drive is not connected';
     final detail = signedIn
         ? '${email ?? widget.scope.label} is known, but Drive permission is not active. '
-              'Notes still save on this phone/web app first.'
-        : 'Notes still save on this phone/web app first. Connect Drive before expecting files to upload.';
+              'Notes are locked until Drive is connected.'
+        : 'Notes are locked until Drive is connected.';
 
     if (widget.compact && !expanded) {
       return InkWell(
@@ -94,7 +94,7 @@ class _GoogleDriveConnectionWarningState
                 child: Text(
                   signedIn
                       ? 'Drive reconnect needed'
-                      : 'Drive optional - tap to connect',
+                      : 'Drive required - tap to connect',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
