@@ -263,8 +263,11 @@ class LocalSupportNoteService {
   }
 
   static String defaultInitialsForEntry(WorkEntry entry) {
-    final value = entry.client.trim();
+    return defaultInitialsForName(entry.client);
+  }
 
+  static String defaultInitialsForName(String value) {
+    value = value.trim();
     if (value.isEmpty) return 'NA';
 
     final parts = value
@@ -306,6 +309,11 @@ class LocalSupportNoteService {
     if (fallbackName == null || fallbackName.isEmpty) return false;
     if (appName.isEmpty) return true;
     if (appName.toLowerCase() == fallbackName.toLowerCase()) return false;
+
+    if (defaultInitialsForName(fallbackName) ==
+        appName.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase()) {
+      return true;
+    }
 
     return _looksLikeInitialsCode(appName) &&
         !_looksLikeInitialsCode(fallbackName);

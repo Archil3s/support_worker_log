@@ -189,7 +189,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       if (loaded == null) {
         initialsController.text = _personNameForNote(
           widget.entry,
-          fallback: loadedDrive?.initials,
+          fallback: _bestPersonNameFallback(
+            widget.entry,
+            null,
+            loadedDrive,
+            appState.clients,
+          ),
         );
         noteController.text = loadedDrive?.noteText.trim().isNotEmpty == true
             ? loadedDrive!.noteText
@@ -202,7 +207,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       } else {
         initialsController.text = _personNameForNote(
           widget.entry,
-          fallback: loaded.initials,
+          fallback: _bestPersonNameFallback(
+            widget.entry,
+            loaded,
+            loadedDrive,
+            appState.clients,
+          ),
         );
         noteController.text = loaded.noteText;
         status = _preferredStatus(loaded.status, loadedDrive?.status);
@@ -767,7 +777,12 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
     final displayName = _personNameForNote(
       entry,
-      fallback: _bestPersonNameFallback(meta, driveMeta),
+      fallback: _bestPersonNameFallback(
+        entry,
+        meta,
+        driveMeta,
+        appState.clients,
+      ),
     );
 
     if (!appState.notesStorageReadyForScope(scope)) {
@@ -1098,10 +1113,13 @@ String _personNameForNote(WorkEntry entry, {String? fallback}) {
 }
 
 String? _bestPersonNameFallback(
+  WorkEntry entry,
   EntrySupportNoteMeta? localMeta,
   EntryDriveSupportNoteMeta? driveMeta,
+  Iterable<String> candidates,
 ) {
-  final names = [localMeta?.initials, driveMeta?.initials]
+  final matchedCandidate = _matchingNameCandidate(entry.client, candidates);
+  final names = [localMeta?.initials, driveMeta?.initials, matchedCandidate]
       .whereType<String>()
       .map((name) => name.trim())
       .where((name) => name.isNotEmpty)
@@ -1111,11 +1129,34 @@ String? _bestPersonNameFallback(
   return names.firstWhere(_looksLikeFullName, orElse: () => names.first);
 }
 
+String? _matchingNameCandidate(String initialsCode, Iterable<String> names) {
+  final code = initialsCode
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+      .toUpperCase();
+  if (code.isEmpty) return null;
+
+  for (final name in names) {
+    final cleaned = name.trim();
+    if (cleaned.isEmpty || cleaned.toLowerCase() == code.toLowerCase()) {
+      continue;
+    }
+    if (LocalSupportNoteService.defaultInitialsForName(cleaned) == code) {
+      return cleaned;
+    }
+  }
+
+  return null;
+}
+
 bool _looksLikeFullName(String name) {
   if (name.contains(RegExp(r'\s'))) return true;
 
   final cleaned = name.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
-  return cleaned.length > 4;
+  if (cleaned.length <= 2) return false;
+
+  return LocalSupportNoteService.defaultInitialsForName(name) !=
+      cleaned.toUpperCase();
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {

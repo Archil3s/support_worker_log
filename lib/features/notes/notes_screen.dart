@@ -36,10 +36,13 @@ String _personNameForNote(WorkEntry entry, {String? fallback}) {
 }
 
 String? _bestPersonNameFallback(
+  WorkEntry entry,
   EntrySupportNoteMeta? localMeta,
   EntryDriveSupportNoteMeta? driveMeta,
+  Iterable<String> candidates,
 ) {
-  final names = [localMeta?.initials, driveMeta?.initials]
+  final matchedCandidate = _matchingNameCandidate(entry.client, candidates);
+  final names = [localMeta?.initials, driveMeta?.initials, matchedCandidate]
       .whereType<String>()
       .map((name) => name.trim())
       .where((name) => name.isNotEmpty)
@@ -49,11 +52,34 @@ String? _bestPersonNameFallback(
   return names.firstWhere(_looksLikeFullName, orElse: () => names.first);
 }
 
+String? _matchingNameCandidate(String initialsCode, Iterable<String> names) {
+  final code = initialsCode
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+      .toUpperCase();
+  if (code.isEmpty) return null;
+
+  for (final name in names) {
+    final cleaned = name.trim();
+    if (cleaned.isEmpty || cleaned.toLowerCase() == code.toLowerCase()) {
+      continue;
+    }
+    if (LocalSupportNoteService.defaultInitialsForName(cleaned) == code) {
+      return cleaned;
+    }
+  }
+
+  return null;
+}
+
 bool _looksLikeFullName(String name) {
   if (name.contains(RegExp(r'\s'))) return true;
 
   final cleaned = name.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
-  return cleaned.length > 4;
+  if (cleaned.length <= 2) return false;
+
+  return LocalSupportNoteService.defaultInitialsForName(name) !=
+      cleaned.toUpperCase();
 }
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -925,7 +951,12 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
       widget.entry,
       displayName: _personNameForNote(
         widget.entry,
-        fallback: _bestPersonNameFallback(meta, driveMeta),
+        fallback: _bestPersonNameFallback(
+          widget.entry,
+          meta,
+          driveMeta,
+          appState.clients,
+        ),
       ),
     );
 
@@ -983,7 +1014,13 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
     final hasLocal = meta?.fileName.isNotEmpty == true;
     final hasDriveNote = driveMeta?.openLink?.isNotEmpty == true;
-    final fallbackName = _bestPersonNameFallback(meta, driveMeta);
+    final appState = context.watch<AppState>();
+    final fallbackName = _bestPersonNameFallback(
+      widget.entry,
+      meta,
+      driveMeta,
+      appState.clients,
+    );
     final displayName = _personNameForNote(
       widget.entry,
       fallback: fallbackName,
@@ -1220,7 +1257,12 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       if (loaded == null && loadedDrive != null) {
         initialsController.text = _personNameForNote(
           widget.entry,
-          fallback: loadedDrive.initials,
+          fallback: _bestPersonNameFallback(
+            widget.entry,
+            null,
+            loadedDrive,
+            appState.clients,
+          ),
         );
         noteController.text = loadedDrive.noteText.trim().isNotEmpty
             ? loadedDrive.noteText
@@ -1231,7 +1273,15 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               );
         status = loadedDrive.status;
       } else if (loaded == null) {
-        initialsController.text = _personNameForNote(widget.entry);
+        initialsController.text = _personNameForNote(
+          widget.entry,
+          fallback: _bestPersonNameFallback(
+            widget.entry,
+            null,
+            null,
+            appState.clients,
+          ),
+        );
         noteController.text = _defaultNoteText(
           appState: appState,
           entry: widget.entry,
@@ -1240,7 +1290,12 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       } else {
         initialsController.text = _personNameForNote(
           widget.entry,
-          fallback: loaded.initials,
+          fallback: _bestPersonNameFallback(
+            widget.entry,
+            loaded,
+            loadedDrive,
+            appState.clients,
+          ),
         );
         noteController.text = loaded.noteText;
         status = _preferredStatus(loaded.status, loadedDrive?.status);
@@ -1777,8 +1832,14 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
-    final payeMode = context.watch<AppState>().isPayeMode;
-    final fallbackName = _bestPersonNameFallback(meta, driveMeta);
+    final appState = context.watch<AppState>();
+    final payeMode = appState.isPayeMode;
+    final fallbackName = _bestPersonNameFallback(
+      entry,
+      meta,
+      driveMeta,
+      appState.clients,
+    );
     final displayName = _personNameForNote(entry, fallback: fallbackName);
 
     return Padding(

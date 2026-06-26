@@ -171,6 +171,26 @@ void main() {
     expect(title, 'Brad Roberts | 26/06/2026 | Submitted');
   });
 
+  test('support note title expands initials code to a single saved name', () {
+    final entry = WorkEntry(
+      id: 'work-note-title-single-name',
+      client: 'BR',
+      type: EntryType.homeVisit,
+      date: DateTime(2026, 6, 26),
+      startTime: const TimeOfDay(hour: 9, minute: 0),
+      minutes: 60,
+      notes: const [],
+    );
+
+    final title = LocalSupportNoteService.noteTitle(
+      entry: entry,
+      initials: 'Brad',
+      status: EntrySupportNoteStatus.incomplete,
+    );
+
+    expect(title, 'Brad | 26/06/2026 | Incomplete');
+  });
+
   test('removeMeta deletes stored support note metadata', () async {
     final entry = WorkEntry(
       id: 'paye-note-remove',
