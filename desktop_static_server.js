@@ -278,6 +278,60 @@ function googleDriveJsonRequest({ accessToken, method, path: requestPath, body }
   });
 }
 
+function googleDriveTextRequest({ accessToken, method, path: requestPath }) {
+  return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
+    const request = https.request(
+      {
+        hostname: 'www.googleapis.com',
+        path: requestPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                responseBody.trim() || `Google Drive returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          resolve(responseBody);
+        });
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Drive: ${error.message}`
+            : 'Could not reach Google Drive.',
+        ),
+      );
+    });
+
+    request.end();
+  });
+}
+
 function googleDriveMultipartRequest({
   accessToken,
   method,
@@ -611,6 +665,48 @@ async function deleteGoogleDriveFile(req, res) {
   }
 }
 
+async function exportGoogleDocText(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+
+    if (!fileId) {
+      send(res, 400, 'Missing Drive file id.');
+      return;
+    }
+
+    const params = new URLSearchParams({ mimeType: 'text/plain' });
+    const text = await googleDriveTextRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'GET',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}/export?${params.toString()}`,
+    });
+
+    send(
+      res,
+      200,
+      JSON.stringify({ text }),
+      'application/json; charset=utf-8',
+    );
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message ? error.message : 'Google Docs text export failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -755,6 +851,14 @@ function handleRequest(req, res) {
 
   if ((req.url || '').split('?')[0] === '/__google_drive/delete_file') {
     deleteGoogleDriveFile(req, res);
+    return;
+  }
+
+  if (
+    (req.url || '').split('?')[0] ===
+    '/__google_drive/export_google_doc_text'
+  ) {
+    exportGoogleDocText(req, res);
     return;
   }
 

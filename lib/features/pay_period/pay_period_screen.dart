@@ -1,6 +1,7 @@
 // ignore_for_file: unused_element, deprecated_member_use, unused_local_variable
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/invoice_status.dart';
@@ -173,6 +174,80 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
     }
   }
 
+  Future<void> _createSelectedTotalFolder({
+    required BuildContext context,
+    required int invoiceNumber,
+    required List<WorkEntry> entries,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    if (entries.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('No entries in this invoice period.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Creating Invoice $invoiceNumber total folder...'),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+
+    try {
+      final folder = await context
+          .read<AppState>()
+          .createInvoicePeriodTotalDriveFolder(
+            invoiceNumber: invoiceNumber,
+            range: selectedRange,
+            entries: entries,
+          );
+
+      if (!mounted) return;
+
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Invoice $invoiceNumber total folder ready.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => _openDriveFolder(folder.id),
+          ),
+        ),
+      );
+      await _openDriveFolder(folder.id);
+    } catch (error) {
+      if (!mounted) return;
+
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Total folder failed: $error'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -309,6 +384,18 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
                 ),
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: Text('Build Invoice $selectedInvoiceNumber PDF'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: periodEntries.isEmpty
+              ? null
+              : () => _createSelectedTotalFolder(
+                  context: context,
+                  invoiceNumber: selectedInvoiceNumber,
+                  entries: periodEntries,
+                ),
+          icon: const Icon(Icons.drive_folder_upload_outlined),
+          label: Text('Create Invoice $selectedInvoiceNumber Total Folder'),
         ),
         const SizedBox(height: 12),
         SectionCard(
@@ -800,6 +887,72 @@ class _InvoicePeriodTile extends StatelessWidget {
     }
   }
 
+  Future<void> _createTotalFolderFromMenu(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    if (row.entries.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('No entries in this invoice period.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Creating Invoice ${row.index} total folder...'),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+
+    try {
+      final folder = await context
+          .read<AppState>()
+          .createInvoicePeriodTotalDriveFolder(
+            invoiceNumber: row.index,
+            range: row.range,
+            entries: row.entries,
+          );
+
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Invoice ${row.index} total folder ready.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => _openDriveFolder(folder.id),
+          ),
+        ),
+      );
+      await _openDriveFolder(folder.id);
+    } catch (error) {
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Total folder failed: $error'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    }
+  }
+
   void _openBreakdown(BuildContext context) {
     onSelected(row.range);
 
@@ -914,6 +1067,11 @@ class _InvoicePeriodTile extends StatelessWidget {
                   tooltip: 'Export invoice PDF',
                   onPressed: () => _exportInvoiceFromMenu(context, settings),
                   icon: const Icon(Icons.picture_as_pdf_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Create total Drive folder',
+                  onPressed: () => _createTotalFolderFromMenu(context),
+                  icon: const Icon(Icons.drive_folder_upload_outlined),
                 ),
                 const Icon(Icons.chevron_right),
               ],
@@ -1227,6 +1385,18 @@ bool _sameDate(DateTime a, DateTime b) {
 
 String _formatInvoiceDateRange(PayPeriodRange range) {
   return '${_formatNumericDate(range.start)} - ${_formatNumericDate(range.end)}';
+}
+
+Future<void> _openDriveFolder(String folderId) async {
+  final id = folderId.trim();
+  if (id.isEmpty) return;
+
+  await launchUrl(
+    Uri.parse(
+      'https://drive.google.com/drive/folders/${Uri.encodeComponent(id)}',
+    ),
+    webOnlyWindowName: '_blank',
+  );
 }
 
 String _formatNumericDate(DateTime date) {

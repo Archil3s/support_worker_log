@@ -1,5 +1,6 @@
 import '../models/app_settings.dart';
 import '../models/entry_type.dart';
+import '../models/google_drive_file.dart';
 import '../models/work_entry.dart';
 import '../utils/formatters.dart';
 import '../utils/pay_period_utils.dart';
@@ -55,6 +56,106 @@ class DriveInvoiceCycleSyncService {
       entries: entries,
       settings: settings,
     );
+  }
+
+  Future<GoogleDriveFile> createInvoicePeriodTotalFolder({
+    required String accessToken,
+    required String invoicesFolderId,
+    required int invoiceNumber,
+    required PayPeriodRange range,
+    required List<WorkEntry> entries,
+    required AppSettings settings,
+  }) async {
+    if (entries.isEmpty) {
+      throw StateError('No entries in this invoice period.');
+    }
+
+    final sortedEntries = entries.toList();
+    _sortEntries(sortedEntries);
+    await InvoicePdfService.rememberInvoiceNumberForPeriod(
+      range,
+      invoiceNumber,
+    );
+    final totalFolder = await _driveService.findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: invoicesFolderId,
+      name:
+          'Invoice $invoiceNumber Total - ${_dateKey(range.start)} to '
+          '${_dateKey(range.end)}',
+    );
+    final pdfBytes = await InvoicePdfService.buildInvoicePdf(
+      invoiceNumber: invoiceNumber,
+      period: range,
+      entries: sortedEntries,
+      settings: settings,
+    );
+
+    await _driveService.uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: totalFolder.id,
+      name: 'Invoice_${invoiceNumber}_${_fileSuffix(range)}.pdf',
+      mimeType: 'application/pdf',
+      bytes: pdfBytes,
+    );
+
+    final noteBytes = await LocalSupportNoteService.buildInvoicePeriodNoteDocx(
+      invoiceNumber: invoiceNumber,
+      start: range.start,
+      end: range.end,
+      entryCount: sortedEntries.length,
+      hours: totalHours(sortedEntries),
+      kilometres: totalKilometres(sortedEntries),
+      noteText: _invoiceBreakdownText(
+        title: 'Invoice $invoiceNumber total folder breakdown',
+        start: range.start,
+        end: range.end,
+        entries: sortedEntries,
+        settings: settings,
+      ),
+    );
+
+    await _driveService.uploadOrUpdateFile(
+      accessToken: accessToken,
+      parentId: totalFolder.id,
+      name:
+          'Invoice_Total_Breakdown_${invoiceNumber}_${_fileSuffix(range)}.docx',
+      mimeType: _docxMimeType,
+      bytes: noteBytes,
+    );
+
+    for (final entry in sortedEntries) {
+      final meta = await LocalSupportNoteService.loadMeta(entry.id);
+      final initials = meta?.initials.trim().isNotEmpty == true
+          ? meta!.initials
+          : LocalSupportNoteService.defaultInitialsForEntry(entry);
+      final status = meta?.status ?? EntrySupportNoteStatus.incomplete;
+      final noteText = meta?.noteText.trim().isNotEmpty == true
+          ? meta!.noteText
+          : LocalSupportNoteService.defaultNoteTextForEntry(
+              entry: entry,
+              status: status,
+            );
+      final supportNoteBytes = await LocalSupportNoteService.buildNoteDocx(
+        entry: entry,
+        initials: initials,
+        status: status,
+        noteText: noteText,
+      );
+
+      await _driveService.uploadOrUpdateFile(
+        accessToken: accessToken,
+        parentId: totalFolder.id,
+        name: _totalFolderSupportNoteFileName(
+          entry: entry,
+          initials: initials,
+          status: status,
+        ),
+        mimeType: _docxMimeType,
+        bytes: supportNoteBytes,
+      );
+    }
+
+    return totalFolder;
   }
 
   Future<void> _syncInvoicePeriod({
@@ -562,6 +663,27 @@ class DriveInvoiceCycleSyncService {
     required PayPeriodRange range,
   }) {
     return 'Invoice $invoiceNumber - ${_dateKey(range.start)} to ${_dateKey(range.end)}';
+  }
+
+  String _totalFolderSupportNoteFileName({
+    required WorkEntry entry,
+    required String initials,
+    required EntrySupportNoteStatus status,
+  }) {
+    final fileName = [
+      _dateKey(entry.date),
+      _safeFilePart(_clientName(entry)),
+      _safeFilePart(entry.type.label),
+      _safeFilePart(initials).toUpperCase(),
+      status.fileSlug,
+    ].where((part) => part.isNotEmpty).join('_');
+
+    return '$fileName.docx';
+  }
+
+  String _safeFilePart(String value) {
+    final cleaned = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-');
+    return cleaned.replaceAll(RegExp(r'\s+'), '_');
   }
 
   String _fileSuffix(PayPeriodRange range) {

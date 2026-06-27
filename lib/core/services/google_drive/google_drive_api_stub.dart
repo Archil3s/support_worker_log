@@ -104,6 +104,41 @@ class GoogleDriveApiPlatform {
     );
   }
 
+  Future<String> exportGoogleDocText({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    final client = HttpClient();
+
+    try {
+      final request = await client.getUrl(_driveExportUri(fileId));
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $accessToken',
+      );
+
+      final response = await request.close();
+      final raw = await utf8.decodeStream(response);
+      final status = response.statusCode;
+
+      if (status < 200 || status >= 300) {
+        throw StateError(
+          _googleApiError(raw) ??
+              'Google Docs text export failed with HTTP $status.',
+        );
+      }
+
+      return raw.trim();
+    } on SocketException catch (error) {
+      throw StateError(
+        'Google Docs text export failed: could not reach Google Drive. '
+        '${error.message}',
+      );
+    } finally {
+      client.close();
+    }
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -165,6 +200,12 @@ class GoogleDriveApiPlatform {
   Uri _driveFileUri(String fileId) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveExportUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
+      'mimeType': 'text/plain',
     });
   }
 

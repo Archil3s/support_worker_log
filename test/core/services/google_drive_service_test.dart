@@ -782,6 +782,27 @@ void main() {
 
     expect(api.deletedFileIds, ['temporary-doc']);
   });
+
+  test('exportGoogleDocText reads editable Google Doc text', () async {
+    final api = _FakeGoogleDriveApi(exportedText: 'Edited Google Doc note');
+    final service = GoogleDriveService(api: api);
+
+    final text = await service.exportGoogleDocText(
+      accessToken: 'token',
+      meta: const EntryDriveSupportNoteMeta(
+        entryId: 'entry-1',
+        initials: 'AB',
+        status: EntrySupportNoteStatus.finished,
+        fileId: 'google-doc-id',
+        fileName: 'PAYE Google Doc',
+        noteText: '',
+        mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
+      ),
+    );
+
+    expect(text, 'Edited Google Doc note');
+    expect(api.exportedFileIds, ['google-doc-id']);
+  });
 }
 
 const _docxMimeType =
@@ -792,16 +813,19 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({
     this.children = const [],
     this.childrenByParent = const {},
+    this.exportedText = '',
   });
 
   final List<GoogleDriveFile> children;
   final Map<String, List<GoogleDriveFile>> childrenByParent;
+  final String exportedText;
   final uploads = <_Upload>[];
   final updates = <_Update>[];
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
   final deletedFileIds = <String>[];
+  final exportedFileIds = <String>[];
 
   @override
   Future<GoogleDriveFile> createFolder({
@@ -891,6 +915,15 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     required String fileId,
   }) async {
     deletedFileIds.add(fileId);
+  }
+
+  @override
+  Future<String> exportGoogleDocText({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    exportedFileIds.add(fileId);
+    return exportedText;
   }
 }
 

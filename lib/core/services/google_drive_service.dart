@@ -449,6 +449,22 @@ class GoogleDriveService {
     return _api.deleteFile(accessToken: accessToken, fileId: fileId);
   }
 
+  Future<String> exportGoogleDocText({
+    required String accessToken,
+    required EntryDriveSupportNoteMeta meta,
+  }) {
+    if (meta.mimeType != _googleDocsMimeType) {
+      throw StateError('Only Google Docs notes can sync back into the app.');
+    }
+
+    final fileId = meta.fileId.trim();
+    if (fileId.isEmpty) {
+      throw StateError('Google Docs note is missing its Drive file id.');
+    }
+
+    return _api.exportGoogleDocText(accessToken: accessToken, fileId: fileId);
+  }
+
   Future<EntryDriveSupportNoteMeta?> findSupportNoteInDrive({
     required String accessToken,
     required String clientNotesFolderId,

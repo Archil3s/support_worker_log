@@ -751,6 +751,53 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     await _launchDriveLink(Uri.parse(link));
   }
 
+  Future<void> _syncFromGoogleDoc() async {
+    final appState = context.read<AppState>();
+
+    if (!appState.isPayeMode) {
+      setState(() {
+        message = 'Google Doc sync is only available for PAYE notes.';
+      });
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      message = 'Syncing from Google Doc...';
+    });
+
+    try {
+      final updated = await appState.syncPayeNoteFromGoogleDoc(
+        entry: widget.entry,
+        existingMeta: driveMeta,
+      );
+      final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updated;
+        meta = loaded;
+        initialsController.text = updated.initials;
+        noteController.text = updated.noteText;
+        status = updated.status;
+        message = 'Synced Google Doc edits into the app.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not sync from Google Doc: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _openGoogleDriveFolder() async {
     final current = driveMeta;
     final appState = context.read<AppState>();
@@ -1065,6 +1112,14 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
                     : 'Open Google Drive DOCX Note',
               ),
             ),
+            if (payeMode) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: busy ? null : _syncFromGoogleDoc,
+                icon: const Icon(Icons.sync_outlined),
+                label: const Text('Sync from Google Doc'),
+              ),
+            ],
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: busy ? null : _openGoogleDriveFolder,
