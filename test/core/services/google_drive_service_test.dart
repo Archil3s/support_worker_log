@@ -50,7 +50,7 @@ void main() {
   });
 
   test(
-    'saveSupportNote uploads template docx content as a Drive docx file',
+    'saveSupportNote uploads template docx content as a Google Doc',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
       final service = GoogleDriveService(api: api);
@@ -81,14 +81,14 @@ void main() {
       );
 
       final noteUpload = api.uploads.singleWhere(
-        (upload) => upload.name == '2026-06-02_Jane_Smith_in-progress.docx',
+        (upload) => upload.name == '2026-06-02_Jane_Smith_in-progress',
       );
       final documentXml = _docxXml(noteUpload.bytes);
       final documentText = _docxText(noteUpload.bytes);
 
-      expect(meta.fileName, endsWith('.docx'));
-      expect(meta.mimeType, _docxMimeType);
-      expect(meta.openLink, 'https://drive.google.com/file/d/new-doc/view');
+      expect(meta.fileName, '2026-06-02_Jane_Smith_in-progress');
+      expect(meta.mimeType, _googleDocsMimeType);
+      expect(meta.openLink, 'https://docs.google.com/document/d/new-doc/edit');
       expect(
         meta.folderOpenLink,
         startsWith('https://drive.google.com/drive/folders/'),
@@ -98,9 +98,9 @@ void main() {
         contains('client-notes%2FJane%20Smith%2FInvoice%2010'),
       );
       expect(meta.folderOpenLink, contains('Home%20Visits'));
-      expect(noteUpload.mimeType, _docxMimeType);
-      expect(noteUpload.contentMimeType, isNull);
       expect(noteUpload.parentId, contains('client-notes/Jane Smith'));
+      expect(noteUpload.mimeType, _googleDocsMimeType);
+      expect(noteUpload.contentMimeType, _docxMimeType);
       expect(noteUpload.parentId, contains('/Home Visits'));
       expect(documentText, contains('Name of client: Jane Smith'));
       expect(documentText, contains('Interaction: Home Visit'));
@@ -159,7 +159,7 @@ void main() {
     );
 
     final noteUpload = api.uploads.singleWhere(
-      (upload) => upload.name == '2026-06-02_Brad_Roberts_submitted.docx',
+      (upload) => upload.name == '2026-06-02_Brad_Roberts_submitted',
     );
     final documentText = _docxText(noteUpload.bytes);
 
@@ -169,7 +169,7 @@ void main() {
   });
 
   test(
-    'findSupportNoteInDrive returns existing docx from current folder',
+    'findSupportNoteInDrive prefers Google Docs from current folder',
     () async {
       final api = _FakeGoogleDriveApi(
         childrenByParent: {
@@ -195,6 +195,12 @@ void main() {
             ),
           ],
           'type-folder': [
+            const GoogleDriveFile(
+              id: 'google-doc-note',
+              name: '2026-06-02_AB_finished.docx',
+              mimeType: _googleDocsMimeType,
+              webViewLink: 'https://docs.example/note',
+            ),
             const GoogleDriveFile(
               id: 'drive-note',
               name: '2026-06-02_AB_finished.docx',
@@ -222,11 +228,11 @@ void main() {
       );
 
       expect(meta, isNotNull);
-      expect(meta!.fileId, 'drive-note');
+      expect(meta!.fileId, 'google-doc-note');
       expect(meta.fileName, '2026-06-02_AB_finished.docx');
       expect(meta.status, EntrySupportNoteStatus.finished);
       expect(meta.parentFolderId, 'type-folder');
-      expect(meta.openLink, 'https://drive.example/note');
+      expect(meta.openLink, 'https://docs.example/note');
       expect(meta.googleAccountEmail, 'work@example.com');
     },
   );
@@ -432,7 +438,7 @@ void main() {
     );
 
     final noteUpload = api.uploads.singleWhere(
-      (upload) => upload.name.endsWith('_AB_in-progress.docx'),
+      (upload) => upload.name.endsWith('_AB_in-progress'),
     );
 
     expect(noteUpload.parentId, contains('/Texts'));
@@ -460,7 +466,7 @@ void main() {
     );
 
     final noteUpload = api.uploads.singleWhere(
-      (upload) => upload.name.endsWith('_AB_in-progress.docx'),
+      (upload) => upload.name.endsWith('_AB_in-progress'),
     );
 
     expect(noteUpload.parentId, contains('/Phone Calls'));
@@ -509,7 +515,7 @@ void main() {
     expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
   });
 
-  test('saveSupportNote moves an existing docx into the type folder', () async {
+  test('saveSupportNote converts an existing docx into a Google Doc', () async {
     final api = _FakeGoogleDriveApi(children: const []);
     final service = GoogleDriveService(api: api);
 
@@ -540,13 +546,10 @@ void main() {
       ),
     );
 
-    expect(api.movedFiles.single.fileId, 'existing-docx');
-    expect(api.movedFiles.single.toParentId, contains('/Phone Calls'));
-    expect(api.updatedFileIds, contains('existing-docx'));
-    expect(
-      api.uploadedNames,
-      isNot(contains('2026-06-02_AB_in-progress.docx')),
-    );
+    expect(api.movedFiles, isEmpty);
+    expect(api.updatedFileIds, isNot(contains('existing-docx')));
+    expect(api.uploadedNames, contains('2026-06-02_AB_in-progress'));
+    expect(meta.mimeType, _googleDocsMimeType);
     expect(meta.parentFolderId, contains('/Phone Calls'));
   });
 
@@ -587,7 +590,7 @@ void main() {
       );
 
       expect(api.updatedFileIds, isNot(contains('old-account-docx')));
-      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
+      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress'));
       expect(meta.fileId, 'new-doc');
       expect(meta.googleAccountEmail, 'new-work@example.com');
     },

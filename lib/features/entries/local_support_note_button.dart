@@ -111,6 +111,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   String? message;
   bool draftAutosaveReady = false;
   Timer? draftAutosaveTimer;
+  Timer? googleDocSyncTimer;
 
   @override
   void initState() {
@@ -118,6 +119,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     initialsController.addListener(_scheduleDraftAutosave);
     noteController.addListener(_scheduleDraftAutosave);
     unawaited(_load());
+    _startGoogleDocSyncTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _warmGoogleAccount();
     });
@@ -126,10 +128,18 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   @override
   void dispose() {
     draftAutosaveTimer?.cancel();
+    googleDocSyncTimer?.cancel();
     initialsController.dispose();
     noteController.dispose();
     noteFocusNode.dispose();
     super.dispose();
+  }
+
+  void _startGoogleDocSyncTimer() {
+    googleDocSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted || busy || driveMeta == null) return;
+      unawaited(_syncFromGoogleDoc(silent: true));
+    });
   }
 
   Future<void> _load() async {
@@ -178,6 +188,19 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
     if (loadedDrive != null) {
       appState.upsertDriveSupportNoteMeta(loadedDrive);
+    }
+
+    if (loadedDrive != null) {
+      try {
+        loadedDrive = await appState.syncEntryNoteFromGoogleDoc(
+          entry: widget.entry,
+          existingMeta: loadedDrive,
+          payeMode: appState.isPayeMode,
+        );
+        loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+      } catch (_) {
+        // The visible sync button reports connection or permission errors.
+      }
     }
 
     if (!mounted) return;
@@ -742,8 +765,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         link == null ||
         link.isEmpty) {
       setState(() {
-        message =
-            'Save the Google Drive note file under the selected account first.';
+        message = 'Save the Google Doc under the selected account first.';
       });
       return;
     }
@@ -751,46 +773,48 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     await _launchDriveLink(Uri.parse(link));
   }
 
-  Future<void> _syncFromGoogleDoc() async {
+  Future<void> _syncFromGoogleDoc({bool silent = false}) async {
     final appState = context.read<AppState>();
 
-    if (!appState.isPayeMode) {
+    if (!silent) {
       setState(() {
-        message = 'Google Doc sync is only available for PAYE notes.';
+        busy = true;
+        message = 'Syncing from Google Doc...';
       });
-      return;
     }
 
-    setState(() {
-      busy = true;
-      message = 'Syncing from Google Doc...';
-    });
-
     try {
-      final updated = await appState.syncPayeNoteFromGoogleDoc(
+      final updated = await appState.syncEntryNoteFromGoogleDoc(
         entry: widget.entry,
         existingMeta: driveMeta,
+        payeMode: appState.isPayeMode,
       );
       final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
 
       if (!mounted) return;
 
+      draftAutosaveReady = false;
       setState(() {
         driveMeta = updated;
         meta = loaded;
         initialsController.text = updated.initials;
         noteController.text = updated.noteText;
         status = updated.status;
-        message = 'Synced Google Doc edits into the app.';
+        if (!silent) {
+          message = 'Synced Google Doc edits into the app.';
+        }
       });
+      draftAutosaveReady = true;
     } catch (error) {
       if (!mounted) return;
 
-      setState(() {
-        message = 'Could not sync from Google Doc: $error';
-      });
+      if (!silent) {
+        setState(() {
+          message = 'Could not sync from Google Doc: $error';
+        });
+      }
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           busy = false;
         });
@@ -809,8 +833,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
     if (current == null || accountMeta == null) {
       setState(() {
-        message =
-            'Save the Google Drive note file under the selected account first.';
+        message = 'Save the Google Doc under the selected account first.';
       });
       return;
     }
@@ -886,8 +909,6 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     final appState = context.watch<AppState>();
     final scope = _currentGoogleScope(appState);
     final payeMode = appState.isPayeMode;
-    final driveIsGoogleDoc =
-        driveMeta?.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType;
     final keyboardBottom = MediaQuery.viewInsetsOf(context).bottom;
     final displayName = _personNameForNote(
       entry,
@@ -1022,11 +1043,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: SelectableText(
-                    payeMode
-                        ? 'Google Docs note:\n${driveMeta!.fileName}'
-                        : driveIsGoogleDoc
-                        ? 'Google Docs note:\n${driveMeta!.fileName}'
-                        : 'Google Drive DOCX note:\n${driveMeta!.fileName}',
+                    'Google Docs note:\n${driveMeta!.fileName}',
                     style: const TextStyle(fontSize: 13),
                   ),
                 ),
@@ -1056,8 +1073,8 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             const SizedBox(height: 6),
             Text(
               payeMode
-                  ? 'This saves the PAYE note after Firebase sync and Google Drive are connected.'
-                  : 'This saves the note after Firebase sync and Google Drive are connected.',
+                  ? 'This saves the PAYE note in the app. Use Google Docs to keep Drive matched.'
+                  : 'This saves the note in the app. Use Google Docs to keep Drive matched.',
               style: const TextStyle(color: Color(0xFF8396C7), fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -1088,12 +1105,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
                 driveMeta == null
                     ? payeMode
                           ? 'Save Google Docs Note'
-                          : 'Create Google Drive DOCX Note'
+                          : 'Create Google Docs Note'
                     : payeMode
                     ? 'Update Google Docs Note'
-                    : driveIsGoogleDoc
-                    ? 'Update Google Docs Note'
-                    : 'Update Google Drive DOCX Note',
+                    : 'Update Google Docs Note',
               ),
             ),
             const SizedBox(height: 8),
@@ -1106,20 +1121,14 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             OutlinedButton.icon(
               onPressed: busy ? null : _openGoogleDriveNote,
               icon: const Icon(Icons.open_in_new_outlined),
-              label: Text(
-                payeMode
-                    ? 'Open Google Docs Note'
-                    : 'Open Google Drive DOCX Note',
-              ),
+              label: const Text('Open Google Docs Note'),
             ),
-            if (payeMode) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: busy ? null : _syncFromGoogleDoc,
-                icon: const Icon(Icons.sync_outlined),
-                label: const Text('Sync from Google Doc'),
-              ),
-            ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _syncFromGoogleDoc,
+              icon: const Icon(Icons.sync_outlined),
+              label: const Text('Sync from Google Doc'),
+            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: busy ? null : _openGoogleDriveFolder,
@@ -1132,7 +1141,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Notes stay locked unless Firebase sync and Google Drive are connected.',
+              'The app note and Google Doc stay matched for this entry.',
               style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
             ),
           ],

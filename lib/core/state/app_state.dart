@@ -506,36 +506,67 @@ class AppState extends ChangeNotifier {
     required WorkEntry entry,
     EntryDriveSupportNoteMeta? existingMeta,
   }) async {
-    if (!_googleExportAccountService.isConnected(
-      GoogleExportAccountScope.paye,
-    )) {
-      await connectPayeGoogle();
+    return syncEntryNoteFromGoogleDoc(
+      entry: entry,
+      existingMeta: existingMeta,
+      payeMode: true,
+    );
+  }
+
+  Future<EntryDriveSupportNoteMeta> syncEntryNoteFromGoogleDoc({
+    required WorkEntry entry,
+    EntryDriveSupportNoteMeta? existingMeta,
+    required bool payeMode,
+  }) async {
+    final scope = payeMode
+        ? GoogleExportAccountScope.paye
+        : GoogleExportAccountScope.work;
+    if (!_googleExportAccountService.isConnected(scope) &&
+        !(scope == GoogleExportAccountScope.work &&
+            workGoogleServicesConnected)) {
+      await connectGoogleDrive(scope: scope);
     }
 
-    final accessToken = await requireGoogleDriveAccessToken(
-      scope: GoogleExportAccountScope.paye,
-    );
+    final accessToken = await requireGoogleDriveAccessToken(scope: scope);
+    final accountEmail = payeMode
+        ? payeGoogleAccountEmail
+        : workGoogleAccountEmail;
     final savedMeta =
         existingMeta ?? await _googleDriveService.loadSupportNoteMeta(entry.id);
     final sourceMeta =
-        _driveMetaForAccount(savedMeta, payeGoogleAccountEmail) ??
-        await findEntryNoteInCurrentDrive(entry);
+        _driveMetaForAccount(savedMeta, accountEmail) ??
+        await _findEntryNoteForSync(
+          accessToken: accessToken,
+          entry: entry,
+          payeMode: payeMode,
+          googleAccountEmail: accountEmail,
+        );
 
     if (sourceMeta == null) {
-      throw StateError('Save or find the PAYE Google Doc first.');
+      throw StateError('Save or find the Google Doc first.');
     }
 
+    final googleDocMeta =
+        _googleDriveService.isGoogleDocsSupportNote(sourceMeta)
+        ? sourceMeta
+        : await _convertSupportNoteToGoogleDoc(
+            accessToken: accessToken,
+            entry: entry,
+            sourceMeta: sourceMeta,
+            payeMode: payeMode,
+            googleAccountEmail: accountEmail,
+          );
     final noteText = await _googleDriveService.exportGoogleDocText(
       accessToken: accessToken,
-      meta: sourceMeta,
+      meta: googleDocMeta,
     );
-    final initials = sourceMeta.initials.trim().isNotEmpty
-        ? sourceMeta.initials
+    final initials = googleDocMeta.initials.trim().isNotEmpty
+        ? googleDocMeta.initials
         : LocalSupportNoteService.defaultInitialsForEntry(entry);
-    final updatedMeta = sourceMeta.copyWith(
+    final updatedMeta = googleDocMeta.copyWith(
       initials: initials,
       noteText: noteText,
-      googleAccountEmail: payeGoogleAccountEmail,
+      googleAccountEmail: accountEmail,
     );
     final updatedEntry = entry.copyWith(supportNoteBreakdown: noteText);
 
@@ -546,9 +577,128 @@ class AppState extends ChangeNotifier {
       noteText: noteText,
     );
     await _googleDriveService.saveSupportNoteMeta(updatedMeta);
-    updatePayeEntry(updatedEntry);
+    _updateEntryForSupportNoteSync(updatedEntry, payeMode: payeMode);
 
     return updatedMeta;
+  }
+
+  Future<EntryDriveSupportNoteMeta?> _findEntryNoteForSync({
+    required String accessToken,
+    required WorkEntry entry,
+    required bool payeMode,
+    required String? googleAccountEmail,
+  }) async {
+    if (payeMode) {
+      final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
+      if (notesFolderId == null || notesFolderId.isEmpty) return null;
+
+      return _googleDriveService.findPayeNoteInDrive(
+        accessToken: accessToken,
+        notesFolderId: notesFolderId,
+        entry: entry,
+        googleAccountEmail: googleAccountEmail,
+      );
+    }
+
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+    if (clientNotesFolderId == null || clientNotesFolderId.isEmpty) {
+      return null;
+    }
+
+    return _googleDriveService.findSupportNoteInDrive(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entry: entry,
+      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+      googleAccountEmail: googleAccountEmail,
+    );
+  }
+
+  Future<EntryDriveSupportNoteMeta> _convertSupportNoteToGoogleDoc({
+    required String accessToken,
+    required WorkEntry entry,
+    required EntryDriveSupportNoteMeta sourceMeta,
+    required bool payeMode,
+    required String? googleAccountEmail,
+  }) async {
+    final localMeta = await LocalSupportNoteService.loadMeta(entry.id);
+    final initials = localMeta?.initials.trim().isNotEmpty == true
+        ? localMeta!.initials
+        : sourceMeta.initials.trim().isNotEmpty
+        ? sourceMeta.initials
+        : LocalSupportNoteService.defaultInitialsForEntry(entry);
+    final status = localMeta?.status ?? sourceMeta.status;
+    final noteText = localMeta?.noteText.trim().isNotEmpty == true
+        ? localMeta!.noteText
+        : entry.supportNoteBreakdown.trim().isNotEmpty
+        ? entry.supportNoteBreakdown
+        : sourceMeta.noteText;
+    final updatedEntry = entry.copyWith(supportNoteBreakdown: noteText);
+
+    if (payeMode) {
+      final file = await savePayeNoteToDrive(updatedEntry);
+      final discovered = await _findEntryNoteForSync(
+        accessToken: accessToken,
+        entry: updatedEntry,
+        payeMode: true,
+        googleAccountEmail: googleAccountEmail,
+      );
+      final meta =
+          discovered?.copyWith(
+            initials: initials,
+            status: status,
+            fileId: file.id,
+            fileName: file.name,
+            noteText: noteText,
+            mimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            googleAccountEmail: googleAccountEmail,
+          ) ??
+          sourceMeta.copyWith(
+            initials: initials,
+            status: status,
+            fileId: file.id,
+            fileName: file.name,
+            noteText: noteText,
+            mimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            googleAccountEmail: googleAccountEmail,
+          );
+      await _googleDriveService.saveSupportNoteMeta(meta);
+      return meta;
+    }
+
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+    if (clientNotesFolderId == null || clientNotesFolderId.isEmpty) {
+      throw StateError('Google Drive client notes folder is not ready.');
+    }
+
+    return _googleDriveService.saveSupportNote(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entry: updatedEntry,
+      initials: initials,
+      status: status,
+      noteText: noteText,
+      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+      existingMeta: sourceMeta,
+      googleAccountEmail: googleAccountEmail,
+    );
+  }
+
+  void _updateEntryForSupportNoteSync(
+    WorkEntry updatedEntry, {
+    required bool payeMode,
+  }) {
+    final entries = payeMode ? _payeEntries : _entries;
+    final index = entries.indexWhere((entry) => entry.id == updatedEntry.id);
+    if (index == -1) return;
+
+    entries[index] = updatedEntry;
+    _persistAndNotify();
+    if (!payeMode) _scheduleDriveInvoiceSync();
   }
 
   Future<void> deletePayeDriveFile(String fileId) async {
