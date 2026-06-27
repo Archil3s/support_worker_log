@@ -16,6 +16,7 @@ import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/note_text_input_tools.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
@@ -1190,6 +1191,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   final GoogleDriveService driveService = GoogleDriveService();
   final initialsController = TextEditingController();
   final noteController = TextEditingController();
+  final noteFocusNode = FocusNode();
 
   EntrySupportNoteStatus status = EntrySupportNoteStatus.incomplete;
   EntrySupportNoteMeta? meta;
@@ -1219,6 +1221,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     noteController.removeListener(_onAttachedNoteChanged);
     initialsController.dispose();
     noteController.dispose();
+    noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -1992,11 +1995,30 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             ),
           ),
           const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: NoteTextInputTools(
+              controller: noteController,
+              focusNode: noteFocusNode,
+              title: payeMode ? 'PAYE note' : 'Support worker note',
+              onSaveDraft: () => _saveDraftOnly('Draft saved in the app.'),
+              onSaveDrive: _saveToDrive,
+              onSyncDrive: () => _syncFromGoogleDoc(),
+              syncStatusLabel: driveMeta == null
+                  ? 'App note'
+                  : 'Google Doc attached: ${driveMeta!.fileName}',
+              actionsEnabled: !busy && !autoSaving,
+            ),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: noteController,
+            focusNode: noteFocusNode,
             enabled: !busy,
             minLines: 8,
             maxLines: 14,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
             decoration: InputDecoration(
               labelText: payeMode ? 'PAYE note' : 'Support worker note',
               alignLabelWithHint: true,

@@ -989,8 +989,15 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               child: NoteTextInputTools(
                 controller: noteController,
                 focusNode: noteFocusNode,
-                title: 'Support worker note',
+                title: payeMode ? 'PAYE note' : 'Support worker note',
                 onChanged: (_) => _scheduleDraftAutosave(),
+                onSaveDraft: () => _saveDraftOnly('Draft saved in the app.'),
+                onSaveDrive: _saveGoogleDriveNote,
+                onSyncDrive: () => _syncFromGoogleDoc(),
+                syncStatusLabel: driveMeta == null
+                    ? 'App note'
+                    : 'Google Doc attached: ${driveMeta!.fileName}',
+                actionsEnabled: !busy,
               ),
             ),
             const SizedBox(height: 8),

@@ -10,6 +10,11 @@ class NoteTextInputTools extends StatefulWidget {
     required this.focusNode,
     required this.title,
     this.onChanged,
+    this.onSaveDraft,
+    this.onSaveDrive,
+    this.onSyncDrive,
+    this.syncStatusLabel,
+    this.actionsEnabled = true,
     this.showFullscreenButton = true,
   });
 
@@ -17,6 +22,11 @@ class NoteTextInputTools extends StatefulWidget {
   final FocusNode focusNode;
   final String title;
   final ValueChanged<String>? onChanged;
+  final Future<void> Function()? onSaveDraft;
+  final Future<void> Function()? onSaveDrive;
+  final Future<void> Function()? onSyncDrive;
+  final String? syncStatusLabel;
+  final bool actionsEnabled;
   final bool showFullscreenButton;
 
   @override
@@ -103,6 +113,11 @@ class _NoteTextInputToolsState extends State<NoteTextInputTools> {
           controller: widget.controller,
           title: widget.title,
           onChanged: widget.onChanged,
+          onSaveDraft: widget.onSaveDraft,
+          onSaveDrive: widget.onSaveDrive,
+          onSyncDrive: widget.onSyncDrive,
+          syncStatusLabel: widget.syncStatusLabel,
+          actionsEnabled: widget.actionsEnabled,
         ),
       ),
     );
@@ -215,11 +230,21 @@ class _FullScreenNoteEditor extends StatefulWidget {
     required this.controller,
     required this.title,
     this.onChanged,
+    this.onSaveDraft,
+    this.onSaveDrive,
+    this.onSyncDrive,
+    this.syncStatusLabel,
+    this.actionsEnabled = true,
   });
 
   final TextEditingController controller;
   final String title;
   final ValueChanged<String>? onChanged;
+  final Future<void> Function()? onSaveDraft;
+  final Future<void> Function()? onSaveDrive;
+  final Future<void> Function()? onSyncDrive;
+  final String? syncStatusLabel;
+  final bool actionsEnabled;
 
   @override
   State<_FullScreenNoteEditor> createState() => _FullScreenNoteEditorState();
@@ -227,6 +252,7 @@ class _FullScreenNoteEditor extends StatefulWidget {
 
 class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
   late final FocusNode focusNode;
+  bool actionBusy = false;
 
   @override
   void initState() {
@@ -250,6 +276,34 @@ class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
     return RegExp(
       r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?",
     ).allMatches(widget.controller.text).length;
+  }
+
+  int get _characterCount => widget.controller.text.characters.length;
+
+  Future<void> _runAction(Future<void> Function()? action) async {
+    if (action == null || actionBusy || !widget.actionsEnabled) return;
+
+    setState(() => actionBusy = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => actionBusy = false);
+    }
+  }
+
+  void _insertSection(String heading) {
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    final insert = text.trim().isEmpty ? '$heading\n' : '\n\n$heading\n';
+    final offset = selection.isValid ? selection.end : text.length;
+    final next = text.replaceRange(offset, offset, insert);
+    final nextOffset = offset + insert.length;
+    widget.controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: nextOffset),
+    );
+    widget.onChanged?.call(next);
+    focusNode.requestFocus();
   }
 
   @override
@@ -276,12 +330,34 @@ class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '$_wordCount words',
+                    '$_wordCount words | $_characterCount characters',
                     style: const TextStyle(
                       color: Color(0xFF8396C7),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (widget.syncStatusLabel != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.cloud_done_outlined,
+                          size: 18,
+                          color: Color(0xFF31E981),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            widget.syncStatusLabel!,
+                            style: const TextStyle(
+                              color: Color(0xFF9BB0E8),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
@@ -290,9 +366,82 @@ class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
                       focusNode: focusNode,
                       title: widget.title,
                       onChanged: widget.onChanged,
+                      onSaveDraft: widget.onSaveDraft,
+                      onSaveDrive: widget.onSaveDrive,
+                      onSyncDrive: widget.onSyncDrive,
+                      syncStatusLabel: widget.syncStatusLabel,
+                      actionsEnabled: widget.actionsEnabled,
                       showFullscreenButton: false,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _SectionButton(
+                        label: 'Main topic',
+                        onPressed: () => _insertSection('Main topic(s)'),
+                      ),
+                      _SectionButton(
+                        label: 'Outcome',
+                        onPressed: () => _insertSection('Outcome(s)'),
+                      ),
+                      _SectionButton(
+                        label: 'Next action',
+                        onPressed: () => _insertSection('Next action(s)'),
+                      ),
+                      _SectionButton(
+                        label: 'Referral',
+                        onPressed: () => _insertSection('Referrals'),
+                      ),
+                      _SectionButton(
+                        label: 'Safety',
+                        onPressed: () => _insertSection(
+                          'Safety concerns for sexual harm survivors and mental health',
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (widget.onSaveDraft != null ||
+                      widget.onSaveDrive != null ||
+                      widget.onSyncDrive != null) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (widget.onSaveDraft != null)
+                          FilledButton.icon(
+                            onPressed: actionBusy || !widget.actionsEnabled
+                                ? null
+                                : () => _runAction(widget.onSaveDraft),
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Save in app'),
+                          ),
+                        if (widget.onSaveDrive != null)
+                          FilledButton.tonalIcon(
+                            onPressed: actionBusy || !widget.actionsEnabled
+                                ? null
+                                : () => _runAction(widget.onSaveDrive),
+                            icon: const Icon(Icons.cloud_upload_outlined),
+                            label: const Text('Save Google Doc'),
+                          ),
+                        if (widget.onSyncDrive != null)
+                          OutlinedButton.icon(
+                            onPressed: actionBusy || !widget.actionsEnabled
+                                ? null
+                                : () => _runAction(widget.onSyncDrive),
+                            icon: const Icon(Icons.sync_outlined),
+                            label: const Text('Pull Google Doc'),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (actionBusy) ...[
+                    const SizedBox(height: 8),
+                    const LinearProgressIndicator(minHeight: 3),
+                  ],
                 ],
               ),
             ),
@@ -347,6 +496,22 @@ class _ToolButton extends StatelessWidget {
       selectedIcon: Icon(icon),
       onPressed: onPressed,
       icon: Icon(icon),
+    );
+  }
+}
+
+class _SectionButton extends StatelessWidget {
+  const _SectionButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: const Icon(Icons.add, size: 18),
+      label: Text(label),
+      onPressed: onPressed,
     );
   }
 }
