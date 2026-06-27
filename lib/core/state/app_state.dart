@@ -19,6 +19,7 @@ import '../services/google_export_account_service.dart';
 import '../services/google_drive_service.dart';
 import '../services/local_support_note_service.dart';
 import '../services/storage_service.dart';
+import '../utils/pay_period_utils.dart';
 import '../utils/sample_invoice_data.dart';
 
 class RemovedEntry {
@@ -421,6 +422,92 @@ class AppState extends ChangeNotifier {
       entry: entry,
       temporary: true,
     );
+  }
+
+  Future<GoogleDriveFile> createInvoicePeriodTotalDriveFolder({
+    required int invoiceNumber,
+    required PayPeriodRange range,
+    required List<WorkEntry> entries,
+  }) async {
+    if (entries.isEmpty) {
+      throw StateError('No entries in this invoice period.');
+    }
+
+    if (!workGoogleServicesConnected) {
+      await connectWorkGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken();
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
+
+    if (invoicesFolderId == null || invoicesFolderId.isEmpty) {
+      throw StateError('Google Drive invoices folder is not ready.');
+    }
+
+    final folder = await _driveInvoiceSyncService
+        .createInvoicePeriodTotalFolder(
+          accessToken: accessToken,
+          invoicesFolderId: invoicesFolderId,
+          invoiceNumber: invoiceNumber,
+          range: range,
+          entries: entries,
+          settings: syncSettings,
+        );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+    return folder;
+  }
+
+  Future<EntryDriveSupportNoteMeta> syncPayeNoteFromGoogleDoc({
+    required WorkEntry entry,
+    EntryDriveSupportNoteMeta? existingMeta,
+  }) async {
+    if (!_googleExportAccountService.isConnected(
+      GoogleExportAccountScope.paye,
+    )) {
+      await connectPayeGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(
+      scope: GoogleExportAccountScope.paye,
+    );
+    final savedMeta =
+        existingMeta ?? await _googleDriveService.loadSupportNoteMeta(entry.id);
+    final sourceMeta =
+        _driveMetaForAccount(savedMeta, payeGoogleAccountEmail) ??
+        await findEntryNoteInCurrentDrive(entry);
+
+    if (sourceMeta == null) {
+      throw StateError('Save or find the PAYE Google Doc first.');
+    }
+
+    final noteText = await _googleDriveService.exportGoogleDocText(
+      accessToken: accessToken,
+      meta: sourceMeta,
+    );
+    final initials = sourceMeta.initials.trim().isNotEmpty
+        ? sourceMeta.initials
+        : LocalSupportNoteService.defaultInitialsForEntry(entry);
+    final updatedMeta = sourceMeta.copyWith(
+      initials: initials,
+      noteText: noteText,
+      googleAccountEmail: payeGoogleAccountEmail,
+    );
+    final updatedEntry = entry.copyWith(supportNoteBreakdown: noteText);
+
+    await LocalSupportNoteService.saveDraftMeta(
+      entry: updatedEntry,
+      initials: initials,
+      status: updatedMeta.status,
+      noteText: noteText,
+    );
+    await _googleDriveService.saveSupportNoteMeta(updatedMeta);
+    updatePayeEntry(updatedEntry);
+
+    return updatedMeta;
   }
 
   Future<void> deletePayeDriveFile(String fileId) async {
@@ -1284,32 +1371,10 @@ class AppState extends ChangeNotifier {
     if (!_cloudStorageService.isSignedIn || _entries.isEmpty) return;
 
     final accessToken = await requireGoogleDriveAccessToken();
-    var syncSettings = _settings;
-    var rootFolderId = syncSettings.googleDriveRootFolderId;
-    var clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
-    var invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
-
-    if (rootFolderId == null ||
-        rootFolderId.isEmpty ||
-        clientNotesFolderId == null ||
-        clientNotesFolderId.isEmpty ||
-        invoicesFolderId == null ||
-        invoicesFolderId.isEmpty) {
-      final folderSetup = await _googleDriveService.createFolderSetup(
-        accessToken: accessToken,
-      );
-
-      _settings = folderSetup.applyTo(_settings);
-      syncSettings = _settings;
-      rootFolderId = syncSettings.googleDriveRootFolderId;
-      clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
-      invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
-
-      final data = _currentStoredData();
-      await _storageService.save(data);
-      await _cloudStorageService.save(data);
-      notifyListeners();
-    }
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final rootFolderId = syncSettings.googleDriveRootFolderId;
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+    final invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
 
     if (rootFolderId == null ||
         rootFolderId.isEmpty ||
@@ -1332,6 +1397,51 @@ class AppState extends ChangeNotifier {
     _cloudSyncReady = true;
     _cloudSyncError = null;
     notifyListeners();
+  }
+
+  Future<AppSettings> _ensureWorkDriveFolderSetup(String accessToken) async {
+    var syncSettings = _settings;
+    var rootFolderId = syncSettings.googleDriveRootFolderId;
+    var clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+    var invoicesFolderId = syncSettings.googleDriveInvoicesFolderId;
+
+    if (rootFolderId != null &&
+        rootFolderId.isNotEmpty &&
+        clientNotesFolderId != null &&
+        clientNotesFolderId.isNotEmpty &&
+        invoicesFolderId != null &&
+        invoicesFolderId.isNotEmpty) {
+      return syncSettings;
+    }
+
+    final folderSetup = await _googleDriveService.createFolderSetup(
+      accessToken: accessToken,
+    );
+
+    _settings = folderSetup.applyTo(_settings);
+    syncSettings = _settings;
+
+    final data = _currentStoredData();
+    await _storageService.save(data);
+    await _cloudStorageService.save(data);
+    notifyListeners();
+
+    return syncSettings;
+  }
+
+  EntryDriveSupportNoteMeta? _driveMetaForAccount(
+    EntryDriveSupportNoteMeta? meta,
+    String? accountEmail,
+  ) {
+    if (meta == null) return null;
+
+    final selected = accountEmail?.trim().toLowerCase();
+    final saved = meta.googleAccountEmail?.trim().toLowerCase();
+
+    if (selected == null || selected.isEmpty) return meta;
+    if (saved == null || saved.isEmpty) return null;
+
+    return saved == selected ? meta : null;
   }
 
   Future<void> _syncDrivePersonalLogsSafely() async {

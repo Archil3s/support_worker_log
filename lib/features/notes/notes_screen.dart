@@ -1659,6 +1659,55 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     await _launchDriveLink(Uri.parse(link));
   }
 
+  Future<void> _syncFromGoogleDoc() async {
+    final appState = context.read<AppState>();
+
+    if (!appState.isPayeMode) {
+      setState(() {
+        message = 'Google Doc sync is only available for PAYE notes.';
+      });
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      message = 'Syncing from Google Doc...';
+    });
+
+    try {
+      final updated = await appState.syncPayeNoteFromGoogleDoc(
+        entry: widget.entry,
+        existingMeta: driveMeta,
+      );
+      final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+
+      if (!mounted) return;
+
+      suppressAutoSave = true;
+      setState(() {
+        driveMeta = updated;
+        meta = loaded;
+        initialsController.text = updated.initials;
+        noteController.text = updated.noteText;
+        status = updated.status;
+        message = 'Synced Google Doc edits into the app.';
+      });
+      suppressAutoSave = false;
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not sync from Google Doc: ${_friendlyError(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   String _friendlyError(Object error) {
     final text = error.toString().trim();
     if (text.startsWith('Bad state: ')) {
@@ -1855,6 +1904,14 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               payeMode ? 'Open Google Docs Note' : 'Open Google Drive File',
             ),
           ),
+          if (payeMode) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : _syncFromGoogleDoc,
+              icon: const Icon(Icons.sync_outlined),
+              label: const Text('Sync from Google Doc'),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
             payeMode

@@ -228,6 +228,32 @@ class GoogleDriveApiPlatform {
     );
   }
 
+  Future<String> exportGoogleDocText({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/export_google_doc_text',
+        {'accessToken': accessToken, 'fileId': fileId},
+        failureMessage: 'Google Docs text export failed',
+      );
+      return (decoded['text'] as String? ?? '').trim();
+    }
+
+    final response = await _request(
+      _driveExportUri(fileId).toString(),
+      method: 'GET',
+      requestHeaders: {'Authorization': 'Bearer $accessToken'},
+      failureMessage: 'Google Docs text export failed',
+    );
+
+    return _decodeTextResponse(
+      response,
+      failureMessage: 'Google Docs text export failed',
+    ).trim();
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -311,6 +337,12 @@ class GoogleDriveApiPlatform {
   Uri _driveFileUri(String fileId) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveExportUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
+      'mimeType': 'text/plain',
     });
   }
 
@@ -410,6 +442,22 @@ class GoogleDriveApiPlatform {
     }
 
     return decoded;
+  }
+
+  String _decodeTextResponse(
+    html.HttpRequest response, {
+    required String failureMessage,
+  }) {
+    final raw = response.responseText ?? '';
+    final status = response.status ?? 0;
+
+    if (status < 200 || status >= 300) {
+      throw StateError(
+        _googleApiError(raw) ?? '$failureMessage with HTTP $status.',
+      );
+    }
+
+    return raw;
   }
 
   GoogleDriveFile? _fileFromJson(Map<String, dynamic> json) {
