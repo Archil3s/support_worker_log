@@ -185,7 +185,7 @@ class _NotesListTab extends StatelessWidget {
               Text(
                 payeMode
                     ? 'Create, test, save, open, and remove PAYE Google Docs notes from saved PAYE entries.'
-                    : 'Create local support-note files attached to saved entries. Files are stored only in the folder you choose.',
+                    : 'Create and sync Google Docs notes attached to saved entries.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
@@ -811,14 +811,26 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
   Future<void> _load() async {
     final appState = context.read<AppState>();
-    final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+    var loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
     final savedDrive = await driveService.loadSupportNoteMeta(widget.entry.id);
-    final loadedDrive =
+    var loadedDrive =
         _driveMetaForAccount(
           savedDrive,
           _currentGoogleAccountEmail(appState),
         ) ??
         await appState.findEntryNoteInCurrentDrive(widget.entry);
+    if (loadedDrive != null) {
+      try {
+        loadedDrive = await appState.syncEntryNoteFromGoogleDoc(
+          entry: widget.entry,
+          existingMeta: loadedDrive,
+          payeMode: appState.isPayeMode,
+        );
+        loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
+      } catch (_) {
+        // The visible sync button reports connection or permission errors.
+      }
+    }
 
     if (!mounted) return;
 
@@ -865,9 +877,7 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
     if (link == null || link.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Create the Google Drive note file first.'),
-        ),
+        const SnackBar(content: Text('Create the Google Doc first.')),
       );
       return;
     }
@@ -1650,8 +1660,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         link == null ||
         link.isEmpty) {
       setState(() {
-        message =
-            'Save the Google Drive note file under the selected account first.';
+        message = 'Save the Google Doc under the selected account first.';
       });
       return;
     }
@@ -1662,22 +1671,16 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   Future<void> _syncFromGoogleDoc() async {
     final appState = context.read<AppState>();
 
-    if (!appState.isPayeMode) {
-      setState(() {
-        message = 'Google Doc sync is only available for PAYE notes.';
-      });
-      return;
-    }
-
     setState(() {
       busy = true;
       message = 'Syncing from Google Doc...';
     });
 
     try {
-      final updated = await appState.syncPayeNoteFromGoogleDoc(
+      final updated = await appState.syncEntryNoteFromGoogleDoc(
         entry: widget.entry,
         existingMeta: driveMeta,
+        payeMode: appState.isPayeMode,
       );
       final loaded = await LocalSupportNoteService.loadMeta(widget.entry.id);
 
@@ -1817,9 +1820,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: SelectableText(
-                  payeMode
-                      ? 'Google Docs note:\n${driveMeta!.fileName}'
-                      : 'Attached Google Drive file:\n${driveMeta!.fileName}',
+                  'Google Docs note:\n${driveMeta!.fileName}',
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -1858,7 +1859,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           if (payeMode) ...[
             const SizedBox(height: 6),
             const Text(
-              'This always saves the PAYE note in the app. Local DOCX and Google Drive are optional copies.',
+              'This saves the PAYE note in the app. Use Google Docs to keep Drive matched.',
               style: TextStyle(color: Color(0xFF8396C7), fontSize: 12),
             ),
           ],
@@ -1884,10 +1885,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
               driveMeta == null
                   ? payeMode
                         ? 'Save Google Docs Note'
-                        : 'Create Google Drive Note File'
+                        : 'Create Google Docs Note'
                   : payeMode
                   ? 'Update Google Docs Note'
-                  : 'Create Updated Google Drive Note File',
+                  : 'Update Google Docs Note',
             ),
           ),
           const SizedBox(height: 8),
@@ -1900,23 +1901,19 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           OutlinedButton.icon(
             onPressed: busy ? null : _openDriveFile,
             icon: const Icon(Icons.open_in_new),
-            label: Text(
-              payeMode ? 'Open Google Docs Note' : 'Open Google Drive File',
-            ),
+            label: const Text('Open Google Docs Note'),
           ),
-          if (payeMode) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: busy ? null : _syncFromGoogleDoc,
-              icon: const Icon(Icons.sync_outlined),
-              label: const Text('Sync from Google Doc'),
-            ),
-          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : _syncFromGoogleDoc,
+            icon: const Icon(Icons.sync_outlined),
+            label: const Text('Sync from Google Doc'),
+          ),
           const SizedBox(height: 12),
           Text(
             payeMode
                 ? 'PAYE Google Docs notes save to the PAYE notes folder for the selected PAYE Google account.'
-                : 'Local files save to the folder you choose. Google Drive files save to the Client Notes folder created in More > Google Drive.',
+                : 'The app note and Google Doc stay matched for this entry.',
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
         ],

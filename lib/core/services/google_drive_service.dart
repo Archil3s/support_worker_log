@@ -468,6 +468,10 @@ class GoogleDriveService {
     return _api.exportGoogleDocText(accessToken: accessToken, fileId: fileId);
   }
 
+  bool isGoogleDocsSupportNote(EntryDriveSupportNoteMeta? meta) {
+    return meta?.mimeType == _googleDocsMimeType;
+  }
+
   Future<EntryDriveSupportNoteMeta?> findSupportNoteInDrive({
     required String accessToken,
     required String clientNotesFolderId,
@@ -493,11 +497,16 @@ class GoogleDriveService {
             .where(
               (file) =>
                   file.name.startsWith(datePrefix) &&
-                  file.name.endsWith('.docx') &&
-                  file.mimeType == _docxMimeType,
+                  (file.mimeType == _googleDocsMimeType ||
+                      file.mimeType == _docxMimeType),
             )
             .toList()
-          ..sort((a, b) => b.name.compareTo(a.name));
+          ..sort((a, b) {
+            if (a.mimeType != b.mimeType) {
+              return a.mimeType == _googleDocsMimeType ? -1 : 1;
+            }
+            return b.name.compareTo(a.name);
+          });
 
     if (matches.isEmpty) return null;
 
@@ -942,17 +951,17 @@ class GoogleDriveService {
             existingGoogleAccountEmail.isNotEmpty &&
             existingGoogleAccountEmail.toLowerCase() ==
                 currentGoogleAccountEmail.toLowerCase());
-    final canUpdateExistingDocx =
+    final canUpdateExistingGoogleDoc =
         sameGoogleAccount &&
-        existingMeta?.mimeType == _docxMimeType &&
+        existingMeta?.mimeType == _googleDocsMimeType &&
         existingFileId != null &&
         existingFileId.isNotEmpty;
-    final shouldMoveExistingDocx =
-        canUpdateExistingDocx &&
+    final shouldMoveExistingGoogleDoc =
+        canUpdateExistingGoogleDoc &&
         existingParentFolderId != null &&
         existingParentFolderId.isNotEmpty &&
         existingParentFolderId != periodFolder.id;
-    if (shouldMoveExistingDocx) {
+    if (shouldMoveExistingGoogleDoc) {
       await _api.moveFile(
         accessToken: accessToken,
         fileId: existingFileId,
@@ -961,20 +970,22 @@ class GoogleDriveService {
       );
     }
 
-    final file = canUpdateExistingDocx
+    final file = canUpdateExistingGoogleDoc
         ? await _api.updateFile(
             accessToken: accessToken,
             fileId: existingFileId,
             name: driveFileName,
-            mimeType: _docxMimeType,
+            mimeType: _googleDocsMimeType,
             bytes: bytes,
+            contentMimeType: _docxMimeType,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,
             parentId: periodFolder.id,
             name: driveFileName,
-            mimeType: _docxMimeType,
+            mimeType: _googleDocsMimeType,
             bytes: bytes,
+            contentMimeType: _docxMimeType,
           );
 
     final meta = EntryDriveSupportNoteMeta(

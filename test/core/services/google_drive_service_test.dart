@@ -50,7 +50,7 @@ void main() {
   });
 
   test(
-    'saveSupportNote uploads template docx content as a Drive docx file',
+    'saveSupportNote uploads template docx content as a Google Doc',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
       final service = GoogleDriveService(api: api);
@@ -87,16 +87,16 @@ void main() {
       final documentText = _docxText(noteUpload.bytes);
 
       expect(meta.fileName, endsWith('.docx'));
-      expect(meta.mimeType, _docxMimeType);
-      expect(meta.openLink, 'https://drive.google.com/file/d/new-doc/view');
+      expect(meta.mimeType, _googleDocsMimeType);
+      expect(meta.openLink, 'https://docs.google.com/document/d/new-doc/edit');
       expect(
         meta.folderOpenLink,
         startsWith('https://drive.google.com/drive/folders/'),
       );
       expect(meta.folderOpenLink, contains('client-notes%2FAB%2FInvoice%2010'));
       expect(meta.folderOpenLink, contains('Home%20Visits'));
-      expect(noteUpload.mimeType, _docxMimeType);
-      expect(noteUpload.contentMimeType, isNull);
+      expect(noteUpload.mimeType, _googleDocsMimeType);
+      expect(noteUpload.contentMimeType, _docxMimeType);
       expect(noteUpload.parentId, contains('/Home Visits'));
       expect(documentText, contains('Name of client: AB'));
       expect(documentText, contains('Interaction: Home Visit'));
@@ -134,7 +134,7 @@ void main() {
   );
 
   test(
-    'findSupportNoteInDrive returns existing docx from current folder',
+    'findSupportNoteInDrive prefers Google Docs from current folder',
     () async {
       final api = _FakeGoogleDriveApi(
         childrenByParent: {
@@ -160,6 +160,12 @@ void main() {
             ),
           ],
           'type-folder': [
+            const GoogleDriveFile(
+              id: 'google-doc-note',
+              name: '2026-06-02_AB_finished.docx',
+              mimeType: _googleDocsMimeType,
+              webViewLink: 'https://docs.example/note',
+            ),
             const GoogleDriveFile(
               id: 'drive-note',
               name: '2026-06-02_AB_finished.docx',
@@ -187,11 +193,11 @@ void main() {
       );
 
       expect(meta, isNotNull);
-      expect(meta!.fileId, 'drive-note');
+      expect(meta!.fileId, 'google-doc-note');
       expect(meta.fileName, '2026-06-02_AB_finished.docx');
       expect(meta.status, EntrySupportNoteStatus.finished);
       expect(meta.parentFolderId, 'type-folder');
-      expect(meta.openLink, 'https://drive.example/note');
+      expect(meta.openLink, 'https://docs.example/note');
       expect(meta.googleAccountEmail, 'work@example.com');
     },
   );
@@ -368,46 +374,46 @@ void main() {
     expect(noteUpload.parentId, contains('/Phone Calls'));
   });
 
-  test(
-    'saveSupportNote replaces legacy converted Docs metadata with docx',
-    () async {
-      final api = _FakeGoogleDriveApi(children: const []);
-      final service = GoogleDriveService(api: api);
+  test('saveSupportNote updates an existing Google Doc in place', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
 
-      final meta = await service.saveSupportNote(
-        accessToken: 'token',
-        clientNotesFolderId: 'client-notes',
-        entry: WorkEntry(
-          id: 'entry-1',
-          client: 'AB',
-          type: EntryType.homeVisit,
-          date: DateTime(2026, 6, 2),
-          startTime: const TimeOfDay(hour: 9, minute: 0),
-          minutes: 60,
-          notes: const [],
-        ),
+    final meta = await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.homeVisit,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 60,
+        notes: const [],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.inProgress,
+      noteText: 'Main topic(s)\nTest note',
+      existingMeta: const EntryDriveSupportNoteMeta(
+        entryId: 'entry-1',
         initials: 'AB',
         status: EntrySupportNoteStatus.inProgress,
-        noteText: 'Main topic(s)\nTest note',
-        existingMeta: const EntryDriveSupportNoteMeta(
-          entryId: 'entry-1',
-          initials: 'AB',
-          status: EntrySupportNoteStatus.inProgress,
-          fileId: 'legacy-google-doc',
-          fileName: '2026-06-02_AB_in-progress.docx',
-          noteText: 'Old note',
-          mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
-        ),
-      );
+        fileId: 'legacy-google-doc',
+        fileName: '2026-06-02_AB_in-progress.docx',
+        noteText: 'Old note',
+        mimeType: EntryDriveSupportNoteMeta.googleDocsMimeType,
+      ),
+    );
 
-      expect(api.updatedFileIds, isNot(contains('legacy-google-doc')));
-      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
-      expect(meta.mimeType, _docxMimeType);
-      expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
-    },
-  );
+    expect(api.updatedFileIds, contains('legacy-google-doc'));
+    expect(
+      api.uploadedNames,
+      isNot(contains('2026-06-02_AB_in-progress.docx')),
+    );
+    expect(meta.mimeType, _googleDocsMimeType);
+    expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
+  });
 
-  test('saveSupportNote moves an existing docx into the type folder', () async {
+  test('saveSupportNote converts an existing docx into a Google Doc', () async {
     final api = _FakeGoogleDriveApi(children: const []);
     final service = GoogleDriveService(api: api);
 
@@ -438,13 +444,10 @@ void main() {
       ),
     );
 
-    expect(api.movedFiles.single.fileId, 'existing-docx');
-    expect(api.movedFiles.single.toParentId, contains('/Phone Calls'));
-    expect(api.updatedFileIds, contains('existing-docx'));
-    expect(
-      api.uploadedNames,
-      isNot(contains('2026-06-02_AB_in-progress.docx')),
-    );
+    expect(api.movedFiles, isEmpty);
+    expect(api.updatedFileIds, isNot(contains('existing-docx')));
+    expect(api.uploadedNames, contains('2026-06-02_AB_in-progress.docx'));
+    expect(meta.mimeType, _googleDocsMimeType);
     expect(meta.parentFolderId, contains('/Phone Calls'));
   });
 
