@@ -6,6 +6,7 @@ import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
+import '../../shared/widgets/web_spacing.dart';
 import '../admin_review/admin_review_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../charts/charts_screen.dart';
@@ -260,7 +261,8 @@ class _MainShellState extends State<MainShell> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
-        final maxContentWidth = wide ? 980.0 : 430.0;
+        final tightWeb = useTightWebSpacing(context);
+        final maxContentWidth = wide ? (tightWeb ? 1180.0 : 980.0) : 430.0;
         final personalMode = appMode == AppMode.personal;
         final massageMode = appMode == AppMode.massage;
         final moodMode = appMode == AppMode.mood;
@@ -284,10 +286,10 @@ class _MainShellState extends State<MainShell> {
           appBar: AppBar(
             title: Text(_title(appMode)),
             centerTitle: false,
-            toolbarHeight: wide ? 64 : 56,
+            toolbarHeight: tightWeb ? 54 : (wide ? 64 : 56),
             actions: [
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: EdgeInsets.only(right: tightWeb ? 6 : 8),
                 child: PopupMenuButton<AppMode>(
                   tooltip: 'App mode',
                   initialValue: appMode,
@@ -357,23 +359,23 @@ class _MainShellState extends State<MainShell> {
                     ),
                   ],
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: tightWeb ? 10 : 12,
+                      vertical: tightWeb ? 6 : 8,
                     ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF151B29),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(tightWeb ? 12 : 16),
                       border: Border.all(color: const Color(0xFF34405F)),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           _modeIcon(appMode),
-                          size: 20,
+                          size: tightWeb ? 18 : 20,
                           color: const Color(0xFF4F8DF7),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: tightWeb ? 6 : 8),
                         Text(
                           appMode.label,
                           style: const TextStyle(
@@ -487,21 +489,23 @@ class _SideRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tight = useTightWebSpacing(context);
+
     return Container(
-      width: 94,
-      margin: const EdgeInsets.fromLTRB(12, 8, 6, 12),
+      width: tight ? 82 : 94,
+      margin: EdgeInsets.fromLTRB(tight ? 8 : 12, tight ? 6 : 8, 6, 8),
       decoration: BoxDecoration(
         color: const Color(0xFF151B29),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(tight ? 14 : 18),
         border: Border.all(color: const Color(0xFF34405F)),
       ),
       child: NavigationRail(
         backgroundColor: Colors.transparent,
         selectedIndex: selectedIndex,
         onDestinationSelected: onTap,
-        minWidth: 94,
+        minWidth: tight ? 82 : 94,
         labelType: NavigationRailLabelType.all,
-        groupAlignment: -0.88,
+        groupAlignment: tight ? -0.94 : -0.88,
         selectedIconTheme: const IconThemeData(color: Color(0xFF4F8DF7)),
         unselectedIconTheme: const IconThemeData(color: Color(0xFF8396C7)),
         selectedLabelTextStyle: const TextStyle(

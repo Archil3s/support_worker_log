@@ -7,6 +7,7 @@ import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/web_spacing.dart';
 import 'notes_screen.dart';
 
 String _dateTimeText(BuildContext context, DateTime value) {
@@ -98,7 +99,7 @@ class _NextActionsTab extends StatelessWidget {
     final completedActions = _completedActions;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: webPagePadding(context),
       children: [
         SectionCard(
           title: 'Next Actions',
@@ -352,7 +353,7 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: webPagePadding(context),
       children: [
         SectionCard(
           title: 'Add Mixed Action',

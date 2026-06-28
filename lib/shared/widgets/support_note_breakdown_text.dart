@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'web_spacing.dart';
+
 const _supportNoteHeadings = {
   'attendance',
   'what happened',
@@ -28,7 +30,10 @@ class SupportNoteBreakdownText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseStyle =
-        style ?? DefaultTextStyle.of(context).style.copyWith(height: 1.35);
+        style ??
+        DefaultTextStyle.of(
+          context,
+        ).style.copyWith(height: useTightWebSpacing(context) ? 1.2 : 1.35);
 
     return SelectableText.rich(
       TextSpan(style: baseStyle, children: _spans(baseStyle)),

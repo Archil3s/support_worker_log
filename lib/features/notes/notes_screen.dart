@@ -23,6 +23,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
 import '../../shared/widgets/support_note_breakdown_text.dart';
+import '../../shared/widgets/web_spacing.dart';
 
 String _noteTitleForEntry({
   required WorkEntry entry,
@@ -221,7 +222,7 @@ class _NotesListTab extends StatelessWidget {
     final payeMode = context.watch<AppState>().isPayeMode;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: webPagePadding(context),
       children: [
         _NotesOverview(entries: entries),
         const SizedBox(height: 12),
@@ -400,7 +401,7 @@ class _NextActionsTab extends StatelessWidget {
     final completedActions = _completedActions;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: webPagePadding(context),
       children: [
         SectionCard(
           title: 'Next Actions',
@@ -654,7 +655,7 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: webPagePadding(context),
       children: [
         SectionCard(
           title: 'Add Mixed Action',

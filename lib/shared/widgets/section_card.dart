@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'web_spacing.dart';
+
 class SectionCard extends StatelessWidget {
   const SectionCard({super.key, required this.title, required this.child});
 
@@ -8,22 +10,24 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tight = useTightWebSpacing(context);
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFF151B29),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(tight ? 14 : 22),
         border: Border.all(color: const Color(0xFF34405F)),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 22,
-            offset: Offset(0, 10),
+            color: const Color(0x66000000),
+            blurRadius: tight ? 12 : 22,
+            offset: Offset(0, tight ? 4 : 10),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(tight ? 12 : 18),
         child: DefaultTextStyle.merge(
           style: const TextStyle(color: Colors.white),
           child: IconTheme.merge(
@@ -35,13 +39,13 @@ class SectionCard extends StatelessWidget {
                   children: [
                     Container(
                       width: 5,
-                      height: 24,
+                      height: tight ? 20 : 24,
                       decoration: BoxDecoration(
                         color: const Color(0xFF4F8DF7),
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: tight ? 8 : 10),
                     Expanded(
                       child: Text(
                         title,
@@ -55,7 +59,7 @@ class SectionCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: tight ? 10 : 14),
                 child,
               ],
             ),
