@@ -36,7 +36,7 @@ class SupportNoteBreakdownText extends StatelessWidget {
   }
 
   List<TextSpan> _spans(TextStyle baseStyle) {
-    final lines = text.trim().split(RegExp(r'\r?\n'));
+    final lines = _normalizedLines();
     final spans = <TextSpan>[];
 
     for (var index = 0; index < lines.length; index += 1) {
@@ -53,6 +53,21 @@ class SupportNoteBreakdownText extends StatelessWidget {
     }
 
     return spans;
+  }
+
+  List<String> _normalizedLines() {
+    final rawLines = text.trim().split(RegExp(r'\r?\n'));
+    final lines = <String>[];
+
+    for (final line in rawLines) {
+      if (line.trim().isEmpty && lines.lastOrNull?.trim().isEmpty == true) {
+        continue;
+      }
+
+      lines.add(line);
+    }
+
+    return lines;
   }
 
   String _normalize(String value) {

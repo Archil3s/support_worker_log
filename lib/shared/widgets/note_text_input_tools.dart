@@ -292,12 +292,20 @@ class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
   }
 
   void _insertSection(String heading) {
-    final text = widget.controller.text;
-    final selection = widget.controller.selection;
-    final insert = text.trim().isEmpty ? '$heading\n' : '\n\n$heading\n';
-    final offset = selection.isValid ? selection.end : text.length;
-    final next = text.replaceRange(offset, offset, insert);
-    final nextOffset = offset + insert.length;
+    final value = widget.controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final before = text
+        .substring(0, start)
+        .replaceFirst(RegExp(r'[ \t]*(?:\r?\n[ \t]*)*$'), '');
+    final after = text
+        .substring(end)
+        .replaceFirst(RegExp(r'^[ \t]*(?:\r?\n[ \t]*)*'), '');
+    final insert = before.trim().isEmpty ? '$heading\n' : '\n\n$heading\n';
+    final next = '$before$insert$after';
+    final nextOffset = before.length + insert.length;
     widget.controller.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: nextOffset),
