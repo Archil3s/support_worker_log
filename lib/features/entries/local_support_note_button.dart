@@ -581,6 +581,130 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     }
   }
 
+  Future<void> _writeInGoogleDoc() async {
+    setState(() {
+      busy = true;
+      message = driveMeta == null
+          ? 'Creating live Google Doc...'
+          : 'Opening live Google Doc...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      final accountEmail = _currentGoogleAccountEmail(appState);
+      final accountMeta = _driveMetaForAccount(driveMeta, accountEmail);
+      final accountLink = accountMeta?.openLink;
+
+      if (accountLink != null && accountLink.isNotEmpty) {
+        await _launchDriveLink(Uri.parse(accountLink));
+
+        if (!mounted) return;
+
+        setState(() {
+          message = 'Opened the live Google Doc.';
+        });
+        return;
+      }
+
+      late EntryDriveSupportNoteMeta updated;
+
+      if (appState.isPayeMode) {
+        try {
+          await appState.requireGoogleDriveAccessToken(
+            scope: GoogleExportAccountScope.paye,
+          );
+        } catch (_) {
+          await appState.connectPayeGoogle();
+        }
+
+        final updatedEntry = _payeEntryWithCurrentNote();
+        final existing = await appState.findEntryNoteInCurrentDrive(
+          updatedEntry,
+        );
+
+        if (existing != null &&
+            driveService.isGoogleDocsSupportNote(existing)) {
+          updated = existing.copyWith(
+            initials: _personNameForNote(
+              widget.entry,
+              fallback: initialsController.text,
+            ),
+            status: status,
+            noteText: noteController.text,
+            googleAccountEmail: appState.payeGoogleAccountEmail,
+          );
+        } else {
+          appState.updatePayeEntry(updatedEntry);
+          updated = await _saveDriveNoteFromCurrentState(appState);
+        }
+      } else {
+        final token = await appState.connectGoogleDrive();
+        final folderId = await _clientNotesFolderId(appState, token);
+        final existing = await driveService.findSupportNoteInDrive(
+          accessToken: token,
+          clientNotesFolderId: folderId,
+          entry: widget.entry,
+          payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+          googleAccountEmail: appState.workGoogleAccountEmail,
+        );
+
+        if (existing != null &&
+            driveService.isGoogleDocsSupportNote(existing)) {
+          updated = existing.copyWith(
+            initials: initialsController.text.trim().toUpperCase(),
+            status: status,
+            noteText: noteController.text,
+            googleAccountEmail: appState.workGoogleAccountEmail,
+          );
+        } else {
+          updated = await driveService.saveSupportNote(
+            accessToken: token,
+            clientNotesFolderId: folderId,
+            entry: widget.entry,
+            initials: initialsController.text,
+            status: status,
+            noteText: noteController.text,
+            payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+            existingMeta: existing,
+            googleAccountEmail: appState.workGoogleAccountEmail,
+          );
+        }
+      }
+
+      await driveService.saveSupportNoteMeta(updated);
+      appState.upsertDriveSupportNoteMeta(updated);
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updated;
+        message = 'Opened the live Google Doc.';
+      });
+
+      final link = updated.openLink;
+      if (link == null || link.isEmpty) {
+        setState(() {
+          message = 'Google Doc was linked, but no open link was returned.';
+        });
+        return;
+      }
+
+      await _launchDriveLink(Uri.parse(link));
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not open live Google Doc: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _testGoogleDocsSave() async {
     setState(() {
       busy = true;
@@ -1105,6 +1229,16 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
               ),
               const SizedBox(height: 8),
             ],
+            OutlinedButton.icon(
+              onPressed: busy ? null : _writeInGoogleDoc,
+              icon: const Icon(Icons.edit_document),
+              label: Text(
+                driveMeta == null
+                    ? 'Write in Google Docs'
+                    : 'Open Live Google Doc',
+              ),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: busy ? null : _saveGoogleDriveNote,
               icon: const Icon(Icons.cloud_upload_outlined),

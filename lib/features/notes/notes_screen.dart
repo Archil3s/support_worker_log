@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/general_action.dart';
+import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/google_drive_file.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
@@ -1596,6 +1597,154 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     }
   }
 
+  Future<void> _writeInGoogleDoc() async {
+    setState(() {
+      busy = true;
+      message = driveMeta == null
+          ? 'Creating live Google Doc...'
+          : 'Opening live Google Doc...';
+    });
+
+    try {
+      final appState = context.read<AppState>();
+      final accountEmail = _currentGoogleAccountEmail(appState);
+      final accountMeta = _driveMetaForAccount(driveMeta, accountEmail);
+      final accountLink = accountMeta?.openLink;
+
+      if (accountLink != null && accountLink.isNotEmpty) {
+        await _launchDriveLink(Uri.parse(accountLink));
+
+        if (!mounted) return;
+
+        setState(() {
+          message = 'Opened the live Google Doc.';
+        });
+        return;
+      }
+
+      late EntryDriveSupportNoteMeta updated;
+
+      if (appState.isPayeMode) {
+        try {
+          await appState.requireGoogleDriveAccessToken(
+            scope: GoogleExportAccountScope.paye,
+          );
+        } catch (_) {
+          await appState.connectPayeGoogle();
+        }
+
+        final updatedEntry = widget.entry.copyWith(
+          supportNoteBreakdown: noteController.text,
+        );
+        final existing = await appState.findEntryNoteInCurrentDrive(
+          updatedEntry,
+        );
+
+        if (existing != null &&
+            driveService.isGoogleDocsSupportNote(existing)) {
+          updated = existing.copyWith(
+            initials: initialsController.text.trim().toUpperCase(),
+            status: status,
+            noteText: noteController.text,
+            googleAccountEmail: appState.payeGoogleAccountEmail,
+          );
+        } else {
+          final file = await appState.savePayeNoteToDrive(updatedEntry);
+          final discovered = await appState.findEntryNoteInCurrentDrive(
+            updatedEntry,
+          );
+          updated =
+              discovered?.copyWith(
+                initials: initialsController.text.trim().toUpperCase(),
+                status: status,
+                fileId: file.id,
+                fileName: file.name,
+                noteText: noteController.text,
+                mimeType: file.mimeType,
+                webViewLink: file.webViewLink,
+                googleAccountEmail: appState.payeGoogleAccountEmail,
+              ) ??
+              EntryDriveSupportNoteMeta(
+                entryId: widget.entry.id,
+                initials: initialsController.text.trim().toUpperCase(),
+                status: status,
+                fileId: file.id,
+                fileName: file.name,
+                noteText: noteController.text,
+                mimeType: file.mimeType,
+                parentFolderId: driveMeta?.parentFolderId,
+                webViewLink: file.webViewLink,
+                contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
+                googleAccountEmail: appState.payeGoogleAccountEmail,
+              );
+        }
+      } else {
+        final token = await appState.connectGoogleDrive();
+        final folderId = await _clientNotesFolderId(appState, token);
+        final existing = await driveService.findSupportNoteInDrive(
+          accessToken: token,
+          clientNotesFolderId: folderId,
+          entry: widget.entry,
+          payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+          googleAccountEmail: appState.workGoogleAccountEmail,
+        );
+
+        if (existing != null &&
+            driveService.isGoogleDocsSupportNote(existing)) {
+          updated = existing.copyWith(
+            initials: initialsController.text.trim().toUpperCase(),
+            status: status,
+            noteText: noteController.text,
+            googleAccountEmail: appState.workGoogleAccountEmail,
+          );
+        } else {
+          updated = await driveService.saveSupportNote(
+            accessToken: token,
+            clientNotesFolderId: folderId,
+            entry: widget.entry,
+            initials: initialsController.text,
+            status: status,
+            noteText: noteController.text,
+            payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
+            existingMeta: existing,
+            googleAccountEmail: appState.workGoogleAccountEmail,
+          );
+        }
+      }
+
+      await driveService.saveSupportNoteMeta(updated);
+
+      if (!mounted) return;
+
+      setState(() {
+        driveMeta = updated;
+        message = 'Opened the live Google Doc.';
+      });
+
+      final link = updated.openLink;
+      if (link == null || link.isEmpty) {
+        setState(() {
+          message = 'Google Doc was linked, but no open link was returned.';
+        });
+        return;
+      }
+
+      await _launchDriveLink(Uri.parse(link));
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not open live Google Doc: ${_friendlyError(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _testGoogleDocsSave() async {
     setState(() {
       busy = true;
@@ -2118,8 +2267,18 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             const SizedBox(height: 8),
           ],
           FilledButton.icon(
+            onPressed: busy ? null : _writeInGoogleDoc,
+            icon: const Icon(Icons.edit_document),
+            label: Text(
+              driveMeta == null
+                  ? 'Write in Google Docs'
+                  : 'Open Live Google Doc',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
             onPressed: busy ? null : _saveToDrive,
-            icon: const Icon(Icons.add_to_drive_outlined),
+            icon: const Icon(Icons.cloud_upload_outlined),
             label: Text(
               driveMeta == null
                   ? payeMode
