@@ -84,6 +84,11 @@ bool _looksLikeFullName(String name) {
       cleaned.toUpperCase();
 }
 
+bool _shouldAutoSyncGoogleDoc(EntrySupportNoteStatus status) {
+  return status == EntrySupportNoteStatus.finished ||
+      status == EntrySupportNoteStatus.submitted;
+}
+
 String _dateTimeText(BuildContext context, DateTime value) {
   final time = TimeOfDay.fromDateTime(value).format(context);
   return '${formatDate(value)} $time';
@@ -1824,6 +1829,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             );
       suppressAutoSave = false;
       await _saveDraftOnly('Draft status saved.', showMessage: false);
+      if (_shouldAutoSyncGoogleDoc(next)) {
+        await _autoSaveAttachedFiles();
+      }
       return;
     }
 
@@ -1831,7 +1839,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   }
 
   Future<void> _autoSaveAttachedFiles() async {
-    if (meta == null && driveMeta == null) return;
+    final shouldSyncDrive =
+        driveMeta != null || _shouldAutoSyncGoogleDoc(status);
+    if (meta == null && !shouldSyncDrive) return;
 
     autoSaveDebounce?.cancel();
     final version = ++autoSaveVersion;
@@ -1869,7 +1879,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         }
       }
 
-      if (driveMeta != null) {
+      if (shouldSyncDrive) {
         if (appState.isPayeMode) {
           final updatedEntry = _payeEntryWithCurrentNote();
           final file = await appState.savePayeNoteToDrive(updatedEntry);

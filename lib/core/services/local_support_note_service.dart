@@ -956,6 +956,13 @@ Referrals
   }
 
   static String _fillBlankParagraph(String paragraphXml, String text) {
+    if (text.contains('\n')) {
+      return _paragraphsXml(
+        text,
+        paragraphProps: _paragraphProps(paragraphXml),
+      );
+    }
+
     final withoutEmptyRun = paragraphXml.replaceFirst(
       RegExp(r'<w:r><w:rPr>[\s\S]*?<\/w:rPr><\/w:r>'),
       '',
@@ -978,6 +985,20 @@ Referrals
 
   static String _paragraphXml(String text, {bool bold = false}) {
     return '<w:p>${_runXml(text, bold: bold)}</w:p>';
+  }
+
+  static String _paragraphsXml(String text, {String paragraphProps = ''}) {
+    return text
+        .split('\n')
+        .map((line) => '<w:p>$paragraphProps${_runXml(line)}</w:p>')
+        .join();
+  }
+
+  static String _paragraphProps(String paragraphXml) {
+    final match = RegExp(
+      r'<w:pPr(?:\s|>)[\s\S]*?<\/w:pPr>',
+    ).firstMatch(paragraphXml);
+    return match?.group(0) ?? '';
   }
 
   static String _supportCheckParagraphs(_SupportNoteSections sections) {
@@ -1334,11 +1355,18 @@ class _SupportNoteSections {
   }
 
   static String _cleanLines(Iterable<String> lines) {
-    return lines
-        .map((line) => line.trimRight())
+    final cleaned = lines.map((line) => line.trimRight()).toList();
+    while (cleaned.isNotEmpty && cleaned.first.trim().isEmpty) {
+      cleaned.removeAt(0);
+    }
+    while (cleaned.isNotEmpty && cleaned.last.trim().isEmpty) {
+      cleaned.removeLast();
+    }
+
+    return cleaned
         .where((line) {
           final trimmed = line.trim();
-          return trimmed.isNotEmpty &&
+          return trimmed.isEmpty ||
               !RegExp(r'^(\d+[\.)]?|[-*])\s*$').hasMatch(trimmed);
         })
         .join('\n')

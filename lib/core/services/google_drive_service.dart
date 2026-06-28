@@ -526,6 +526,35 @@ class GoogleDriveService {
     );
   }
 
+  Future<GoogleDriveFile?> _findSupportNoteFileInFolder({
+    required String accessToken,
+    required String folderId,
+    required WorkEntry entry,
+  }) async {
+    final files = await listFolder(
+      accessToken: accessToken,
+      folderId: folderId,
+    );
+    final datePrefix = '${_dateKey(entry.date)}_';
+    final matches =
+        files
+            .where(
+              (file) =>
+                  file.name.startsWith(datePrefix) &&
+                  (file.mimeType == _googleDocsMimeType ||
+                      file.mimeType == _docxMimeType),
+            )
+            .toList()
+          ..sort((a, b) {
+            if (a.mimeType != b.mimeType) {
+              return a.mimeType == _googleDocsMimeType ? -1 : 1;
+            }
+            return b.name.compareTo(a.name);
+          });
+
+    return matches.isEmpty ? null : matches.first;
+  }
+
   Future<EntryDriveSupportNoteMeta?> findPayeNoteInDrive({
     required String accessToken,
     required String notesFolderId,
@@ -955,6 +984,15 @@ class GoogleDriveService {
         existingMeta?.mimeType == _googleDocsMimeType &&
         existingFileId != null &&
         existingFileId.isNotEmpty;
+    final discoveredExistingFile = canUpdateExistingGoogleDoc
+        ? null
+        : await _findSupportNoteFileInFolder(
+            accessToken: accessToken,
+            folderId: periodFolder.id,
+            entry: displayEntry,
+          );
+    final canUpdateDiscoveredGoogleDoc =
+        discoveredExistingFile?.mimeType == _googleDocsMimeType;
     final shouldMoveExistingGoogleDoc =
         canUpdateExistingGoogleDoc &&
         existingParentFolderId != null &&
@@ -973,6 +1011,15 @@ class GoogleDriveService {
         ? await _api.updateFile(
             accessToken: accessToken,
             fileId: existingFileId,
+            name: _supportNoteGoogleDocName(displayEntry, status),
+            mimeType: _googleDocsMimeType,
+            bytes: bytes,
+            contentMimeType: _docxMimeType,
+          )
+        : canUpdateDiscoveredGoogleDoc
+        ? await _api.updateFile(
+            accessToken: accessToken,
+            fileId: discoveredExistingFile!.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
             mimeType: _googleDocsMimeType,
             bytes: bytes,

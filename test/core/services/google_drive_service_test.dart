@@ -70,7 +70,7 @@ void main() {
         initials: 'AB',
         status: EntrySupportNoteStatus.inProgress,
         noteText:
-            'Main topic(s)\nTest note\n\n'
+            'Main topic(s)\nTest note\n\nSecond paragraph\n\n'
             'Outcome(s)\nSaved to Drive\n\n'
             'Next action(s)\nFollow up tomorrow\n\n'
             'Overall impression\nSettled\n\n'
@@ -85,6 +85,9 @@ void main() {
       );
       final documentXml = _docxXml(noteUpload.bytes);
       final documentText = _docxText(noteUpload.bytes);
+      final paragraphs = _docxParagraphTexts(noteUpload.bytes);
+      final mainLine = paragraphs.indexOf('Test note');
+      final secondLine = paragraphs.indexOf('Second paragraph');
 
       expect(meta.fileName, '2026-06-02_Jane_Smith_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
@@ -111,6 +114,9 @@ void main() {
       expect(documentText, isNot(contains('Kilometres')));
       expect(documentText, contains('Main topic(s)'));
       expect(documentText, contains('Test note'));
+      expect(mainLine, isNonNegative);
+      expect(secondLine, greaterThan(mainLine));
+      expect(paragraphs.sublist(mainLine + 1, secondLine), contains(''));
       expect(documentText, contains('Outcome(s)'));
       expect(documentText, contains('Saved to Drive'));
       expect(documentText, contains('Next actions'));
@@ -183,7 +189,7 @@ void main() {
           'client-folder': [
             const GoogleDriveFile(
               id: 'period-folder',
-              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              name: 'Invoice 10 - 2026-05-31 to 2026-06-13',
               mimeType: 'application/vnd.google-apps.folder',
             ),
           ],
@@ -514,6 +520,78 @@ void main() {
     expect(meta.mimeType, _googleDocsMimeType);
     expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
   });
+
+  test(
+    'saveSupportNote reuses date-matched Google Doc after status rename',
+    () async {
+      final api = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'client-folder',
+              name: 'Jane Smith',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'client-folder': [
+            const GoogleDriveFile(
+              id: 'period-folder',
+              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'period-folder': [
+            const GoogleDriveFile(
+              id: 'type-folder',
+              name: 'Home Visits',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'type-folder': [
+            const GoogleDriveFile(
+              id: 'existing-google-doc',
+              name: '2026-06-02_Jane_Smith_incomplete',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+          'client-folder/Invoice 10 - 2026-05-31 to 2026-06-13/Home Visits': [
+            const GoogleDriveFile(
+              id: 'existing-google-doc',
+              name: '2026-06-02_Jane_Smith_incomplete',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final service = GoogleDriveService(api: api);
+
+      final meta = await service.saveSupportNote(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entry: WorkEntry(
+          id: 'entry-1',
+          client: 'Jane Smith',
+          type: EntryType.homeVisit,
+          date: DateTime(2026, 6, 2),
+          startTime: const TimeOfDay(hour: 9, minute: 0),
+          minutes: 60,
+          notes: const [],
+        ),
+        initials: 'JS',
+        status: EntrySupportNoteStatus.submitted,
+        noteText: 'Main topic(s)\nUpdated in app',
+      );
+
+      final update = api.updates.single;
+      expect(api.uploads, isEmpty);
+      expect(update.fileId, 'existing-google-doc');
+      expect(update.name, '2026-06-02_Jane_Smith_submitted');
+      expect(_docxText(update.bytes), contains('Updated in app'));
+      expect(meta.fileId, 'existing-google-doc');
+      expect(meta.fileName, '2026-06-02_Jane_Smith_submitted');
+      expect(meta.status, EntrySupportNoteStatus.submitted);
+    },
+  );
 
   test('saveSupportNote converts an existing docx into a Google Doc', () async {
     final api = _FakeGoogleDriveApi(children: const []);
@@ -980,6 +1058,17 @@ String _docxText(List<int> bytes) {
   return RegExp(
     r'<w:t[^>]*>(.*?)<\/w:t>',
   ).allMatches(xml).map((match) => _unxml(match.group(1)!)).join(' ');
+}
+
+List<String> _docxParagraphTexts(List<int> bytes) {
+  final xml = _docxXml(bytes);
+
+  return RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>').allMatches(xml).map((match) {
+    final paragraph = match.group(0)!;
+    return RegExp(
+      r'<w:t[^>]*>(.*?)<\/w:t>',
+    ).allMatches(paragraph).map((text) => _unxml(text.group(1)!)).join();
+  }).toList();
 }
 
 String _docxXml(List<int> bytes) {

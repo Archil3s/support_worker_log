@@ -500,7 +500,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   }
 
   Future<void> _autoSaveAttachedFiles() async {
-    if (meta == null && driveMeta == null) return;
+    final shouldSyncDrive =
+        driveMeta != null || _shouldAutoSyncGoogleDoc(status);
+    if (meta == null && !shouldSyncDrive) return;
 
     final appState = context.read<AppState>();
     EntrySupportNoteMeta? updatedLocal;
@@ -524,9 +526,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       localError = error;
       localStackTrace = stackTrace;
     }
-    final updatedDrive = driveMeta == null
-        ? null
-        : await _saveDriveNoteFromCurrentState(appState);
+    final updatedDrive = shouldSyncDrive
+        ? await _saveDriveNoteFromCurrentState(appState)
+        : null;
 
     if (updatedLocal == null && updatedDrive == null && localError != null) {
       Error.throwWithStackTrace(localError, localStackTrace!);
@@ -779,15 +781,19 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         status: next,
       );
       await _saveDraftOnly('Draft status saved.', showMessage: false);
+      if (_shouldAutoSyncGoogleDoc(next)) {
+        await _autoSaveAttachedFiles();
+      }
       return;
     }
 
     try {
       final hadDrive = driveMeta != null;
+      final shouldCreateDrive = !hadDrive && _shouldAutoSyncGoogleDoc(next);
       await _autoSaveAttachedFiles();
       if (!mounted) return;
       setState(() {
-        message = hadDrive
+        message = hadDrive || shouldCreateDrive
             ? 'Status saved to local file and Google Drive.'
             : 'Status saved locally.';
       });
@@ -1433,6 +1439,11 @@ bool _looksLikeFullName(String name) {
 
   return LocalSupportNoteService.defaultInitialsForName(name) !=
       cleaned.toUpperCase();
+}
+
+bool _shouldAutoSyncGoogleDoc(EntrySupportNoteStatus status) {
+  return status == EntrySupportNoteStatus.finished ||
+      status == EntrySupportNoteStatus.submitted;
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {
