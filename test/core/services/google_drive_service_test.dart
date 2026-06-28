@@ -498,7 +498,9 @@ void main() {
         ),
         initials: 'AB',
         status: EntrySupportNoteStatus.inProgress,
-        noteText: 'Main topic(s)\nTest note',
+        noteText:
+            'Main topic(s)\nTest note\n\nSecond paragraph\n\n'
+            'Outcome(s)\nSaved to Drive',
         existingMeta: const EntryDriveSupportNoteMeta(
           entryId: 'entry-1',
           initials: 'AB',
@@ -517,6 +519,8 @@ void main() {
       expect(replacement.fileId, 'legacy-google-doc');
       expect(replacement.name, '2026-06-02_AB_in-progress');
       expect(replacement.text, contains('Test note'));
+      expect(replacement.text, contains('Test note\n\nSecond paragraph'));
+      expect(replacement.text, contains('Second paragraph\n\nOutcome(s)'));
       expect(meta.fileName, '2026-06-02_AB_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
       expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);

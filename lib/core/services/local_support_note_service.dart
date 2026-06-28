@@ -428,9 +428,42 @@ Referrals
               .map((text) => _unescapeXml(text.group(1)!))
               .join();
         })
-        .where((line) => line.trim().isNotEmpty);
+        .toList();
+    while (paragraphs.isNotEmpty && paragraphs.first.trim().isEmpty) {
+      paragraphs.removeAt(0);
+    }
+    while (paragraphs.isNotEmpty && paragraphs.last.trim().isEmpty) {
+      paragraphs.removeLast();
+    }
 
-    return paragraphs.join('\n');
+    final buffer = StringBuffer();
+    var blankPending = false;
+    for (final paragraph in paragraphs) {
+      if (paragraph.trim().isEmpty) {
+        blankPending = buffer.isNotEmpty;
+        continue;
+      }
+
+      if (_startsSupportNoteSection(paragraph) && buffer.isNotEmpty) {
+        blankPending = true;
+      }
+      if (buffer.isNotEmpty) {
+        buffer.write(blankPending ? '\n\n' : '\n');
+      }
+      buffer.write(paragraph);
+      blankPending = false;
+    }
+
+    return buffer.toString();
+  }
+
+  static bool _startsSupportNoteSection(String value) {
+    final normalized = value.trimLeft().toLowerCase();
+    return normalized.startsWith('outcome') ||
+        normalized.startsWith('next action') ||
+        normalized.startsWith('overall impression') ||
+        normalized.startsWith('referrals') ||
+        normalized.startsWith('safety concerns');
   }
 
   static String _unescapeXml(String value) {
