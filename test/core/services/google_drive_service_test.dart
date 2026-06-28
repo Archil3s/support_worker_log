@@ -530,6 +530,9 @@ void main() {
       expect(paragraphs.sublist(mainLine + 1, secondLine), contains(''));
       expect(meta.fileName, '2026-06-02_AB_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
+      expect(meta.noteText, contains('Test note\n\nSecond paragraph'));
+      expect(meta.noteText, contains('Second paragraph\n\nOutcome(s)'));
+      expect(meta.noteText, contains('Next action(s)\n\nOverall impression'));
       expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
     },
   );

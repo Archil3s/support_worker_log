@@ -331,9 +331,21 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
   }) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
-    return savedBreakdown.isNotEmpty
-        ? savedBreakdown
-        : supportNoteBreakdownTemplate;
+    return canonicalSupportNoteText(
+      savedBreakdown.isNotEmpty ? savedBreakdown : supportNoteBreakdownTemplate,
+    );
+  }
+
+  static String canonicalSupportNoteText(
+    String noteText, {
+    String? fallbackNoteText,
+  }) {
+    final source = noteText.trim().isNotEmpty
+        ? noteText
+        : fallbackNoteText?.trim() ?? '';
+    if (source.trim().isEmpty) return '';
+
+    return _SupportNoteSections.fromNoteText(source).canonicalText;
   }
 
   static String defaultPayeNoteTextForEntry(WorkEntry entry) {
@@ -1248,6 +1260,27 @@ class _SupportNoteSections {
 
   bool get hasSupportChecks =>
       referrals.trim().isNotEmpty || safetyConcerns.trim().isNotEmpty;
+
+  String get canonicalText {
+    return [
+      _canonicalSection('Main topic(s)', mainTopic),
+      _canonicalSection('Outcome(s)', outcomes),
+      _canonicalSection('Next action(s)', nextActions),
+      _canonicalSection('Overall impression', overallImpression),
+      _canonicalSection('Referrals', referrals),
+      _canonicalSection(
+        'Safety concerns for sexual harm survivors and mental health',
+        safetyConcerns,
+      ),
+    ].join('\n\n').trimRight();
+  }
+
+  static String _canonicalSection(String heading, String body) {
+    final cleanedBody = body.trimRight();
+    if (cleanedBody.isEmpty) return heading;
+
+    return '$heading\n$cleanedBody';
+  }
 
   String get outcomesWithActions {
     final supportChecks = _supportChecksText;

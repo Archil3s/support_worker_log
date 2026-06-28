@@ -556,10 +556,13 @@ class AppState extends ChangeNotifier {
             payeMode: payeMode,
             googleAccountEmail: accountEmail,
           );
-    final noteText = await _googleDriveService.exportGoogleDocText(
+    final exportedNoteText = await _googleDriveService.exportGoogleDocText(
       accessToken: accessToken,
       meta: googleDocMeta,
     );
+    final noteText = payeMode
+        ? exportedNoteText
+        : LocalSupportNoteService.canonicalSupportNoteText(exportedNoteText);
     final initials = googleDocMeta.initials.trim().isNotEmpty
         ? googleDocMeta.initials
         : LocalSupportNoteService.defaultInitialsForEntry(entry);

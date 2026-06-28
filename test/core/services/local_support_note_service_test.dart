@@ -106,6 +106,34 @@ void main() {
     expect(restored?.noteText, longNote);
   });
 
+  test('canonical support note text keeps one spacing rule', () {
+    final canonical = LocalSupportNoteService.canonicalSupportNoteText(
+      'Outcome(s)\nSorted out transport\n'
+      'Main topic(s)\nAppointment planning\n\n'
+      'Referrals\nNo referrals discussed or made this visit.',
+    );
+
+    expect(
+      canonical,
+      [
+        'Main topic(s)',
+        'Appointment planning',
+        '',
+        'Outcome(s)',
+        'Sorted out transport',
+        '',
+        'Next action(s)',
+        '',
+        'Overall impression',
+        '',
+        'Referrals',
+        'No referrals discussed or made this visit.',
+        '',
+        'Safety concerns for sexual harm survivors and mental health',
+      ].join('\n'),
+    );
+  });
+
   test('empty Work draft still saves in app', () async {
     final entry = WorkEntry(
       id: 'work-note-empty',

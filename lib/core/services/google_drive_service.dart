@@ -961,11 +961,18 @@ class GoogleDriveService {
       entry: displayEntry,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
+    final canonicalNoteText = LocalSupportNoteService.canonicalSupportNoteText(
+      noteText,
+      fallbackNoteText: LocalSupportNoteService.defaultNoteTextForEntry(
+        entry: displayEntry,
+        status: status,
+      ),
+    );
     final bytes = await LocalSupportNoteService.buildNoteDocx(
       entry: displayEntry,
       initials: cleanedInitials,
       status: status,
-      noteText: noteText,
+      noteText: canonicalNoteText,
       clientDisplayName: _folderName(displayEntry.client),
     );
     final existingFileId = existingMeta?.fileId.trim();
@@ -1023,7 +1030,7 @@ class GoogleDriveService {
       status: status,
       fileId: file.id,
       fileName: file.name,
-      noteText: noteText,
+      noteText: canonicalNoteText,
       mimeType: file.mimeType,
       parentFolderId: periodFolder.id,
       webViewLink: file.webViewLink,

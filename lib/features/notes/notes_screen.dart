@@ -1426,16 +1426,20 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     bool showMessage = true,
   }) async {
     final appState = context.read<AppState>();
+    final noteText = appState.isPayeMode
+        ? noteController.text
+        : LocalSupportNoteService.canonicalSupportNoteText(noteController.text);
     final updated = await LocalSupportNoteService.saveDraftMeta(
       entry: widget.entry,
       initials: initialsController.text,
       status: status,
-      noteText: noteController.text,
+      noteText: noteText,
     );
 
     if (!mounted) return;
 
     setState(() {
+      if (!appState.isPayeMode) noteController.text = noteText;
       meta = updated;
       if (showMessage) message = nextMessage;
     });
@@ -1571,7 +1575,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         entry: widget.entry,
         initials: initialsController.text,
         status: status,
-        noteText: noteController.text,
+        noteText: LocalSupportNoteService.canonicalSupportNoteText(
+          noteController.text,
+        ),
         payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
         existingMeta: _driveMetaForAccount(driveMeta, googleAccountEmail),
         googleAccountEmail: googleAccountEmail,
@@ -1580,6 +1586,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       if (!mounted) return;
 
       setState(() {
+        noteController.text = updated.noteText;
         driveMeta = updated;
         message =
             updated.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType
@@ -1696,20 +1703,26 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
         if (existing != null &&
             driveService.isGoogleDocsSupportNote(existing)) {
+          final noteText = LocalSupportNoteService.canonicalSupportNoteText(
+            noteController.text,
+          );
           updated = existing.copyWith(
             initials: initialsController.text.trim().toUpperCase(),
             status: status,
-            noteText: noteController.text,
+            noteText: noteText,
             googleAccountEmail: appState.workGoogleAccountEmail,
           );
         } else {
+          final noteText = LocalSupportNoteService.canonicalSupportNoteText(
+            noteController.text,
+          );
           updated = await driveService.saveSupportNote(
             accessToken: token,
             clientNotesFolderId: folderId,
             entry: widget.entry,
             initials: initialsController.text,
             status: status,
-            noteText: noteController.text,
+            noteText: noteText,
             payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
             existingMeta: existing,
             googleAccountEmail: appState.workGoogleAccountEmail,
@@ -1928,7 +1941,9 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             entry: widget.entry,
             initials: initialsController.text,
             status: status,
-            noteText: noteController.text,
+            noteText: LocalSupportNoteService.canonicalSupportNoteText(
+              noteController.text,
+            ),
             payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
             existingMeta: _driveMetaForAccount(driveMeta, googleAccountEmail),
             googleAccountEmail: googleAccountEmail,
