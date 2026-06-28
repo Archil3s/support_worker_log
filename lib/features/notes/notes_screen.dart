@@ -1830,17 +1830,17 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       suppressAutoSave = false;
       await _saveDraftOnly('Draft status saved.', showMessage: false);
       if (_shouldAutoSyncGoogleDoc(next)) {
-        await _autoSaveAttachedFiles();
+        await _autoSaveAttachedFiles(syncDrive: true);
       }
       return;
     }
 
-    await _autoSaveAttachedFiles();
+    await _autoSaveAttachedFiles(syncDrive: true);
   }
 
-  Future<void> _autoSaveAttachedFiles() async {
+  Future<void> _autoSaveAttachedFiles({bool syncDrive = false}) async {
     final shouldSyncDrive =
-        driveMeta != null || _shouldAutoSyncGoogleDoc(status);
+        syncDrive && (driveMeta != null || _shouldAutoSyncGoogleDoc(status));
     if (meta == null && !shouldSyncDrive) return;
 
     autoSaveDebounce?.cancel();

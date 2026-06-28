@@ -72,6 +72,50 @@ class GoogleDriveApiPlatform {
     return _fileFromJson(decoded, 'Google Drive file update failed');
   }
 
+  Future<GoogleDriveFile> replaceGoogleDocText({
+    required String accessToken,
+    required String fileId,
+    required String name,
+    required String text,
+  }) async {
+    final renamed = await _jsonRequest(
+      _driveFileUri(fileId),
+      method: 'PATCH',
+      accessToken: accessToken,
+      body: {'name': name},
+      failureMessage: 'Google Docs rename failed',
+    );
+    final endIndex = await _googleDocEndIndex(
+      accessToken: accessToken,
+      fileId: fileId,
+    );
+    final requests = <Map<String, Object?>>[
+      if (endIndex > 2)
+        {
+          'deleteContentRange': {
+            'range': {'startIndex': 1, 'endIndex': endIndex - 1},
+          },
+        },
+      if (text.isNotEmpty)
+        {
+          'insertText': {
+            'location': {'index': 1},
+            'text': text,
+          },
+        },
+    ];
+
+    await _jsonRequest(
+      _googleDocBatchUpdateUri(fileId),
+      method: 'POST',
+      accessToken: accessToken,
+      body: {'requests': requests},
+      failureMessage: 'Google Docs body replacement failed',
+    );
+
+    return _fileFromJson(renamed, 'Google Docs update failed');
+  }
+
   Future<GoogleDriveFile> moveFile({
     required String accessToken,
     required String fileId,
@@ -207,6 +251,38 @@ class GoogleDriveApiPlatform {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
       'mimeType': 'text/plain',
     });
+  }
+
+  Uri _googleDocUri(String fileId) {
+    return Uri.https('docs.googleapis.com', '/v1/documents/$fileId', {
+      'fields': 'body(content(endIndex))',
+    });
+  }
+
+  Uri _googleDocBatchUpdateUri(String fileId) {
+    return Uri.https(
+      'docs.googleapis.com',
+      '/v1/documents/$fileId:batchUpdate',
+    );
+  }
+
+  Future<int> _googleDocEndIndex({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    final decoded = await _jsonRequest(
+      _googleDocUri(fileId),
+      method: 'GET',
+      accessToken: accessToken,
+      failureMessage: 'Google Docs read failed',
+    );
+    final body = decoded['body'];
+    final content = body is Map<String, dynamic> ? body['content'] : null;
+    if (content is! List || content.isEmpty) return 1;
+    final last = content.last;
+    if (last is! Map<String, dynamic>) return 1;
+
+    return last['endIndex'] as int? ?? 1;
   }
 
   Future<Map<String, dynamic>> _jsonRequest(

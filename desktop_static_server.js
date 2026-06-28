@@ -332,6 +332,76 @@ function googleDriveTextRequest({ accessToken, method, path: requestPath }) {
   });
 }
 
+function googleDocsJsonRequest({ accessToken, method, path: requestPath, body }) {
+  return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
+    const bodyText = body == null ? '' : JSON.stringify(body);
+
+    const request = https.request(
+      {
+        hostname: 'docs.googleapis.com',
+        path: requestPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=utf-8',
+          ...(bodyText
+            ? { 'Content-Length': Buffer.byteLength(bodyText) }
+            : {}),
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                responseBody.trim() || `Google Docs returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          if (!responseBody.trim()) {
+            resolve({});
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch (error) {
+            reject(new Error('Google Docs returned invalid JSON.'));
+          }
+        });
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Docs: ${error.message}`
+            : 'Could not reach Google Docs.',
+        ),
+      );
+    });
+
+    if (bodyText) request.write(bodyText);
+    request.end();
+  });
+}
+
 function googleDriveMultipartRequest({
   accessToken,
   method,
@@ -581,6 +651,83 @@ async function updateGoogleDriveFile(req, res) {
       res,
       502,
       error && error.message ? error.message : 'Google Drive file update failed.',
+    );
+  }
+}
+
+async function replaceGoogleDocText(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const accessToken = String(payload.accessToken || '');
+    const fileId = String(payload.fileId || '').trim();
+    const name = String(payload.name || '').trim();
+    const text = String(payload.text || '');
+
+    if (!fileId) {
+      send(res, 400, 'Missing Drive file id.');
+      return;
+    }
+
+    if (!name) {
+      send(res, 400, 'Missing Drive file name.');
+      return;
+    }
+
+    const renamed = await googleDriveJsonRequest({
+      accessToken,
+      method: 'PATCH',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,webViewLink`,
+      body: { name },
+    });
+    const doc = await googleDocsJsonRequest({
+      accessToken,
+      method: 'GET',
+      path: `/v1/documents/${encodeURIComponent(fileId)}?fields=body(content(endIndex))`,
+    });
+    const content = doc && doc.body && Array.isArray(doc.body.content)
+      ? doc.body.content
+      : [];
+    const last = content.length ? content[content.length - 1] : {};
+    const endIndex = Number(last.endIndex || 1);
+    const requests = [];
+
+    if (endIndex > 2) {
+      requests.push({
+        deleteContentRange: {
+          range: { startIndex: 1, endIndex: endIndex - 1 },
+        },
+      });
+    }
+
+    if (text) {
+      requests.push({ insertText: { location: { index: 1 }, text } });
+    }
+
+    await googleDocsJsonRequest({
+      accessToken,
+      method: 'POST',
+      path: `/v1/documents/${encodeURIComponent(fileId)}:batchUpdate`,
+      body: { requests },
+    });
+
+    send(res, 200, JSON.stringify(renamed), 'application/json; charset=utf-8');
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message
+        ? error.message
+        : 'Google Docs body replacement failed.',
     );
   }
 }
@@ -841,6 +988,14 @@ function handleRequest(req, res) {
 
   if ((req.url || '').split('?')[0] === '/__google_drive/update_file') {
     updateGoogleDriveFile(req, res);
+    return;
+  }
+
+  if (
+    (req.url || '').split('?')[0] ===
+    '/__google_drive/replace_google_doc_text'
+  ) {
+    replaceGoogleDocText(req, res);
     return;
   }
 

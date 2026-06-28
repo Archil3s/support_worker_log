@@ -968,6 +968,7 @@ class GoogleDriveService {
       noteText: noteText,
       clientDisplayName: _folderName(displayEntry.client),
     );
+    final googleDocText = LocalSupportNoteService.docxPlainText(bytes);
     final existingFileId = existingMeta?.fileId.trim();
     final existingParentFolderId = existingMeta?.parentFolderId?.trim();
     final currentGoogleAccountEmail = googleAccountEmail?.trim();
@@ -1008,22 +1009,18 @@ class GoogleDriveService {
     }
 
     final file = canUpdateExistingGoogleDoc
-        ? await _api.updateFile(
+        ? await _api.replaceGoogleDocText(
             accessToken: accessToken,
             fileId: existingFileId,
             name: _supportNoteGoogleDocName(displayEntry, status),
-            mimeType: _googleDocsMimeType,
-            bytes: bytes,
-            contentMimeType: _docxMimeType,
+            text: googleDocText,
           )
         : canUpdateDiscoveredGoogleDoc
-        ? await _api.updateFile(
+        ? await _api.replaceGoogleDocText(
             accessToken: accessToken,
             fileId: discoveredExistingFile!.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
-            mimeType: _googleDocsMimeType,
-            bytes: bytes,
-            contentMimeType: _docxMimeType,
+            text: googleDocText,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,

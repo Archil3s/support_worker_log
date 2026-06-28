@@ -499,9 +499,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     return updated;
   }
 
-  Future<void> _autoSaveAttachedFiles() async {
+  Future<void> _autoSaveAttachedFiles({bool syncDrive = false}) async {
     final shouldSyncDrive =
-        driveMeta != null || _shouldAutoSyncGoogleDoc(status);
+        syncDrive && (driveMeta != null || _shouldAutoSyncGoogleDoc(status));
     if (meta == null && !shouldSyncDrive) return;
 
     final appState = context.read<AppState>();
@@ -782,7 +782,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       );
       await _saveDraftOnly('Draft status saved.', showMessage: false);
       if (_shouldAutoSyncGoogleDoc(next)) {
-        await _autoSaveAttachedFiles();
+        await _autoSaveAttachedFiles(syncDrive: true);
       }
       return;
     }
@@ -790,7 +790,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     try {
       final hadDrive = driveMeta != null;
       final shouldCreateDrive = !hadDrive && _shouldAutoSyncGoogleDoc(next);
-      await _autoSaveAttachedFiles();
+      await _autoSaveAttachedFiles(syncDrive: true);
       if (!mounted) return;
       setState(() {
         message = hadDrive || shouldCreateDrive

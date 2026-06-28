@@ -413,6 +413,35 @@ Referrals
     }
   }
 
+  static String docxPlainText(List<int> bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final document = archive.files.firstWhere(
+      (file) => file.name == 'word/document.xml',
+    );
+    final xml = utf8.decode(document.content as List<int>);
+    final paragraphs = RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>')
+        .allMatches(xml)
+        .map((match) {
+          final paragraph = match.group(0)!;
+          return RegExp(r'<w:t[^>]*>(.*?)<\/w:t>')
+              .allMatches(paragraph)
+              .map((text) => _unescapeXml(text.group(1)!))
+              .join();
+        })
+        .where((line) => line.trim().isNotEmpty);
+
+    return paragraphs.join('\n');
+  }
+
+  static String _unescapeXml(String value) {
+    return value
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&amp;', '&');
+  }
+
   static Future<List<int>> buildInvoicePeriodNoteDocx({
     required int invoiceNumber,
     required DateTime start,
