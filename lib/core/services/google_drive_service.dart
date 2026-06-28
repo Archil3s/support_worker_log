@@ -968,9 +968,7 @@ class GoogleDriveService {
       noteText: noteText,
       clientDisplayName: _folderName(displayEntry.client),
     );
-    final googleDocText = LocalSupportNoteService.docxPlainText(bytes);
     final existingFileId = existingMeta?.fileId.trim();
-    final existingParentFolderId = existingMeta?.parentFolderId?.trim();
     final currentGoogleAccountEmail = googleAccountEmail?.trim();
     final existingGoogleAccountEmail = existingMeta?.googleAccountEmail?.trim();
     final sameGoogleAccount =
@@ -994,33 +992,21 @@ class GoogleDriveService {
           );
     final canUpdateDiscoveredGoogleDoc =
         discoveredExistingFile?.mimeType == _googleDocsMimeType;
-    final shouldMoveExistingGoogleDoc =
-        canUpdateExistingGoogleDoc &&
-        existingParentFolderId != null &&
-        existingParentFolderId.isNotEmpty &&
-        existingParentFolderId != periodFolder.id;
-    if (shouldMoveExistingGoogleDoc) {
-      await _api.moveFile(
-        accessToken: accessToken,
-        fileId: existingFileId,
-        fromParentId: existingParentFolderId,
-        toParentId: periodFolder.id,
-      );
-    }
-
     final file = canUpdateExistingGoogleDoc
-        ? await _api.replaceGoogleDocText(
+        ? await _replaceGoogleDocThroughDrive(
             accessToken: accessToken,
-            fileId: existingFileId,
+            oldFileId: existingFileId,
+            parentId: periodFolder.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
-            text: googleDocText,
+            bytes: bytes,
           )
         : canUpdateDiscoveredGoogleDoc
-        ? await _api.replaceGoogleDocText(
+        ? await _replaceGoogleDocThroughDrive(
             accessToken: accessToken,
-            fileId: discoveredExistingFile!.id,
+            oldFileId: discoveredExistingFile!.id,
+            parentId: periodFolder.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
-            text: googleDocText,
+            bytes: bytes,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,
@@ -1047,6 +1033,26 @@ class GoogleDriveService {
     await saveSupportNoteMeta(meta);
 
     return meta;
+  }
+
+  Future<GoogleDriveFile> _replaceGoogleDocThroughDrive({
+    required String accessToken,
+    required String oldFileId,
+    required String parentId,
+    required String name,
+    required List<int> bytes,
+  }) async {
+    final replacement = await _api.uploadFile(
+      accessToken: accessToken,
+      name: name,
+      mimeType: _googleDocsMimeType,
+      bytes: bytes,
+      parentId: parentId,
+      contentMimeType: _docxMimeType,
+    );
+    await _api.deleteFile(accessToken: accessToken, fileId: oldFileId);
+
+    return replacement;
   }
 
   String _folderName(String value) {

@@ -479,7 +479,7 @@ void main() {
   });
 
   test(
-    'saveSupportNote replaces existing Google Docs notes in place',
+    'saveSupportNote replaces existing Google Docs notes through Drive',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
       final service = GoogleDriveService(api: api);
@@ -512,15 +512,22 @@ void main() {
         ),
       );
 
-      final replacement = api.replacements.single;
-      expect(api.uploadedNames, isEmpty);
+      final replacement = api.uploads.single;
+      final replacementText = _docxText(replacement.bytes);
+      final paragraphs = _docxParagraphTexts(replacement.bytes);
+      final mainLine = paragraphs.indexOf('Test note');
+      final secondLine = paragraphs.indexOf('Second paragraph');
+
+      expect(api.uploadedNames, contains('2026-06-02_AB_in-progress'));
       expect(api.updates, isEmpty);
-      expect(api.replacedFileIds, contains('legacy-google-doc'));
-      expect(replacement.fileId, 'legacy-google-doc');
+      expect(api.deletedFileIds, contains('legacy-google-doc'));
       expect(replacement.name, '2026-06-02_AB_in-progress');
-      expect(replacement.text, contains('Test note'));
-      expect(replacement.text, contains('Test note\n\nSecond paragraph'));
-      expect(replacement.text, contains('Second paragraph\n\nOutcome(s)'));
+      expect(replacement.mimeType, _googleDocsMimeType);
+      expect(replacement.contentMimeType, _docxMimeType);
+      expect(replacementText, contains('Test note'));
+      expect(mainLine, isNonNegative);
+      expect(secondLine, greaterThan(mainLine));
+      expect(paragraphs.sublist(mainLine + 1, secondLine), contains(''));
       expect(meta.fileName, '2026-06-02_AB_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
       expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
@@ -588,13 +595,12 @@ void main() {
         noteText: 'Main topic(s)\nUpdated in app',
       );
 
-      final replacement = api.replacements.single;
-      expect(api.uploads, isEmpty);
+      final replacement = api.uploads.single;
       expect(api.updates, isEmpty);
-      expect(replacement.fileId, 'existing-google-doc');
+      expect(api.deletedFileIds, contains('existing-google-doc'));
       expect(replacement.name, '2026-06-02_Jane_Smith_submitted');
-      expect(replacement.text, contains('Updated in app'));
-      expect(meta.fileId, 'existing-google-doc');
+      expect(_docxText(replacement.bytes), contains('Updated in app'));
+      expect(meta.fileId, 'new-doc');
       expect(meta.fileName, '2026-06-02_Jane_Smith_submitted');
       expect(meta.status, EntrySupportNoteStatus.submitted);
     },
@@ -909,11 +915,9 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final String exportedText;
   final uploads = <_Upload>[];
   final updates = <_Update>[];
-  final replacements = <_Replacement>[];
   final movedFiles = <_Move>[];
   final uploadedNames = <String>[];
   final updatedFileIds = <String>[];
-  final replacedFileIds = <String>[];
   final deletedFileIds = <String>[];
   final exportedFileIds = <String>[];
 
@@ -983,22 +987,6 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   }
 
   @override
-  Future<GoogleDriveFile> replaceGoogleDocText({
-    required String accessToken,
-    required String fileId,
-    required String name,
-    required String text,
-  }) async {
-    replacedFileIds.add(fileId);
-    replacements.add(_Replacement(fileId: fileId, name: name, text: text));
-    return GoogleDriveFile(
-      id: fileId,
-      name: name,
-      mimeType: _googleDocsMimeType,
-    );
-  }
-
-  @override
   Future<GoogleDriveFile> moveFile({
     required String accessToken,
     required String fileId,
@@ -1063,18 +1051,6 @@ class _Update {
   final String mimeType;
   final String? contentMimeType;
   final List<int> bytes;
-}
-
-class _Replacement {
-  const _Replacement({
-    required this.fileId,
-    required this.name,
-    required this.text,
-  });
-
-  final String fileId;
-  final String name;
-  final String text;
 }
 
 class _Move {

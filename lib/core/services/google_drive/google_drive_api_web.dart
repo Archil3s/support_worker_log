@@ -169,74 +169,6 @@ class GoogleDriveApiPlatform {
     return _fileFromResponse(response, 'Google Drive file update failed');
   }
 
-  Future<GoogleDriveFile> replaceGoogleDocText({
-    required String accessToken,
-    required String fileId,
-    required String name,
-    required String text,
-  }) async {
-    if (_useDesktopProxy) {
-      final decoded = await _proxyJson(
-        '/__google_drive/replace_google_doc_text',
-        {
-          'accessToken': accessToken,
-          'fileId': fileId,
-          'name': name,
-          'text': text,
-        },
-        failureMessage: 'Google Docs body replacement failed',
-      );
-      final file = _fileFromJson(decoded);
-      if (file == null) {
-        throw StateError('Google Docs update failed: invalid response.');
-      }
-      return file;
-    }
-
-    final renameResponse = await _request(
-      _driveFileUri(fileId).toString(),
-      method: 'PATCH',
-      requestHeaders: {
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      sendData: jsonEncode({'name': name}),
-      failureMessage: 'Google Docs rename failed',
-    );
-    final endIndex = await _googleDocEndIndex(
-      accessToken: accessToken,
-      fileId: fileId,
-    );
-    final requests = <Map<String, Object?>>[
-      if (endIndex > 2)
-        {
-          'deleteContentRange': {
-            'range': {'startIndex': 1, 'endIndex': endIndex - 1},
-          },
-        },
-      if (text.isNotEmpty)
-        {
-          'insertText': {
-            'location': {'index': 1},
-            'text': text,
-          },
-        },
-    ];
-
-    await _request(
-      _googleDocBatchUpdateUri(fileId).toString(),
-      method: 'POST',
-      requestHeaders: {
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      sendData: jsonEncode({'requests': requests}),
-      failureMessage: 'Google Docs body replacement failed',
-    );
-
-    return _fileFromResponse(renameResponse, 'Google Docs update failed');
-  }
-
   Future<GoogleDriveFile> moveFile({
     required String accessToken,
     required String fileId,
@@ -412,42 +344,6 @@ class GoogleDriveApiPlatform {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
       'mimeType': 'text/plain',
     });
-  }
-
-  Uri _googleDocUri(String fileId) {
-    return Uri.https('docs.googleapis.com', '/v1/documents/$fileId', {
-      'fields': 'body(content(endIndex))',
-    });
-  }
-
-  Uri _googleDocBatchUpdateUri(String fileId) {
-    return Uri.https(
-      'docs.googleapis.com',
-      '/v1/documents/$fileId:batchUpdate',
-    );
-  }
-
-  Future<int> _googleDocEndIndex({
-    required String accessToken,
-    required String fileId,
-  }) async {
-    final response = await _request(
-      _googleDocUri(fileId).toString(),
-      method: 'GET',
-      requestHeaders: {'Authorization': 'Bearer $accessToken'},
-      failureMessage: 'Google Docs read failed',
-    );
-    final decoded = _decodeJsonResponse(
-      response,
-      failureMessage: 'Google Docs read failed',
-    );
-    final body = decoded['body'];
-    final content = body is Map<String, dynamic> ? body['content'] : null;
-    if (content is! List || content.isEmpty) return 1;
-    final last = content.last;
-    if (last is! Map<String, dynamic>) return 1;
-
-    return last['endIndex'] as int? ?? 1;
   }
 
   bool get _useDesktopProxy {

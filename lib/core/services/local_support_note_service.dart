@@ -413,68 +413,6 @@ Referrals
     }
   }
 
-  static String docxPlainText(List<int> bytes) {
-    final archive = ZipDecoder().decodeBytes(bytes);
-    final document = archive.files.firstWhere(
-      (file) => file.name == 'word/document.xml',
-    );
-    final xml = utf8.decode(document.content as List<int>);
-    final paragraphs = RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>')
-        .allMatches(xml)
-        .map((match) {
-          final paragraph = match.group(0)!;
-          return RegExp(r'<w:t[^>]*>(.*?)<\/w:t>')
-              .allMatches(paragraph)
-              .map((text) => _unescapeXml(text.group(1)!))
-              .join();
-        })
-        .toList();
-    while (paragraphs.isNotEmpty && paragraphs.first.trim().isEmpty) {
-      paragraphs.removeAt(0);
-    }
-    while (paragraphs.isNotEmpty && paragraphs.last.trim().isEmpty) {
-      paragraphs.removeLast();
-    }
-
-    final buffer = StringBuffer();
-    var blankPending = false;
-    for (final paragraph in paragraphs) {
-      if (paragraph.trim().isEmpty) {
-        blankPending = buffer.isNotEmpty;
-        continue;
-      }
-
-      if (_startsSupportNoteSection(paragraph) && buffer.isNotEmpty) {
-        blankPending = true;
-      }
-      if (buffer.isNotEmpty) {
-        buffer.write(blankPending ? '\n\n' : '\n');
-      }
-      buffer.write(paragraph);
-      blankPending = false;
-    }
-
-    return buffer.toString();
-  }
-
-  static bool _startsSupportNoteSection(String value) {
-    final normalized = value.trimLeft().toLowerCase();
-    return normalized.startsWith('outcome') ||
-        normalized.startsWith('next action') ||
-        normalized.startsWith('overall impression') ||
-        normalized.startsWith('referrals') ||
-        normalized.startsWith('safety concerns');
-  }
-
-  static String _unescapeXml(String value) {
-    return value
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&apos;', "'")
-        .replaceAll('&amp;', '&');
-  }
-
   static Future<List<int>> buildInvoicePeriodNoteDocx({
     required int invoiceNumber,
     required DateTime start,

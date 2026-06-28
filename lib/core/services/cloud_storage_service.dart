@@ -293,7 +293,6 @@ class CloudStorageService {
 
     return GoogleAuthProvider()
       ..addScope('https://www.googleapis.com/auth/drive.file')
-      ..addScope('https://www.googleapis.com/auth/documents')
       ..setCustomParameters(parameters);
   }
 

@@ -229,7 +229,6 @@ class GoogleExportAccountService {
       ..addScope('email')
       ..addScope('profile')
       ..addScope('https://www.googleapis.com/auth/drive.file')
-      ..addScope('https://www.googleapis.com/auth/documents')
       ..setCustomParameters(parameters);
 
     if (kIsWeb) return auth.signInWithPopup(provider);
