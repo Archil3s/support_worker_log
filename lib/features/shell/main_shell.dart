@@ -482,6 +482,33 @@ class _WorkflowStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tight = useTightWebSpacing(context);
+    final items = sections;
+    final selectedIndex = items.indexOf(selected);
+    final previous = selectedIndex > 0 ? items[selectedIndex - 1] : null;
+    final next = selectedIndex >= 0 && selectedIndex < items.length - 1
+        ? items[selectedIndex + 1]
+        : null;
+    final stepWidgets = <Widget>[];
+
+    for (var index = 0; index < items.length; index += 1) {
+      final item = items[index];
+      stepWidgets.add(
+        Expanded(
+          child: _WorkflowStep(
+            section: item,
+            selected: selected == item,
+            completed: selectedIndex > index,
+            onTap: () => onSelected(item),
+          ),
+        ),
+      );
+
+      if (index < items.length - 1) {
+        stepWidgets.add(
+          _WorkflowConnector(active: selectedIndex > index, compact: tight),
+        );
+      }
+    }
 
     return Container(
       height: tight ? 50 : 58,
@@ -494,15 +521,116 @@ class _WorkflowStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          for (final item in sections)
-            Expanded(
-              child: _WorkflowStep(
-                section: item,
-                selected: selected == item,
-                onTap: () => onSelected(item),
-              ),
+          if (previous != null) ...[
+            _WorkflowJumpButton(
+              key: const ValueKey('workflow-previous'),
+              section: previous,
+              forward: false,
+              onTap: () => onSelected(previous),
             ),
+            SizedBox(width: tight ? 4 : 6),
+          ],
+          Expanded(child: Row(children: stepWidgets)),
+          if (next != null) ...[
+            SizedBox(width: tight ? 4 : 6),
+            _WorkflowJumpButton(
+              key: const ValueKey('workflow-next'),
+              section: next,
+              forward: true,
+              onTap: () => onSelected(next),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _WorkflowJumpButton extends StatelessWidget {
+  const _WorkflowJumpButton({
+    super.key,
+    required this.section,
+    required this.forward,
+    required this.onTap,
+  });
+
+  final _Section section;
+  final bool forward;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tight = useTightWebSpacing(context);
+    final label = _workflowLabel(section);
+
+    return Tooltip(
+      message: '${forward ? 'Next' : 'Back'}: ${_workflowTooltip(section)}',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(tight ? 10 : 12),
+        onTap: onTap,
+        child: Container(
+          width: tight ? 96 : 124,
+          height: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0E1422),
+            borderRadius: BorderRadius.circular(tight ? 10 : 12),
+            border: Border.all(color: const Color(0xFF34405F)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (!forward) ...[
+                Icon(
+                  Icons.chevron_left_rounded,
+                  color: const Color(0xFFB8C7F3),
+                  size: tight ? 18 : 20,
+                ),
+                SizedBox(width: tight ? 2 : 4),
+              ],
+              Flexible(
+                child: Text(
+                  forward ? 'Next $label' : label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFFE7EEFF),
+                    fontSize: tight ? 11 : 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (forward) ...[
+                SizedBox(width: tight ? 2 : 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: const Color(0xFFB8C7F3),
+                  size: tight ? 18 : 20,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkflowConnector extends StatelessWidget {
+  const _WorkflowConnector({required this.active, required this.compact});
+
+  final bool active;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      width: compact ? 10 : 14,
+      height: 2,
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF4F8DF7) : const Color(0xFF34405F),
+        borderRadius: BorderRadius.circular(1),
       ),
     );
   }
@@ -512,11 +640,13 @@ class _WorkflowStep extends StatelessWidget {
   const _WorkflowStep({
     required this.section,
     required this.selected,
+    required this.completed,
     required this.onTap,
   });
 
   final _Section section;
   final bool selected;
+  final bool completed;
   final VoidCallback onTap;
 
   @override
@@ -547,7 +677,7 @@ class _WorkflowStep extends StatelessWidget {
             children: [
               Icon(
                 _workflowIcon(section, selected),
-                color: selected
+                color: selected || completed
                     ? const Color(0xFF4F8DF7)
                     : const Color(0xFF8396C7),
                 size: tight ? 18 : 20,
