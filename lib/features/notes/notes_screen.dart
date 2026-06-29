@@ -90,6 +90,15 @@ bool _shouldAutoSyncGoogleDoc(EntrySupportNoteStatus status) {
       status == EntrySupportNoteStatus.submitted;
 }
 
+String _friendlyErrorText(Object error) {
+  final text = error.toString().trim();
+  if (text.startsWith('Bad state: ')) {
+    return text.replaceFirst('Bad state: ', '');
+  }
+
+  return text;
+}
+
 String _dateTimeText(BuildContext context, DateTime value) {
   final time = TimeOfDay.fromDateTime(value).format(context);
   return '${formatDate(value)} $time';
@@ -109,6 +118,8 @@ class _NotesScreenState extends State<NotesScreen> {
   String? clientFilter;
   EntrySupportNoteStatus? statusFilter;
   bool syncingLivingDocs = false;
+  bool loadingLivingDocs = false;
+  List<LivingSupportDocumentSummary> livingDocs = const [];
 
   @override
   void dispose() {
@@ -150,7 +161,11 @@ class _NotesScreenState extends State<NotesScreen> {
       );
     } catch (error) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Folder selection failed: $error')),
+        SnackBar(
+          content: Text(
+            'Folder selection failed: ${_friendlyErrorText(error)}',
+          ),
+        ),
       );
     }
   }
@@ -183,11 +198,60 @@ class _NotesScreenState extends State<NotesScreen> {
       );
     } catch (error) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Living Google Docs sync failed: $error')),
+        SnackBar(
+          content: Text(
+            'Living Google Docs sync failed: ${_friendlyErrorText(error)}',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => syncingLivingDocs = false);
     }
+  }
+
+  Future<void> _loadLivingDocuments() async {
+    if (loadingLivingDocs) return;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => loadingLivingDocs = true);
+
+    try {
+      final results = await context
+          .read<AppState>()
+          .loadLivingSupportDocuments();
+      if (!mounted) return;
+
+      setState(() => livingDocs = results);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Loaded ${results.length} living docs.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Living Google Docs load failed: ${_friendlyErrorText(error)}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => loadingLivingDocs = false);
+    }
+  }
+
+  Future<void> _openLivingDocument(
+    LivingSupportDocumentSummary document,
+  ) async {
+    final link = document.openLink;
+    if (link == null || link.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('Living Google Doc link is missing.')),
+        );
+      return;
+    }
+
+    await _launchDriveLink(Uri.parse(link));
   }
 
   @override
@@ -222,7 +286,11 @@ class _NotesScreenState extends State<NotesScreen> {
         },
         onChooseFolder: _chooseFolder,
         onSyncLivingDocuments: _syncLivingDocuments,
+        onLoadLivingDocuments: _loadLivingDocuments,
+        onOpenLivingDocument: _openLivingDocument,
         syncingLivingDocs: syncingLivingDocs,
+        loadingLivingDocs: loadingLivingDocs,
+        livingDocs: livingDocs,
       ),
     );
   }
@@ -242,7 +310,11 @@ class _NotesListTab extends StatelessWidget {
     required this.onStatusFilterChanged,
     required this.onChooseFolder,
     required this.onSyncLivingDocuments,
+    required this.onLoadLivingDocuments,
+    required this.onOpenLivingDocument,
     required this.syncingLivingDocs,
+    required this.loadingLivingDocs,
+    required this.livingDocs,
   });
 
   final List<WorkEntry> entries;
@@ -257,7 +329,11 @@ class _NotesListTab extends StatelessWidget {
   final ValueChanged<EntrySupportNoteStatus?> onStatusFilterChanged;
   final VoidCallback onChooseFolder;
   final VoidCallback onSyncLivingDocuments;
+  final VoidCallback onLoadLivingDocuments;
+  final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
   final bool syncingLivingDocs;
+  final bool loadingLivingDocs;
+  final List<LivingSupportDocumentSummary> livingDocs;
 
   @override
   Widget build(BuildContext context) {
@@ -298,6 +374,31 @@ class _NotesListTab extends StatelessWidget {
                         : 'Sync Living Google Docs',
                   ),
                 ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: loadingLivingDocs ? null : onLoadLivingDocuments,
+                  icon: loadingLivingDocs
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.tab_outlined),
+                  label: Text(
+                    loadingLivingDocs
+                        ? 'Loading Living Google Docs'
+                        : 'Load Living Google Docs',
+                  ),
+                ),
+                if (livingDocs.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  for (final document in livingDocs) ...[
+                    _LivingDocumentTile(
+                      document: document,
+                      onOpen: () => onOpenLivingDocument(document),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
               ],
               const SizedBox(height: 10),
               Text(
@@ -380,6 +481,61 @@ class _NotesListTab extends StatelessWidget {
             const SizedBox(height: 12),
           ],
       ],
+    );
+  }
+}
+
+class _LivingDocumentTile extends StatelessWidget {
+  const _LivingDocumentTile({required this.document, required this.onOpen});
+
+  final LivingSupportDocumentSummary document;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF26385F)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            const Icon(Icons.description_outlined, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    document.personName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    document.file.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Open',
+              onPressed: onOpen,
+              icon: const Icon(Icons.open_in_new),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

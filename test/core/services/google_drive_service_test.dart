@@ -711,6 +711,56 @@ void main() {
     },
   );
 
+  test('listLivingSupportDocuments loads existing tabbed docs', () async {
+    final driveApi = _FakeGoogleDriveApi(
+      childrenByParent: {
+        'client-notes': [
+          const GoogleDriveFile(
+            id: 'ab-folder',
+            name: 'AB',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+          const GoogleDriveFile(
+            id: 'cd-folder',
+            name: 'CD',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+          const GoogleDriveFile(
+            id: 'loose-doc',
+            name: 'Loose Doc',
+            mimeType: _googleDocsMimeType,
+          ),
+        ],
+        'ab-folder': [
+          const GoogleDriveFile(
+            id: 'ab-living-folder',
+            name: 'Living Support Notes',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'cd-folder': const [],
+        'ab-living-folder': [
+          const GoogleDriveFile(
+            id: 'ab-living-doc',
+            name: 'AB - Living Support Notes',
+            mimeType: _googleDocsMimeType,
+            webViewLink: 'https://docs.example/ab-living-doc',
+          ),
+        ],
+      },
+    );
+    final service = GoogleDriveService(api: driveApi);
+
+    final results = await service.listLivingSupportDocuments(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+    );
+
+    expect(results.map((result) => result.personName), ['AB']);
+    expect(results.single.file.id, 'ab-living-doc');
+    expect(results.single.openLink, 'https://docs.example/ab-living-doc');
+  });
+
   test(
     'saveSupportNote replaces existing Google Docs notes through Drive',
     () async {

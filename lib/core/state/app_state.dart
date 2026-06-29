@@ -651,6 +651,32 @@ class AppState extends ChangeNotifier {
     return results;
   }
 
+  Future<List<LivingSupportDocumentSummary>>
+  loadLivingSupportDocuments() async {
+    if (!workGoogleServicesConnected) {
+      await connectWorkGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken();
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+
+    if (clientNotesFolderId == null || clientNotesFolderId.isEmpty) {
+      throw StateError('Google Drive client notes folder is not ready.');
+    }
+
+    final results = await _googleDriveService.listLivingSupportDocuments(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+
+    return results;
+  }
+
   Future<EntryDriveSupportNoteMeta?> _findEntryNoteForSync({
     required String accessToken,
     required WorkEntry entry,

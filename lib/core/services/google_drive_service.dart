@@ -242,6 +242,24 @@ class LivingSupportDocumentSyncResult {
   }
 }
 
+class LivingSupportDocumentSummary {
+  const LivingSupportDocumentSummary({
+    required this.personName,
+    required this.file,
+  });
+
+  final String personName;
+  final GoogleDriveFile file;
+
+  String? get openLink {
+    final link = file.webViewLink?.trim();
+    if (link != null && link.isNotEmpty) return link;
+
+    if (file.id.trim().isEmpty) return null;
+    return 'https://docs.google.com/document/d/${Uri.encodeComponent(file.id)}/edit';
+  }
+}
+
 class _LivingSupportTab {
   const _LivingSupportTab({
     required this.id,
@@ -1202,6 +1220,51 @@ class GoogleDriveService {
       );
     }
 
+    return results;
+  }
+
+  Future<List<LivingSupportDocumentSummary>> listLivingSupportDocuments({
+    required String accessToken,
+    required String clientNotesFolderId,
+  }) async {
+    final clientFolders = await listFolder(
+      accessToken: accessToken,
+      folderId: clientNotesFolderId,
+    );
+    final results = <LivingSupportDocumentSummary>[];
+
+    for (final clientFolder in clientFolders) {
+      if (clientFolder.mimeType != 'application/vnd.google-apps.folder') {
+        continue;
+      }
+
+      final livingFolder = await _findChild(
+        accessToken: accessToken,
+        parentId: clientFolder.id,
+        name: _livingSupportFolderName,
+        mimeType: 'application/vnd.google-apps.folder',
+      );
+      if (livingFolder == null) continue;
+
+      final documentName =
+          '${_folderName(clientFolder.name)} - Living Support Notes';
+      final document = await _findChild(
+        accessToken: accessToken,
+        parentId: livingFolder.id,
+        name: documentName,
+        mimeType: _googleDocsMimeType,
+      );
+      if (document == null) continue;
+
+      results.add(
+        LivingSupportDocumentSummary(
+          personName: clientFolder.name,
+          file: document,
+        ),
+      );
+    }
+
+    results.sort((a, b) => a.personName.compareTo(b.personName));
     return results;
   }
 
