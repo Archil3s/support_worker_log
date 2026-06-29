@@ -587,8 +587,35 @@ class AppState extends ChangeNotifier {
 
   Future<List<LivingSupportDocumentSyncResult>>
   syncLivingSupportDocumentsFromEntries() async {
-    if (_entries.isEmpty) {
-      throw StateError('No saved work entries to sync.');
+    return _syncLivingSupportDocumentsFromWorkEntries(
+      entries: _entries,
+      emptyMessage: 'No saved work entries to sync.',
+    );
+  }
+
+  Future<List<LivingSupportDocumentSyncResult>>
+  syncCurrentPayPeriodLivingSupportDocumentsFromEntries({
+    DateTime? today,
+  }) async {
+    final range = fortnightForDate(
+      today ?? DateTime.now(),
+      anchorDate: _settings.payPeriodAnchorDate,
+    );
+    final currentEntries = entriesInRange(_entries, range);
+
+    return _syncLivingSupportDocumentsFromWorkEntries(
+      entries: currentEntries,
+      emptyMessage: 'No work notes in the current pay period to import.',
+    );
+  }
+
+  Future<List<LivingSupportDocumentSyncResult>>
+  _syncLivingSupportDocumentsFromWorkEntries({
+    required List<WorkEntry> entries,
+    required String emptyMessage,
+  }) async {
+    if (entries.isEmpty) {
+      throw StateError(emptyMessage);
     }
 
     if (!workGoogleServicesConnected) {
@@ -605,7 +632,7 @@ class AppState extends ChangeNotifier {
 
     final livingEntries = <LivingSupportDocumentEntry>[];
 
-    for (final entry in _entries) {
+    for (final entry in entries) {
       final loadedLocal =
           _supportNoteMetas[entry.id] ??
           await LocalSupportNoteService.loadMeta(entry.id);
