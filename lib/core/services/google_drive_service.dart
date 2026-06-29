@@ -1309,6 +1309,7 @@ class GoogleDriveService {
     DateTime? payPeriodAnchorDate,
   }) async {
     final typeTabName = _livingSupportTypeTabName(item.entry.type);
+    final childPrefix = _livingSupportChildTabPrefix(item.entry.type);
     final typeTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
@@ -1316,7 +1317,7 @@ class GoogleDriveService {
     );
     final invoiceTitle = await _livingSupportInvoiceTabName(
       item.entry,
-      typeTabName: typeTabName,
+      typePrefix: childPrefix,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
     final legacyInvoiceTitle = await _legacyLivingSupportInvoiceTabName(
@@ -1328,17 +1329,23 @@ class GoogleDriveService {
       documentId: documentId,
       title: invoiceTitle,
       parentTabId: typeTab.id,
-      existingTitles: [legacyInvoiceTitle],
+      existingTitles: [
+        legacyInvoiceTitle,
+        '$typeTabName - $legacyInvoiceTitle',
+      ],
     );
     final dateTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
       title: _livingSupportDateTabName(
         item.entry.date,
-        typeTabName: typeTabName,
+        typePrefix: childPrefix,
       ),
       parentTabId: invoiceTab.id,
-      existingTitles: [_legacyLivingSupportDateTabName(item.entry.date)],
+      existingTitles: [
+        _legacyLivingSupportDateTabName(item.entry.date),
+        '$typeTabName - ${_legacyLivingSupportDateTabName(item.entry.date)}',
+      ],
     );
     final document = await _docsApi.getDocument(
       accessToken: accessToken,
@@ -1684,17 +1691,38 @@ class GoogleDriveService {
     }
   }
 
+  String _livingSupportChildTabPrefix(EntryType type) {
+    switch (type) {
+      case EntryType.textNote:
+        return 'Texts';
+      case EntryType.phoneCall:
+        return 'Phone';
+      case EntryType.videoCall:
+        return 'Video';
+      case EntryType.emailClient:
+      case EntryType.emailProfessional:
+        return 'Emails';
+      case EntryType.adminEducationResources:
+        return 'Admin';
+      case EntryType.homeVisit:
+        return 'Home';
+      case EntryType.professionalContact:
+        return 'Pro';
+    }
+  }
+
   Future<String> _livingSupportInvoiceTabName(
     WorkEntry entry, {
-    required String typeTabName,
+    required String typePrefix,
     DateTime? payPeriodAnchorDate,
   }) async {
-    final legacyTitle = await _legacyLivingSupportInvoiceTabName(
-      entry,
-      payPeriodAnchorDate: payPeriodAnchorDate,
+    final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
+      range,
+      anchorDate: payPeriodAnchorDate,
     );
 
-    return '$typeTabName - $legacyTitle';
+    return '$typePrefix Inv $invoiceNumber ${_dateKey(range.start)} to ${_dateKey(range.end)}';
   }
 
   Future<String> _legacyLivingSupportInvoiceTabName(
@@ -1717,9 +1745,9 @@ class GoogleDriveService {
 
   String _livingSupportDateTabName(
     DateTime date, {
-    required String typeTabName,
+    required String typePrefix,
   }) {
-    return '$typeTabName - ${_dateKey(date)}';
+    return '$typePrefix ${_dateKey(date)}';
   }
 
   String _legacyLivingSupportDateTabName(DateTime date) {

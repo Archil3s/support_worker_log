@@ -614,8 +614,8 @@ void main() {
       );
       expect(docsApi.addedTabs.map((tab) => tab.title), [
         'Phone Calls',
-        'Phone Calls - Invoice 10 - 2026-05-31 to 2026-06-13',
-        'Phone Calls - 2026-06-02',
+        'Phone Inv 10 2026-05-31 to 2026-06-13',
+        'Phone 2026-06-02',
       ]);
       expect(docsApi.insertedText.single, contains('Note status: Finished'));
       expect(
@@ -673,12 +673,13 @@ void main() {
 
       expect(docsApi.addedTabs.map((tab) => tab.title), [
         'Phone Calls',
-        'Phone Calls - Invoice 10 - 2026-05-31 to 2026-06-13',
-        'Phone Calls - 2026-06-02',
+        'Phone Inv 10 2026-05-31 to 2026-06-13',
+        'Phone 2026-06-02',
         'Texts',
-        'Texts - Invoice 10 - 2026-05-31 to 2026-06-13',
-        'Texts - 2026-06-02',
+        'Texts Inv 10 2026-05-31 to 2026-06-13',
+        'Texts 2026-06-02',
       ]);
+      expect(docsApi.addedTabs.every((tab) => tab.title.length <= 50), true);
     },
   );
 
@@ -1282,6 +1283,11 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
         final properties = addDocumentTab['tabProperties'];
         if (properties is Map) {
           final title = properties['title'] as String? ?? 'Tab';
+          if (title.length > 50) {
+            throw StateError(
+              'The tab title cannot be longer than 50 characters.',
+            );
+          }
           if (tabs.any((tab) => tab.title == title)) {
             throw StateError('Tab title must be unique.');
           }
