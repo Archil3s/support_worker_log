@@ -46,7 +46,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  _Section section = _Section.actions;
+  _Section section = _Section.quick;
 
   int get navIndex {
     switch (section) {
@@ -182,9 +182,9 @@ class _MainShellState extends State<MainShell> {
 
   List<_Section> _railSections(AppMode mode) {
     return [
-      _Section.actions,
       _Section.quick,
       _Section.notes,
+      _Section.actions,
       _Section.calendar,
       _Section.entries,
       if (mode != AppMode.paye) _Section.pay,
@@ -281,6 +281,7 @@ class _MainShellState extends State<MainShell> {
             : groceryMode && wide
             ? 1240.0
             : maxContentWidth;
+        final showFlowStrip = wide && !standaloneMode;
 
         return Scaffold(
           appBar: AppBar(
@@ -297,7 +298,7 @@ class _MainShellState extends State<MainShell> {
                     appState.setAppMode(mode);
                     if (mode == AppMode.paye &&
                         (section == _Section.pay || section == _Section.tax)) {
-                      setState(() => section = _Section.actions);
+                      setState(() => section = _Section.quick);
                     }
                   },
                   itemBuilder: (context) => const [
@@ -406,6 +407,13 @@ class _MainShellState extends State<MainShell> {
                       constraints: BoxConstraints(maxWidth: contentWidth),
                       child: Column(
                         children: [
+                          if (showFlowStrip)
+                            _WorkflowStrip(
+                              key: const ValueKey('desktop-workflow-strip'),
+                              selected: section,
+                              onSelected: _go,
+                              showPay: appMode != AppMode.paye,
+                            ),
                           if (!cleaningMode && !groceryMode)
                             GoogleDriveConnectionWarning(
                               scope: _driveScope(appMode),
@@ -448,6 +456,123 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
+class _WorkflowStrip extends StatelessWidget {
+  const _WorkflowStrip({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+    required this.showPay,
+  });
+
+  final _Section selected;
+  final ValueChanged<_Section> onSelected;
+  final bool showPay;
+
+  List<_Section> get sections {
+    return [
+      _Section.quick,
+      _Section.notes,
+      _Section.actions,
+      _Section.calendar,
+      _Section.entries,
+      if (showPay) _Section.pay,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tight = useTightWebSpacing(context);
+
+    return Container(
+      height: tight ? 50 : 58,
+      margin: EdgeInsets.fromLTRB(8, tight ? 4 : 8, 8, tight ? 6 : 8),
+      padding: EdgeInsets.all(tight ? 4 : 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(tight ? 14 : 18),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Row(
+        children: [
+          for (final item in sections)
+            Expanded(
+              child: _WorkflowStep(
+                section: item,
+                selected: selected == item,
+                onTap: () => onSelected(item),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkflowStep extends StatelessWidget {
+  const _WorkflowStep({
+    required this.section,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _Section section;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tight = useTightWebSpacing(context);
+
+    return Tooltip(
+      message: _workflowTooltip(section),
+      child: InkWell(
+        key: ValueKey('workflow-step-${section.name}'),
+        borderRadius: BorderRadius.circular(tight ? 10 : 13),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          height: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF13294D) : Colors.transparent,
+            borderRadius: BorderRadius.circular(tight ? 10 : 13),
+            border: Border.all(
+              color: selected ? const Color(0xFF4F8DF7) : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _workflowIcon(section, selected),
+                color: selected
+                    ? const Color(0xFF4F8DF7)
+                    : const Color(0xFF8396C7),
+                size: tight ? 18 : 20,
+              ),
+              SizedBox(width: tight ? 6 : 8),
+              Flexible(
+                child: Text(
+                  _workflowLabel(section),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : const Color(0xFFB8C7F3),
+                    fontSize: tight ? 12 : 13,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _KeyboardAwareBottomNav extends StatelessWidget {
   const _KeyboardAwareBottomNav({
     required this.selectedIndex,
@@ -473,6 +598,93 @@ class _KeyboardAwareBottomNav extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+IconData _workflowIcon(_Section section, bool selected) {
+  switch (section) {
+    case _Section.quick:
+      return selected ? Icons.bolt_rounded : Icons.bolt_outlined;
+    case _Section.notes:
+      return selected ? Icons.note_alt_rounded : Icons.note_alt_outlined;
+    case _Section.actions:
+      return selected
+          ? Icons.checklist_rtl_rounded
+          : Icons.checklist_rtl_outlined;
+    case _Section.calendar:
+      return selected
+          ? Icons.calendar_month_rounded
+          : Icons.calendar_month_outlined;
+    case _Section.entries:
+      return selected ? Icons.list_alt_rounded : Icons.list_alt_outlined;
+    case _Section.pay:
+      return selected
+          ? Icons.receipt_long_rounded
+          : Icons.receipt_long_outlined;
+    case _Section.admin:
+    case _Section.charts:
+    case _Section.more:
+    case _Section.home:
+    case _Section.tax:
+    case _Section.drive:
+    case _Section.settings:
+      return selected ? Icons.more_horiz_rounded : Icons.more_horiz_outlined;
+  }
+}
+
+String _workflowLabel(_Section section) {
+  switch (section) {
+    case _Section.quick:
+      return 'Start';
+    case _Section.notes:
+      return 'Notes';
+    case _Section.actions:
+      return 'Actions';
+    case _Section.calendar:
+      return 'Calendar';
+    case _Section.entries:
+      return 'Entries';
+    case _Section.pay:
+      return 'Pay';
+    case _Section.admin:
+    case _Section.charts:
+    case _Section.more:
+    case _Section.home:
+    case _Section.tax:
+    case _Section.drive:
+    case _Section.settings:
+      return 'More';
+  }
+}
+
+String _workflowTooltip(_Section section) {
+  switch (section) {
+    case _Section.quick:
+      return 'Quick Entry';
+    case _Section.notes:
+      return 'Notes';
+    case _Section.actions:
+      return 'Actions';
+    case _Section.calendar:
+      return 'Calendar';
+    case _Section.entries:
+      return 'Entries';
+    case _Section.pay:
+      return 'Pay Period';
+    case _Section.admin:
+      return 'Admin Review';
+    case _Section.charts:
+      return 'Charts';
+    case _Section.more:
+      return 'More';
+    case _Section.home:
+      return 'Dashboard';
+    case _Section.tax:
+      return 'Tax';
+    case _Section.drive:
+      return 'Google Drive';
+    case _Section.settings:
+      return 'Settings';
   }
 }
 
