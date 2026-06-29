@@ -1308,25 +1308,37 @@ class GoogleDriveService {
     required LivingSupportDocumentEntry item,
     DateTime? payPeriodAnchorDate,
   }) async {
+    final typeTabName = _livingSupportTypeTabName(item.entry.type);
     final typeTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
-      title: _livingSupportTypeTabName(item.entry.type),
+      title: typeTabName,
+    );
+    final invoiceTitle = await _livingSupportInvoiceTabName(
+      item.entry,
+      typeTabName: typeTabName,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+    final legacyInvoiceTitle = await _legacyLivingSupportInvoiceTabName(
+      item.entry,
+      payPeriodAnchorDate: payPeriodAnchorDate,
     );
     final invoiceTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
-      title: await _livingSupportInvoiceTabName(
-        item.entry,
-        payPeriodAnchorDate: payPeriodAnchorDate,
-      ),
+      title: invoiceTitle,
       parentTabId: typeTab.id,
+      existingTitles: [legacyInvoiceTitle],
     );
     final dateTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
-      title: _livingSupportDateTabName(item.entry.date),
+      title: _livingSupportDateTabName(
+        item.entry.date,
+        typeTabName: typeTabName,
+      ),
       parentTabId: invoiceTab.id,
+      existingTitles: [_legacyLivingSupportDateTabName(item.entry.date)],
     );
     final document = await _docsApi.getDocument(
       accessToken: accessToken,
@@ -1378,14 +1390,17 @@ class GoogleDriveService {
     required String documentId,
     required String title,
     String? parentTabId,
+    List<String> existingTitles = const [],
   }) async {
     final document = await _docsApi.getDocument(
       accessToken: accessToken,
       documentId: documentId,
     );
     _LivingSupportTab? existing;
+    final acceptedTitles = {title, ...existingTitles};
     for (final tab in _livingSupportTabsFromDocument(document)) {
-      if (tab.title == title && (tab.parentId ?? '') == (parentTabId ?? '')) {
+      if (acceptedTitles.contains(tab.title) &&
+          (tab.parentId ?? '') == (parentTabId ?? '')) {
         existing = tab;
         break;
       }
@@ -1671,6 +1686,19 @@ class GoogleDriveService {
 
   Future<String> _livingSupportInvoiceTabName(
     WorkEntry entry, {
+    required String typeTabName,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final legacyTitle = await _legacyLivingSupportInvoiceTabName(
+      entry,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+
+    return '$typeTabName - $legacyTitle';
+  }
+
+  Future<String> _legacyLivingSupportInvoiceTabName(
+    WorkEntry entry, {
     DateTime? payPeriodAnchorDate,
   }) async {
     final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
@@ -1687,7 +1715,14 @@ class GoogleDriveService {
     return '${_dateKey(range.start)} to ${_dateKey(range.end)}';
   }
 
-  String _livingSupportDateTabName(DateTime date) {
+  String _livingSupportDateTabName(
+    DateTime date, {
+    required String typeTabName,
+  }) {
+    return '$typeTabName - ${_dateKey(date)}';
+  }
+
+  String _legacyLivingSupportDateTabName(DateTime date) {
     return _dateKey(date);
   }
 

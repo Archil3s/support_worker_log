@@ -614,8 +614,8 @@ void main() {
       );
       expect(docsApi.addedTabs.map((tab) => tab.title), [
         'Phone Calls',
-        'Invoice 10 - 2026-05-31 to 2026-06-13',
-        '2026-06-02',
+        'Phone Calls - Invoice 10 - 2026-05-31 to 2026-06-13',
+        'Phone Calls - 2026-06-02',
       ]);
       expect(docsApi.insertedText.single, contains('Note status: Finished'));
       expect(
@@ -626,6 +626,59 @@ void main() {
         docsApi.insertedText.single,
         contains('Called client about appointment.'),
       );
+    },
+  );
+
+  test(
+    'syncLivingSupportDocuments creates unique nested tab titles per type',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(children: const []);
+      final docsApi = _FakeGoogleDocsApi();
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      await service.syncLivingSupportDocuments(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'phone-entry',
+              client: 'AB',
+              type: EntryType.phoneCall,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Called client'],
+            ),
+            personName: 'AB',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'Phone note.',
+          ),
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'text-entry',
+              client: 'AB',
+              type: EntryType.textNote,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 10, minute: 15),
+              minutes: 10,
+              notes: const ['Texted client'],
+            ),
+            personName: 'AB',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'Text note.',
+          ),
+        ],
+      );
+
+      expect(docsApi.addedTabs.map((tab) => tab.title), [
+        'Phone Calls',
+        'Phone Calls - Invoice 10 - 2026-05-31 to 2026-06-13',
+        'Phone Calls - 2026-06-02',
+        'Texts',
+        'Texts - Invoice 10 - 2026-05-31 to 2026-06-13',
+        'Texts - 2026-06-02',
+      ]);
     },
   );
 
@@ -1228,9 +1281,13 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
       if (addDocumentTab is Map) {
         final properties = addDocumentTab['tabProperties'];
         if (properties is Map) {
+          final title = properties['title'] as String? ?? 'Tab';
+          if (tabs.any((tab) => tab.title == title)) {
+            throw StateError('Tab title must be unique.');
+          }
           final tab = _FakeGoogleDocTab(
             id: 'tab-${_nextTab++}',
-            title: properties['title'] as String? ?? 'Tab',
+            title: title,
             parentId: properties['parentTabId'] as String?,
           );
           tabs.add(tab);
