@@ -478,6 +478,103 @@ void main() {
     expect(noteUpload.parentId, contains('/Phone Calls'));
   });
 
+  test('saveSupportNote files finished phone calls under Finished', () async {
+    final api = _FakeGoogleDriveApi(children: const []);
+    final service = GoogleDriveService(api: api);
+
+    final meta = await service.saveSupportNote(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.phoneCall,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 30,
+        notes: const ['Phone call'],
+      ),
+      initials: 'AB',
+      status: EntrySupportNoteStatus.finished,
+      noteText: 'Main topic(s)\nPhone call finished',
+    );
+
+    final noteUpload = api.uploads.singleWhere(
+      (upload) => upload.name.endsWith('_AB_finished'),
+    );
+
+    expect(noteUpload.parentId, contains('/Phone Calls/Finished'));
+    expect(meta.parentFolderId, contains('/Phone Calls/Finished'));
+  });
+
+  test('findSupportNoteInDrive finds completed notes under Finished', () async {
+    final api = _FakeGoogleDriveApi(
+      childrenByParent: {
+        'client-notes': [
+          const GoogleDriveFile(
+            id: 'client-folder',
+            name: 'AB',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'client-folder': [
+          const GoogleDriveFile(
+            id: 'period-folder',
+            name: 'Invoice 10 - 2026-05-31 to 2026-06-13',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'period-folder': [
+          const GoogleDriveFile(
+            id: 'type-folder',
+            name: 'Phone Calls',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+        ],
+        'type-folder': [
+          const GoogleDriveFile(
+            id: 'finished-folder',
+            name: 'Finished',
+            mimeType: 'application/vnd.google-apps.folder',
+          ),
+          const GoogleDriveFile(
+            id: 'draft-note',
+            name: '2026-06-02_AB_in-progress',
+            mimeType: _googleDocsMimeType,
+          ),
+        ],
+        'finished-folder': [
+          const GoogleDriveFile(
+            id: 'finished-note',
+            name: '2026-06-02_AB_finished',
+            mimeType: _googleDocsMimeType,
+            webViewLink: 'https://docs.example/finished-note',
+          ),
+        ],
+      },
+    );
+    final service = GoogleDriveService(api: api);
+
+    final meta = await service.findSupportNoteInDrive(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entry: WorkEntry(
+        id: 'entry-1',
+        client: 'AB',
+        type: EntryType.phoneCall,
+        date: DateTime(2026, 6, 2),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 30,
+        notes: const ['Phone call'],
+      ),
+    );
+
+    expect(meta?.fileId, 'finished-note');
+    expect(meta?.status, EntrySupportNoteStatus.finished);
+    expect(meta?.parentFolderId, 'finished-folder');
+    expect(meta?.openLink, 'https://docs.example/finished-note');
+  });
+
   test(
     'saveSupportNote replaces existing Google Docs notes through Drive',
     () async {

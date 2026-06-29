@@ -479,38 +479,24 @@ class GoogleDriveService {
     DateTime? payPeriodAnchorDate,
     String? googleAccountEmail,
   }) async {
-    final folder = await _findExistingSupportNoteFolder(
+    final folders = await _findExistingSupportNoteFolders(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
       entry: entry,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
-    if (folder == null) return null;
+    if (folders.isEmpty) return null;
 
-    final files = await listFolder(
+    final matches = await _findSupportNoteFilesInFolders(
       accessToken: accessToken,
-      folderId: folder.id,
+      folders: folders,
+      entry: entry,
     );
-    final datePrefix = '${_dateKey(entry.date)}_';
-    final matches =
-        files
-            .where(
-              (file) =>
-                  file.name.startsWith(datePrefix) &&
-                  (file.mimeType == _googleDocsMimeType ||
-                      file.mimeType == _docxMimeType),
-            )
-            .toList()
-          ..sort((a, b) {
-            if (a.mimeType != b.mimeType) {
-              return a.mimeType == _googleDocsMimeType ? -1 : 1;
-            }
-            return b.name.compareTo(a.name);
-          });
 
     if (matches.isEmpty) return null;
 
-    final file = matches.first;
+    final match = matches.first;
+    final file = match.file;
     return EntryDriveSupportNoteMeta(
       entryId: entry.id,
       initials: LocalSupportNoteService.personNameForEntry(entry),
@@ -519,24 +505,42 @@ class GoogleDriveService {
       fileName: file.name,
       noteText: '',
       mimeType: file.mimeType,
-      parentFolderId: folder.id,
+      parentFolderId: match.folder.id,
       webViewLink: file.webViewLink,
       contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
       googleAccountEmail: googleAccountEmail?.trim(),
     );
   }
 
-  Future<GoogleDriveFile?> _findSupportNoteFileInFolder({
+  Future<GoogleDriveFile?> _findSupportNoteFileInFolders({
     required String accessToken,
-    required String folderId,
+    required List<GoogleDriveFile> folders,
     required WorkEntry entry,
   }) async {
-    final files = await listFolder(
+    final matches = await _findSupportNoteFilesInFolders(
       accessToken: accessToken,
-      folderId: folderId,
+      folders: folders,
+      entry: entry,
     );
+
+    return matches.isEmpty ? null : matches.first.file;
+  }
+
+  Future<List<({GoogleDriveFile file, GoogleDriveFile folder})>>
+  _findSupportNoteFilesInFolders({
+    required String accessToken,
+    required List<GoogleDriveFile> folders,
+    required WorkEntry entry,
+  }) async {
+    final matches = <({GoogleDriveFile file, GoogleDriveFile folder})>[];
     final datePrefix = '${_dateKey(entry.date)}_';
-    final matches =
+
+    for (final folder in folders) {
+      final files = await listFolder(
+        accessToken: accessToken,
+        folderId: folder.id,
+      );
+      matches.addAll(
         files
             .where(
               (file) =>
@@ -544,15 +548,26 @@ class GoogleDriveService {
                   (file.mimeType == _googleDocsMimeType ||
                       file.mimeType == _docxMimeType),
             )
-            .toList()
-          ..sort((a, b) {
-            if (a.mimeType != b.mimeType) {
-              return a.mimeType == _googleDocsMimeType ? -1 : 1;
-            }
-            return b.name.compareTo(a.name);
-          });
+            .map((file) => (file: file, folder: folder)),
+      );
+    }
 
-    return matches.isEmpty ? null : matches.first;
+    matches.sort((a, b) {
+      final statusRank =
+          _supportNoteStatusRank(
+            _statusFromSupportNoteFileName(b.file.name),
+          ).compareTo(
+            _supportNoteStatusRank(_statusFromSupportNoteFileName(a.file.name)),
+          );
+      if (statusRank != 0) return statusRank;
+
+      if (a.file.mimeType != b.file.mimeType) {
+        return a.file.mimeType == _googleDocsMimeType ? -1 : 1;
+      }
+      return b.file.name.compareTo(a.file.name);
+    });
+
+    return matches;
   }
 
   Future<EntryDriveSupportNoteMeta?> findPayeNoteInDrive({
@@ -669,7 +684,7 @@ class GoogleDriveService {
     );
   }
 
-  Future<GoogleDriveFile?> _findExistingSupportNoteFolder({
+  Future<List<GoogleDriveFile>> _findExistingSupportNoteFolders({
     required String accessToken,
     required String clientNotesFolderId,
     required WorkEntry entry,
@@ -686,7 +701,7 @@ class GoogleDriveService {
       name: _folderName(entry.client),
       mimeType: 'application/vnd.google-apps.folder',
     );
-    if (clientFolder == null) return null;
+    if (clientFolder == null) return const [];
 
     final periodFolder =
         await _findChild(
@@ -700,14 +715,24 @@ class GoogleDriveService {
           clientFolderId: clientFolder.id,
           entry: entry,
         );
-    if (periodFolder == null) return null;
+    if (periodFolder == null) return const [];
 
-    return _findChild(
+    final typeFolder = await _findChild(
       accessToken: accessToken,
       parentId: periodFolder.id,
       name: _supportNoteTypeFolderName(entry.type),
       mimeType: 'application/vnd.google-apps.folder',
     );
+    if (typeFolder == null) return const [];
+
+    final finishedFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: typeFolder.id,
+      name: _finishedSupportNoteFolderName,
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+
+    return [typeFolder, ?finishedFolder];
   }
 
   Future<GoogleDriveFile?> _findSupportNotePeriodFolderFallback({
@@ -732,18 +757,18 @@ class GoogleDriveService {
       );
       if (typeFolder == null) continue;
 
-      final files = await listFolder(
+      final finishedFolder = await _findChild(
         accessToken: accessToken,
-        folderId: typeFolder.id,
+        parentId: typeFolder.id,
+        name: _finishedSupportNoteFolderName,
+        mimeType: 'application/vnd.google-apps.folder',
       );
-      final datePrefix = '${_dateKey(entry.date)}_';
-      final hasMatchingFile = files.any(
-        (file) =>
-            file.name.startsWith(datePrefix) &&
-            (file.mimeType == _docxMimeType ||
-                file.mimeType == _googleDocsMimeType),
+      final matches = await _findSupportNoteFilesInFolders(
+        accessToken: accessToken,
+        folders: [typeFolder, ?finishedFolder],
+        entry: entry,
       );
-      if (hasMatchingFile) return folder;
+      if (matches.isNotEmpty) return folder;
     }
 
     return null;
@@ -955,12 +980,21 @@ class GoogleDriveService {
     }
 
     final displayEntry = entry.copyWith(client: cleanedInitials);
-    final periodFolder = await findOrCreateSupportNoteFolder(
+    final typeFolder = await findOrCreateSupportNoteFolder(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
       entry: displayEntry,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
+    final targetFolder = await _supportNoteTargetFolder(
+      accessToken: accessToken,
+      typeFolder: typeFolder,
+      status: status,
+    );
+    final discoveryFolders = [
+      targetFolder,
+      if (targetFolder.id != typeFolder.id) typeFolder,
+    ];
     final canonicalNoteText = LocalSupportNoteService.canonicalSupportNoteText(
       noteText,
       fallbackNoteText: LocalSupportNoteService.defaultNoteTextForEntry(
@@ -992,9 +1026,9 @@ class GoogleDriveService {
         existingFileId.isNotEmpty;
     final discoveredExistingFile = canUpdateExistingGoogleDoc
         ? null
-        : await _findSupportNoteFileInFolder(
+        : await _findSupportNoteFileInFolders(
             accessToken: accessToken,
-            folderId: periodFolder.id,
+            folders: discoveryFolders,
             entry: displayEntry,
           );
     final canUpdateDiscoveredGoogleDoc =
@@ -1003,7 +1037,7 @@ class GoogleDriveService {
         ? await _replaceGoogleDocThroughDrive(
             accessToken: accessToken,
             oldFileId: existingFileId,
-            parentId: periodFolder.id,
+            parentId: targetFolder.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
             bytes: bytes,
           )
@@ -1011,13 +1045,13 @@ class GoogleDriveService {
         ? await _replaceGoogleDocThroughDrive(
             accessToken: accessToken,
             oldFileId: discoveredExistingFile!.id,
-            parentId: periodFolder.id,
+            parentId: targetFolder.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
             bytes: bytes,
           )
         : await uploadOrUpdateFile(
             accessToken: accessToken,
-            parentId: periodFolder.id,
+            parentId: targetFolder.id,
             name: _supportNoteGoogleDocName(displayEntry, status),
             mimeType: _googleDocsMimeType,
             bytes: bytes,
@@ -1032,7 +1066,7 @@ class GoogleDriveService {
       fileName: file.name,
       noteText: canonicalNoteText,
       mimeType: file.mimeType,
-      parentFolderId: periodFolder.id,
+      parentFolderId: targetFolder.id,
       webViewLink: file.webViewLink,
       contentFormat: EntryDriveSupportNoteMeta.stableContentFormat,
       googleAccountEmail: currentGoogleAccountEmail,
@@ -1060,6 +1094,22 @@ class GoogleDriveService {
     await _api.deleteFile(accessToken: accessToken, fileId: oldFileId);
 
     return replacement;
+  }
+
+  Future<GoogleDriveFile> _supportNoteTargetFolder({
+    required String accessToken,
+    required GoogleDriveFile typeFolder,
+    required EntrySupportNoteStatus status,
+  }) {
+    if (!_isCompletedSupportNoteStatus(status)) {
+      return Future.value(typeFolder);
+    }
+
+    return findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: typeFolder.id,
+      name: _finishedSupportNoteFolderName,
+    );
   }
 
   String _folderName(String value) {
@@ -1093,6 +1143,22 @@ class GoogleDriveService {
       case EntryType.professionalContact:
         return 'Professional Contacts';
     }
+  }
+
+  static const _finishedSupportNoteFolderName = 'Finished';
+
+  bool _isCompletedSupportNoteStatus(EntrySupportNoteStatus status) {
+    return status == EntrySupportNoteStatus.finished ||
+        status == EntrySupportNoteStatus.submitted;
+  }
+
+  int _supportNoteStatusRank(EntrySupportNoteStatus status) {
+    return switch (status) {
+      EntrySupportNoteStatus.incomplete => 0,
+      EntrySupportNoteStatus.inProgress => 1,
+      EntrySupportNoteStatus.finished => 2,
+      EntrySupportNoteStatus.submitted => 3,
+    };
   }
 
   String _personalCategoryFolderName(PersonalLogCategory category) {
