@@ -585,6 +585,72 @@ class AppState extends ChangeNotifier {
     return updatedMeta;
   }
 
+  Future<List<LivingSupportDocumentSyncResult>>
+  syncLivingSupportDocumentsFromEntries() async {
+    if (_entries.isEmpty) {
+      throw StateError('No saved work entries to sync.');
+    }
+
+    if (!workGoogleServicesConnected) {
+      await connectWorkGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken();
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+
+    if (clientNotesFolderId == null || clientNotesFolderId.isEmpty) {
+      throw StateError('Google Drive client notes folder is not ready.');
+    }
+
+    final livingEntries = <LivingSupportDocumentEntry>[];
+
+    for (final entry in _entries) {
+      final loadedLocal =
+          _supportNoteMetas[entry.id] ??
+          await LocalSupportNoteService.loadMeta(entry.id);
+      final loadedDrive =
+          _driveSupportNoteMetas[entry.id] ??
+          await _googleDriveService.loadSupportNoteMeta(entry.id);
+      final status = _preferredSupportNoteStatus(
+        loadedLocal?.status,
+        loadedDrive?.status,
+      );
+      final personName = _livingSupportPersonName(
+        entry: entry,
+        localMeta: loadedLocal,
+        driveMeta: loadedDrive,
+      );
+      final noteText = _livingSupportNoteText(
+        entry: entry,
+        localMeta: loadedLocal,
+        driveMeta: loadedDrive,
+      );
+
+      livingEntries.add(
+        LivingSupportDocumentEntry(
+          entry: entry,
+          personName: personName,
+          status: status,
+          noteText: noteText,
+        ),
+      );
+    }
+
+    final results = await _googleDriveService.syncLivingSupportDocuments(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entries: livingEntries,
+      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+
+    return results;
+  }
+
   Future<EntryDriveSupportNoteMeta?> _findEntryNoteForSync({
     required String accessToken,
     required WorkEntry entry,
@@ -2159,6 +2225,62 @@ class AppState extends ChangeNotifier {
       EntrySupportNoteStatus.finished => 2,
       EntrySupportNoteStatus.submitted => 3,
     };
+  }
+
+  EntrySupportNoteStatus _preferredSupportNoteStatus(
+    EntrySupportNoteStatus? local,
+    EntrySupportNoteStatus? drive,
+  ) {
+    if (local == null) {
+      return drive ?? EntrySupportNoteStatus.incomplete;
+    }
+    if (drive == null) return local;
+
+    return _supportNoteStatusRank(drive) > _supportNoteStatusRank(local)
+        ? drive
+        : local;
+  }
+
+  String _livingSupportPersonName({
+    required WorkEntry entry,
+    EntrySupportNoteMeta? localMeta,
+    EntryDriveSupportNoteMeta? driveMeta,
+  }) {
+    final candidates = [
+      localMeta?.initials,
+      driveMeta?.initials,
+      LocalSupportNoteService.personNameForEntry(entry),
+      entry.client,
+    ];
+
+    for (final candidate in candidates) {
+      final cleaned = candidate?.trim();
+      if (cleaned != null && cleaned.isNotEmpty) return cleaned;
+    }
+
+    return 'Unknown Client';
+  }
+
+  String _livingSupportNoteText({
+    required WorkEntry entry,
+    EntrySupportNoteMeta? localMeta,
+    EntryDriveSupportNoteMeta? driveMeta,
+  }) {
+    final candidates = [
+      localMeta?.noteText,
+      entry.supportNoteBreakdown,
+      driveMeta?.noteText,
+      entry.notes.join('\n'),
+    ];
+
+    for (final candidate in candidates) {
+      final cleaned = candidate?.trim();
+      if (cleaned != null && cleaned.isNotEmpty) {
+        return LocalSupportNoteService.canonicalSupportNoteText(cleaned);
+      }
+    }
+
+    return '';
   }
 
   List<String> _payeClientListFrom(StoredAppData data) {

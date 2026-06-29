@@ -10,6 +10,7 @@ import '../models/google_drive_file.dart';
 import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../utils/pay_period_utils.dart';
+import 'google_docs/google_docs_api_platform.dart';
 import 'google_drive/google_drive_api_platform.dart';
 import 'invoice_pdf_service.dart';
 import 'local_support_note_service.dart';
@@ -205,11 +206,77 @@ class EntryDriveSupportNoteMeta {
   }
 }
 
+class LivingSupportDocumentEntry {
+  const LivingSupportDocumentEntry({
+    required this.entry,
+    required this.personName,
+    required this.status,
+    required this.noteText,
+  });
+
+  final WorkEntry entry;
+  final String personName;
+  final EntrySupportNoteStatus status;
+  final String noteText;
+}
+
+class LivingSupportDocumentSyncResult {
+  const LivingSupportDocumentSyncResult({
+    required this.personName,
+    required this.file,
+    required this.importedCount,
+    required this.updatedCount,
+  });
+
+  final String personName;
+  final GoogleDriveFile file;
+  final int importedCount;
+  final int updatedCount;
+
+  String? get openLink {
+    final link = file.webViewLink?.trim();
+    if (link != null && link.isNotEmpty) return link;
+
+    if (file.id.trim().isEmpty) return null;
+    return 'https://docs.google.com/document/d/${Uri.encodeComponent(file.id)}/edit';
+  }
+}
+
+class _LivingSupportTab {
+  const _LivingSupportTab({
+    required this.id,
+    required this.title,
+    required this.parentId,
+    required this.text,
+    required this.endIndex,
+  });
+
+  final String id;
+  final String title;
+  final String? parentId;
+  final String text;
+  final int endIndex;
+}
+
+class _LivingSupportEntryRange {
+  const _LivingSupportEntryRange({
+    required this.startIndex,
+    required this.endIndex,
+  });
+
+  final int startIndex;
+  final int endIndex;
+}
+
 class GoogleDriveService {
-  GoogleDriveService({GoogleDriveApiPlatform? api})
-    : _api = api ?? GoogleDriveApiPlatform();
+  GoogleDriveService({
+    GoogleDriveApiPlatform? api,
+    GoogleDocsApiPlatform? docsApi,
+  }) : _api = api ?? GoogleDriveApiPlatform(),
+       _docsApi = docsApi ?? GoogleDocsApiPlatform();
 
   final GoogleDriveApiPlatform _api;
+  final GoogleDocsApiPlatform _docsApi;
   static const String _googleDocsMimeType =
       'application/vnd.google-apps.document';
   static const String _docxMimeType =
@@ -1076,6 +1143,378 @@ class GoogleDriveService {
     return meta;
   }
 
+  Future<List<LivingSupportDocumentSyncResult>> syncLivingSupportDocuments({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required List<LivingSupportDocumentEntry> entries,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final grouped = <String, List<LivingSupportDocumentEntry>>{};
+
+    for (final item in entries) {
+      final person = _folderName(item.personName);
+      if (person.trim().isEmpty) continue;
+      grouped
+          .putIfAbsent(person, () => <LivingSupportDocumentEntry>[])
+          .add(item);
+    }
+
+    final results = <LivingSupportDocumentSyncResult>[];
+
+    for (final group in grouped.entries) {
+      final ordered = [...group.value]
+        ..sort((a, b) {
+          final dateCompare = a.entry.date.compareTo(b.entry.date);
+          if (dateCompare != 0) return dateCompare;
+          return _minutesFromStart(
+            a.entry,
+          ).compareTo(_minutesFromStart(b.entry));
+        });
+      final file = await _findOrCreateLivingSupportDocument(
+        accessToken: accessToken,
+        clientNotesFolderId: clientNotesFolderId,
+        personName: group.key,
+      );
+      var importedCount = 0;
+      var updatedCount = 0;
+
+      for (final item in ordered) {
+        final updated = await _syncLivingSupportEntry(
+          accessToken: accessToken,
+          documentId: file.id,
+          item: item,
+          payPeriodAnchorDate: payPeriodAnchorDate,
+        );
+        if (updated) {
+          updatedCount += 1;
+        } else {
+          importedCount += 1;
+        }
+      }
+
+      results.add(
+        LivingSupportDocumentSyncResult(
+          personName: group.key,
+          file: file,
+          importedCount: importedCount,
+          updatedCount: updatedCount,
+        ),
+      );
+    }
+
+    return results;
+  }
+
+  Future<GoogleDriveFile> _findOrCreateLivingSupportDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required String personName,
+  }) async {
+    final clientFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _folderName(personName),
+    );
+    final livingFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientFolder.id,
+      name: _livingSupportFolderName,
+    );
+    final documentName = '${_folderName(personName)} - Living Support Notes';
+    final existing = await _findChild(
+      accessToken: accessToken,
+      parentId: livingFolder.id,
+      name: documentName,
+      mimeType: _googleDocsMimeType,
+    );
+    if (existing != null) return existing;
+
+    return _api.uploadFile(
+      accessToken: accessToken,
+      name: documentName,
+      mimeType: _googleDocsMimeType,
+      bytes: utf8.encode('Living support notes for ${_folderName(personName)}'),
+      parentId: livingFolder.id,
+      contentMimeType: 'text/plain',
+    );
+  }
+
+  Future<bool> _syncLivingSupportEntry({
+    required String accessToken,
+    required String documentId,
+    required LivingSupportDocumentEntry item,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final typeTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportTypeTabName(item.entry.type),
+    );
+    final invoiceTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: await _livingSupportInvoiceTabName(
+        item.entry,
+        payPeriodAnchorDate: payPeriodAnchorDate,
+      ),
+      parentTabId: typeTab.id,
+    );
+    final dateTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportDateTabName(item.entry.date),
+      parentTabId: invoiceTab.id,
+    );
+    final document = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    final tab = _livingSupportTabsFromDocument(document).firstWhere(
+      (candidate) => candidate.id == dateTab.id,
+      orElse: () => dateTab,
+    );
+    final replacement = _livingSupportEntryBlock(item);
+    final existingRange = _livingSupportEntryRange(
+      tab: tab,
+      entryId: item.entry.id,
+    );
+    final requests = <Map<String, dynamic>>[
+      if (existingRange != null)
+        {
+          'deleteContentRange': {
+            'range': {
+              'tabId': tab.id,
+              'startIndex': existingRange.startIndex,
+              'endIndex': existingRange.endIndex,
+            },
+          },
+        },
+      {
+        'insertText': {
+          if (existingRange != null)
+            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
+          else
+            'endOfSegmentLocation': {'tabId': tab.id},
+          'text': existingRange == null ? '\n$replacement' : replacement,
+        },
+      },
+    ];
+
+    await _docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: requests,
+      targetRevisionId: _revisionId(document),
+    );
+
+    return existingRange != null;
+  }
+
+  Future<_LivingSupportTab> _ensureLivingSupportTab({
+    required String accessToken,
+    required String documentId,
+    required String title,
+    String? parentTabId,
+  }) async {
+    final document = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    _LivingSupportTab? existing;
+    for (final tab in _livingSupportTabsFromDocument(document)) {
+      if (tab.title == title && (tab.parentId ?? '') == (parentTabId ?? '')) {
+        existing = tab;
+        break;
+      }
+    }
+    if (existing != null) return existing;
+
+    await _docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: [
+        {
+          'addDocumentTab': {
+            'tabProperties': {
+              'title': title,
+              if (parentTabId != null && parentTabId.trim().isNotEmpty)
+                'parentTabId': parentTabId,
+            },
+          },
+        },
+      ],
+      targetRevisionId: _revisionId(document),
+    );
+
+    final updated = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    return _livingSupportTabsFromDocument(updated).firstWhere(
+      (tab) =>
+          tab.title == title && (tab.parentId ?? '') == (parentTabId ?? ''),
+      orElse: () => throw StateError('Google Docs tab "$title" was not found.'),
+    );
+  }
+
+  List<_LivingSupportTab> _livingSupportTabsFromDocument(
+    Map<String, dynamic> document,
+  ) {
+    final tabs = <_LivingSupportTab>[];
+    final rawTabs = document['tabs'];
+    if (rawTabs is! List) return tabs;
+
+    for (final rawTab in rawTabs) {
+      _collectLivingSupportTabs(rawTab, null, tabs);
+    }
+
+    return tabs;
+  }
+
+  void _collectLivingSupportTabs(
+    Object? rawTab,
+    String? inheritedParentId,
+    List<_LivingSupportTab> tabs,
+  ) {
+    if (rawTab is! Map) return;
+
+    final properties = rawTab['tabProperties'];
+    if (properties is! Map) return;
+
+    final id = properties['tabId'] as String?;
+    final title = properties['title'] as String?;
+    if (id == null || id.isEmpty || title == null || title.isEmpty) return;
+
+    final parentId = properties['parentTabId'] as String? ?? inheritedParentId;
+    final documentTab = rawTab['documentTab'];
+    final body = documentTab is Map ? documentTab['body'] : null;
+    final content = body is Map ? body['content'] : null;
+
+    tabs.add(
+      _LivingSupportTab(
+        id: id,
+        title: title,
+        parentId: parentId,
+        text: _tabText(content),
+        endIndex: _tabEndIndex(content),
+      ),
+    );
+
+    final childTabs = rawTab['childTabs'];
+    if (childTabs is! List) return;
+
+    for (final child in childTabs) {
+      _collectLivingSupportTabs(child, id, tabs);
+    }
+  }
+
+  String _tabText(Object? content) {
+    if (content is! List) return '';
+
+    final buffer = StringBuffer();
+    for (final item in content) {
+      if (item is! Map) continue;
+
+      final paragraph = item['paragraph'];
+      if (paragraph is! Map) continue;
+
+      final elements = paragraph['elements'];
+      if (elements is! List) continue;
+
+      for (final element in elements) {
+        if (element is! Map) continue;
+
+        final textRun = element['textRun'];
+        if (textRun is! Map) continue;
+
+        final content = textRun['content'];
+        if (content is String) buffer.write(content);
+      }
+    }
+
+    return buffer.toString();
+  }
+
+  int _tabEndIndex(Object? content) {
+    if (content is! List || content.isEmpty) return 1;
+
+    var endIndex = 1;
+    for (final item in content) {
+      if (item is! Map) continue;
+      final rawEnd = item['endIndex'];
+      if (rawEnd is int && rawEnd > endIndex) endIndex = rawEnd;
+    }
+
+    return endIndex;
+  }
+
+  _LivingSupportEntryRange? _livingSupportEntryRange({
+    required _LivingSupportTab tab,
+    required String entryId,
+  }) {
+    final startMarker = _livingSupportStartMarker(entryId);
+    final endMarker = _livingSupportEndMarker(entryId);
+    final start = tab.text.indexOf(startMarker);
+    if (start == -1) return null;
+
+    final end = tab.text.indexOf(endMarker, start + startMarker.length);
+    if (end == -1) return null;
+
+    return _LivingSupportEntryRange(
+      startIndex: start + 1,
+      endIndex: end + endMarker.length + 1,
+    );
+  }
+
+  String _livingSupportEntryBlock(LivingSupportDocumentEntry item) {
+    final entry = item.entry;
+    final notes = item.noteText.trim().isNotEmpty
+        ? item.noteText.trim()
+        : entry.notes.join('\n').trim();
+    final nextActions = entry.nextActions
+        .map((action) {
+          final status = action.isCompleted ? 'Done' : 'Open';
+          return '- [$status] ${action.text}';
+        })
+        .join('\n');
+
+    return [
+      _livingSupportStartMarker(entry.id),
+      '${_livingSupportTimeLabel(entry)} - ${entry.type.label}',
+      'Person: ${item.personName}',
+      'Invoice period: ${_livingSupportInvoiceRangeLabel(entry.date)}',
+      'Note status: ${item.status.label}',
+      'Living document sync: Imported',
+      if (entry.type == EntryType.textNote)
+        'Text direction: ${entry.textContactDirection.label}',
+      if (entry.textReplyNeeded) 'Reply needed: Yes',
+      if (entry.importantText) 'Important written contact: Yes',
+      if (entry.kilometres > 0) 'Kilometres: ${entry.kilometres}',
+      '',
+      if (notes.isNotEmpty) notes else 'No note text saved in the app.',
+      if (nextActions.isNotEmpty) ...['', 'Next actions', nextActions],
+      _livingSupportEndMarker(entry.id),
+      '',
+    ].join('\n');
+  }
+
+  String _livingSupportStartMarker(String entryId) {
+    return '[[SWL_ENTRY:${_safeMarkerPart(entryId)}:START]]';
+  }
+
+  String _livingSupportEndMarker(String entryId) {
+    return '[[SWL_ENTRY:${_safeMarkerPart(entryId)}:END]]';
+  }
+
+  String _safeMarkerPart(String value) {
+    return value.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+  }
+
+  String _revisionId(Map<String, dynamic> document) {
+    final revisionId = document['revisionId'];
+    return revisionId is String ? revisionId : '';
+  }
+
   Future<GoogleDriveFile> _replaceGoogleDocThroughDrive({
     required String accessToken,
     required String oldFileId,
@@ -1143,6 +1582,60 @@ class GoogleDriveService {
       case EntryType.professionalContact:
         return 'Professional Contacts';
     }
+  }
+
+  static const _livingSupportFolderName = 'Living Support Notes';
+
+  String _livingSupportTypeTabName(EntryType type) {
+    switch (type) {
+      case EntryType.textNote:
+        return 'Texts';
+      case EntryType.phoneCall:
+        return 'Phone Calls';
+      case EntryType.videoCall:
+        return 'Video Calls';
+      case EntryType.emailClient:
+      case EntryType.emailProfessional:
+        return 'Emails';
+      case EntryType.adminEducationResources:
+        return 'Admin / Education / Resources';
+      case EntryType.homeVisit:
+        return 'Home Visits';
+      case EntryType.professionalContact:
+        return 'Professional Contacts';
+    }
+  }
+
+  Future<String> _livingSupportInvoiceTabName(
+    WorkEntry entry, {
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+    final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
+      range,
+      anchorDate: payPeriodAnchorDate,
+    );
+
+    return 'Invoice $invoiceNumber - ${_dateKey(range.start)} to ${_dateKey(range.end)}';
+  }
+
+  String _livingSupportInvoiceRangeLabel(DateTime date) {
+    final range = fortnightForDate(date);
+    return '${_dateKey(range.start)} to ${_dateKey(range.end)}';
+  }
+
+  String _livingSupportDateTabName(DateTime date) {
+    return _dateKey(date);
+  }
+
+  String _livingSupportTimeLabel(WorkEntry entry) {
+    final hour = entry.startTime.hour.toString().padLeft(2, '0');
+    final minute = entry.startTime.minute.toString().padLeft(2, '0');
+    return '${_dateKey(entry.date)} $hour:$minute';
+  }
+
+  int _minutesFromStart(WorkEntry entry) {
+    return entry.startTime.hour * 60 + entry.startTime.minute;
   }
 
   static const _finishedSupportNoteFolderName = 'Finished';

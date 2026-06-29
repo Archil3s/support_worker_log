@@ -108,6 +108,7 @@ class _NotesScreenState extends State<NotesScreen> {
   String search = '';
   String? clientFilter;
   EntrySupportNoteStatus? statusFilter;
+  bool syncingLivingDocs = false;
 
   @override
   void dispose() {
@@ -154,6 +155,41 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
+  Future<void> _syncLivingDocuments() async {
+    if (syncingLivingDocs) return;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => syncingLivingDocs = true);
+
+    try {
+      final results = await context
+          .read<AppState>()
+          .syncLivingSupportDocumentsFromEntries();
+      final imported = results.fold<int>(
+        0,
+        (total, result) => total + result.importedCount,
+      );
+      final updated = results.fold<int>(
+        0,
+        (total, result) => total + result.updatedCount,
+      );
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Synced ${results.length} living docs. Imported $imported, updated $updated.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Living Google Docs sync failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => syncingLivingDocs = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -185,6 +221,8 @@ class _NotesScreenState extends State<NotesScreen> {
           setState(() => statusFilter = value);
         },
         onChooseFolder: _chooseFolder,
+        onSyncLivingDocuments: _syncLivingDocuments,
+        syncingLivingDocs: syncingLivingDocs,
       ),
     );
   }
@@ -203,6 +241,8 @@ class _NotesListTab extends StatelessWidget {
     required this.onClientFilterChanged,
     required this.onStatusFilterChanged,
     required this.onChooseFolder,
+    required this.onSyncLivingDocuments,
+    required this.syncingLivingDocs,
   });
 
   final List<WorkEntry> entries;
@@ -216,6 +256,8 @@ class _NotesListTab extends StatelessWidget {
   final ValueChanged<String?> onClientFilterChanged;
   final ValueChanged<EntrySupportNoteStatus?> onStatusFilterChanged;
   final VoidCallback onChooseFolder;
+  final VoidCallback onSyncLivingDocuments;
+  final bool syncingLivingDocs;
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +282,23 @@ class _NotesListTab extends StatelessWidget {
                       : 'Use Default MR NOTES FOLDER',
                 ),
               ),
+              if (!payeMode) ...[
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: syncingLivingDocs ? null : onSyncLivingDocuments,
+                  icon: syncingLivingDocs
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_outlined),
+                  label: Text(
+                    syncingLivingDocs
+                        ? 'Syncing Living Google Docs'
+                        : 'Sync Living Google Docs',
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Text(
                 payeMode

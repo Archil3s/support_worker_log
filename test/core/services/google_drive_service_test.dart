@@ -9,6 +9,7 @@ import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/google_drive_file.dart';
 import 'package:support_worker_log/core/models/personal_log_entry.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
+import 'package:support_worker_log/core/services/google_docs/google_docs_api_platform.dart';
 import 'package:support_worker_log/core/services/google_drive/google_drive_api_platform.dart';
 import 'package:support_worker_log/core/services/google_drive_service.dart';
 import 'package:support_worker_log/core/services/local_support_note_service.dart';
@@ -576,6 +577,141 @@ void main() {
   });
 
   test(
+    'syncLivingSupportDocuments creates one tabbed doc per person',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(children: const []);
+      final docsApi = _FakeGoogleDocsApi();
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final results = await service.syncLivingSupportDocuments(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'entry-1',
+              client: 'AB',
+              type: EntryType.phoneCall,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Called client'],
+            ),
+            personName: 'AB',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'Main topic(s)\nCalled client about appointment.',
+          ),
+        ],
+      );
+
+      expect(results.single.personName, 'AB');
+      expect(results.single.importedCount, 1);
+      expect(results.single.updatedCount, 0);
+      expect(driveApi.uploads.single.name, 'AB - Living Support Notes');
+      expect(
+        driveApi.uploads.single.parentId,
+        'client-notes/AB/Living Support Notes',
+      );
+      expect(docsApi.addedTabs.map((tab) => tab.title), [
+        'Phone Calls',
+        'Invoice 10 - 2026-05-31 to 2026-06-13',
+        '2026-06-02',
+      ]);
+      expect(docsApi.insertedText.single, contains('Note status: Finished'));
+      expect(
+        docsApi.insertedText.single,
+        contains('Living document sync: Imported'),
+      );
+      expect(
+        docsApi.insertedText.single,
+        contains('Called client about appointment.'),
+      );
+    },
+  );
+
+  test(
+    'syncLivingSupportDocuments replaces only an existing entry block',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'client-folder',
+              name: 'AB',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'client-folder': [
+            const GoogleDriveFile(
+              id: 'living-folder',
+              name: 'Living Support Notes',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'living-folder': [
+            const GoogleDriveFile(
+              id: 'living-doc',
+              name: 'AB - Living Support Notes',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final docsApi = _FakeGoogleDocsApi(
+        tabs: [
+          _FakeGoogleDocTab(id: 'type-tab', title: 'Texts'),
+          _FakeGoogleDocTab(
+            id: 'invoice-tab',
+            title: 'Invoice 10 - 2026-05-31 to 2026-06-13',
+            parentId: 'type-tab',
+          ),
+          _FakeGoogleDocTab(
+            id: 'date-tab',
+            title: '2026-06-02',
+            parentId: 'invoice-tab',
+            text:
+                '[[SWL_ENTRY:entry-1:START]]\nOld text\n[[SWL_ENTRY:entry-1:END]]\n',
+          ),
+        ],
+      );
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final results = await service.syncLivingSupportDocuments(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'entry-1',
+              client: 'AB',
+              type: EntryType.textNote,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 10, minute: 15),
+              minutes: 10,
+              notes: const ['Text message'],
+            ),
+            personName: 'AB',
+            status: EntrySupportNoteStatus.submitted,
+            noteText: 'Main topic(s)\nUpdated text message.',
+          ),
+        ],
+      );
+
+      final updateRequests = docsApi.batchRequests.last;
+
+      expect(results.single.importedCount, 0);
+      expect(results.single.updatedCount, 1);
+      expect(
+        updateRequests.first,
+        containsPair('deleteContentRange', isA<Map>()),
+      );
+      expect(updateRequests.last, containsPair('insertText', isA<Map>()));
+      expect(docsApi.insertedText.last, contains('Note status: Submitted'));
+      expect(docsApi.insertedText.last, contains('Updated text message.'));
+    },
+  );
+
+  test(
     'saveSupportNote replaces existing Google Docs notes through Drive',
     () async {
       final api = _FakeGoogleDriveApi(children: const []);
@@ -1002,6 +1138,150 @@ void main() {
 const _docxMimeType =
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const _googleDocsMimeType = 'application/vnd.google-apps.document';
+
+class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
+  _FakeGoogleDocsApi({List<_FakeGoogleDocTab> tabs = const []})
+    : tabs = [...tabs];
+
+  final List<_FakeGoogleDocTab> tabs;
+  final addedTabs = <_FakeGoogleDocTab>[];
+  final insertedText = <String>[];
+  final batchRequests = <List<Map<String, dynamic>>>[];
+  var _nextTab = 1;
+  var _revision = 1;
+
+  @override
+  Future<Map<String, dynamic>> getDocument({
+    required String accessToken,
+    required String documentId,
+  }) async {
+    return {
+      'revisionId': 'rev-${_revision++}',
+      'tabs': [
+        for (final tab in tabs.where((tab) => tab.parentId == null))
+          _tabJson(tab),
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> batchUpdate({
+    required String accessToken,
+    required String documentId,
+    required List<Map<String, dynamic>> requests,
+    String? targetRevisionId,
+  }) async {
+    batchRequests.add(requests);
+
+    for (final request in requests) {
+      final addDocumentTab = request['addDocumentTab'];
+      if (addDocumentTab is Map) {
+        final properties = addDocumentTab['tabProperties'];
+        if (properties is Map) {
+          final tab = _FakeGoogleDocTab(
+            id: 'tab-${_nextTab++}',
+            title: properties['title'] as String? ?? 'Tab',
+            parentId: properties['parentTabId'] as String?,
+          );
+          tabs.add(tab);
+          addedTabs.add(tab);
+        }
+      }
+
+      final deleteContentRange = request['deleteContentRange'];
+      if (deleteContentRange is Map) {
+        final range = deleteContentRange['range'];
+        if (range is Map) {
+          final tab = _tabById(range['tabId'] as String?);
+          final start = (range['startIndex'] as int? ?? 1) - 1;
+          final end = (range['endIndex'] as int? ?? 1) - 1;
+          if (tab != null && start >= 0 && end >= start) {
+            tab.text = tab.text.replaceRange(start, end, '');
+          }
+        }
+      }
+
+      final insertText = request['insertText'];
+      if (insertText is Map) {
+        final text = insertText['text'] as String? ?? '';
+        final location = insertText['location'];
+        final endLocation = insertText['endOfSegmentLocation'];
+        final tabId = location is Map
+            ? location['tabId'] as String?
+            : endLocation is Map
+            ? endLocation['tabId'] as String?
+            : null;
+        final tab = _tabById(tabId);
+        if (tab != null) {
+          final index = location is Map ? location['index'] as int? : null;
+          if (index == null) {
+            tab.text = '${tab.text}$text';
+          } else {
+            tab.text = tab.text.replaceRange(index - 1, index - 1, text);
+          }
+          insertedText.add(text);
+        }
+      }
+    }
+
+    return {'replies': const []};
+  }
+
+  _FakeGoogleDocTab? _tabById(String? id) {
+    if (id == null) return null;
+    for (final tab in tabs) {
+      if (tab.id == id) return tab;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _tabJson(_FakeGoogleDocTab tab) {
+    return {
+      'tabProperties': {
+        'tabId': tab.id,
+        'title': tab.title,
+        if (tab.parentId != null) 'parentTabId': tab.parentId,
+      },
+      'documentTab': {
+        'body': {
+          'content': [
+            {
+              'startIndex': 1,
+              'endIndex': tab.text.length + 1,
+              'paragraph': {
+                'elements': [
+                  {
+                    'startIndex': 1,
+                    'endIndex': tab.text.length + 1,
+                    'textRun': {'content': tab.text},
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      'childTabs': [
+        for (final child in tabs.where((item) => item.parentId == tab.id))
+          _tabJson(child),
+      ],
+    };
+  }
+}
+
+class _FakeGoogleDocTab {
+  _FakeGoogleDocTab({
+    required this.id,
+    required this.title,
+    this.parentId,
+    this.text = '\n',
+  });
+
+  final String id;
+  final String title;
+  final String? parentId;
+  String text;
+}
 
 class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   _FakeGoogleDriveApi({
