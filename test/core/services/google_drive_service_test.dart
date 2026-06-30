@@ -768,6 +768,81 @@ void main() {
   );
 
   test(
+    'syncReadyToSubmitLivingDocument creates ready doc for finished notes',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(children: const []);
+      final docsApi = _FakeGoogleDocsApi();
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final result = await service.syncReadyToSubmitLivingDocument(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'finished-entry',
+              client: 'AB',
+              type: EntryType.phoneCall,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Called client'],
+            ),
+            personName: 'Joseph W',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'What happened\nReady phone note.',
+          ),
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'submitted-entry',
+              client: 'CD',
+              type: EntryType.textNote,
+              date: DateTime(2026, 6, 3),
+              startTime: const TimeOfDay(hour: 10, minute: 15),
+              minutes: 10,
+              notes: const ['Texted client'],
+            ),
+            personName: 'Pierre',
+            status: EntrySupportNoteStatus.submitted,
+            noteText: 'What happened\nSubmitted text note.',
+          ),
+        ],
+      );
+
+      expect(result.personName, 'Ready to submit');
+      expect(result.importedCount, 1);
+      expect(result.updatedCount, 0);
+      expect(
+        driveApi.uploads.single.parentId,
+        'client-notes/Living Support Notes',
+      );
+      expect(
+        driveApi.uploads.single.name,
+        'Ready to Submit - Living Support Notes',
+      );
+      expect(
+        result.subTabTitles,
+        containsAll([
+          'Dashboard',
+          'Invoice 10 2026-05-31 to 2026-06-13',
+          'Ready Totals I10',
+          'Phone Calls - Inv 10',
+          'Joseph W Phone I10',
+        ]),
+      );
+      expect(docsApi.insertedText.join('\n'), contains('Ready phone note.'));
+      expect(
+        docsApi.insertedText.join('\n'),
+        contains('Finished not submitted: 1'),
+      );
+      expect(
+        docsApi.insertedText.join('\n'),
+        isNot(contains('Submitted text note.')),
+      );
+    },
+  );
+
+  test(
     'syncLivingSupportDocuments replaces only an existing entry block',
     () async {
       final driveApi = _FakeGoogleDriveApi(

@@ -624,6 +624,70 @@ class AppState extends ChangeNotifier {
   }
 
   Future<List<LivingSupportDocumentSyncResult>>
+  syncReadyToSubmitLivingSupportDocument() async {
+    if (!workGoogleServicesConnected) {
+      await connectWorkGoogle();
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken();
+    final syncSettings = await _ensureWorkDriveFolderSetup(accessToken);
+    final clientNotesFolderId = syncSettings.googleDriveClientNotesFolderId;
+
+    if (clientNotesFolderId == null || clientNotesFolderId.isEmpty) {
+      throw StateError('Google Drive client notes folder is not ready.');
+    }
+
+    final livingEntries = <LivingSupportDocumentEntry>[];
+
+    for (final entry in _entries) {
+      final loadedLocal =
+          _supportNoteMetas[entry.id] ??
+          await LocalSupportNoteService.loadMeta(entry.id);
+      final loadedDrive =
+          _driveSupportNoteMetas[entry.id] ??
+          await _googleDriveService.loadSupportNoteMeta(entry.id);
+      final status = _preferredSupportNoteStatus(
+        loadedLocal?.status,
+        loadedDrive?.status,
+      );
+
+      if (status != EntrySupportNoteStatus.finished) {
+        continue;
+      }
+
+      livingEntries.add(
+        LivingSupportDocumentEntry(
+          entry: entry,
+          personName: _livingSupportPersonName(
+            entry: entry,
+            localMeta: loadedLocal,
+            driveMeta: loadedDrive,
+          ),
+          status: status,
+          noteText: _livingSupportNoteText(
+            entry: entry,
+            localMeta: loadedLocal,
+            driveMeta: loadedDrive,
+          ),
+        ),
+      );
+    }
+
+    final result = await _googleDriveService.syncReadyToSubmitLivingDocument(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      entries: livingEntries,
+      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+    );
+
+    _cloudSyncReady = true;
+    _cloudSyncError = null;
+    notifyListeners();
+
+    return [result];
+  }
+
+  Future<List<LivingSupportDocumentSyncResult>>
   _syncLivingSupportDocumentsFromWorkEntries({
     required List<WorkEntry> entries,
     required String emptyMessage,

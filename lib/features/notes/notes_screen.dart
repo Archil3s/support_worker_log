@@ -120,6 +120,7 @@ class _NotesScreenState extends State<NotesScreen> {
   EntrySupportNoteStatus? statusFilter;
   String? selectedPayPeriodKey;
   bool syncingCurrentPeriodLivingDocs = false;
+  bool syncingReadyToSubmitDocs = false;
   bool loadingLivingDocs = false;
   bool loadingUnsubmittedNotes = false;
   List<LivingSupportDocumentSummary> livingDocs = const [];
@@ -272,6 +273,54 @@ class _NotesScreenState extends State<NotesScreen> {
       );
     } finally {
       if (mounted) setState(() => loadingLivingDocs = false);
+    }
+  }
+
+  Future<void> _syncReadyToSubmitDocument() async {
+    if (syncingReadyToSubmitDocs) return;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => syncingReadyToSubmitDocs = true);
+
+    try {
+      final results = await context
+          .read<AppState>()
+          .syncReadyToSubmitLivingSupportDocument();
+      final readyCount = results.fold<int>(
+        0,
+        (total, result) => total + result.importedCount,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        livingDocs = [
+          for (final result in results)
+            LivingSupportDocumentSummary(
+              personName: result.personName,
+              file: result.file,
+              invoiceTabTitle: result.invoiceTabTitle,
+              subTabTitles: result.subTabTitles,
+            ),
+        ];
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ready-to-submit doc updated with $readyCount finished notes.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ready-to-submit doc sync failed: ${_friendlyErrorText(error)}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => syncingReadyToSubmitDocs = false);
     }
   }
 
@@ -432,10 +481,12 @@ class _NotesScreenState extends State<NotesScreen> {
         onChooseFolder: _chooseFolder,
         onSyncCurrentPayPeriodLivingDocuments:
             _syncCurrentPayPeriodLivingDocuments,
+        onSyncReadyToSubmitDocument: _syncReadyToSubmitDocument,
         onLoadLivingDocuments: _loadLivingDocuments,
         onOpenLivingDocument: _openLivingDocument,
         onLoadUnsubmittedNotes: _openUnsubmittedNotesSheet,
         syncingCurrentPeriodLivingDocs: syncingCurrentPeriodLivingDocs,
+        syncingReadyToSubmitDocs: syncingReadyToSubmitDocs,
         loadingLivingDocs: loadingLivingDocs,
         loadingUnsubmittedNotes: loadingUnsubmittedNotes,
         livingDocs: livingDocs,
@@ -461,10 +512,12 @@ class _NotesListTab extends StatelessWidget {
     required this.onPayPeriodChanged,
     required this.onChooseFolder,
     required this.onSyncCurrentPayPeriodLivingDocuments,
+    required this.onSyncReadyToSubmitDocument,
     required this.onLoadLivingDocuments,
     required this.onOpenLivingDocument,
     required this.onLoadUnsubmittedNotes,
     required this.syncingCurrentPeriodLivingDocs,
+    required this.syncingReadyToSubmitDocs,
     required this.loadingLivingDocs,
     required this.loadingUnsubmittedNotes,
     required this.livingDocs,
@@ -485,10 +538,12 @@ class _NotesListTab extends StatelessWidget {
   final ValueChanged<String?> onPayPeriodChanged;
   final VoidCallback onChooseFolder;
   final VoidCallback onSyncCurrentPayPeriodLivingDocuments;
+  final VoidCallback onSyncReadyToSubmitDocument;
   final VoidCallback onLoadLivingDocuments;
   final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
   final VoidCallback onLoadUnsubmittedNotes;
   final bool syncingCurrentPeriodLivingDocs;
+  final bool syncingReadyToSubmitDocs;
   final bool loadingLivingDocs;
   final bool loadingUnsubmittedNotes;
   final List<LivingSupportDocumentSummary> livingDocs;
@@ -557,6 +612,23 @@ class _NotesListTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: syncingReadyToSubmitDocs || loadingLivingDocs
+                      ? null
+                      : onSyncReadyToSubmitDocument,
+                  icon: syncingReadyToSubmitDocs
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.fact_check_outlined),
+                  label: Text(
+                    syncingReadyToSubmitDocs
+                        ? 'Syncing Ready To Submit Doc'
+                        : 'Sync Ready To Submit Doc',
+                  ),
+                ),
+                const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: loadingLivingDocs ? null : onLoadLivingDocuments,
                   icon: loadingLivingDocs
@@ -586,7 +658,7 @@ class _NotesListTab extends StatelessWidget {
               Text(
                 payeMode
                     ? 'Create, test, save, open, and remove PAYE Google Docs notes from saved PAYE entries.'
-                    : 'Load and update one master Google Doc with invoice-period tabs for all people and interactions.',
+                    : 'Load and update master and ready-to-submit Google Docs with invoice-period tabs for all people and interactions.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),

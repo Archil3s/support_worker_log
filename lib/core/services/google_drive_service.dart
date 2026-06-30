@@ -1307,6 +1307,177 @@ class GoogleDriveService {
     );
   }
 
+  Future<LivingSupportDocumentSyncResult> syncReadyToSubmitLivingDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required List<LivingSupportDocumentEntry> entries,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final readyEntries =
+        entries
+            .where((item) => item.status == EntrySupportNoteStatus.finished)
+            .toList()
+          ..sort((a, b) {
+            final rangeCompare =
+                fortnightForDate(
+                  a.entry.date,
+                  anchorDate: payPeriodAnchorDate,
+                ).start.compareTo(
+                  fortnightForDate(
+                    b.entry.date,
+                    anchorDate: payPeriodAnchorDate,
+                  ).start,
+                );
+            if (rangeCompare != 0) return rangeCompare;
+
+            final typeCompare = a.entry.type.label.compareTo(
+              b.entry.type.label,
+            );
+            if (typeCompare != 0) return typeCompare;
+
+            final personCompare = _folderName(
+              a.personName,
+            ).compareTo(_folderName(b.personName));
+            if (personCompare != 0) return personCompare;
+
+            final dateCompare = a.entry.date.compareTo(b.entry.date);
+            if (dateCompare != 0) return dateCompare;
+            return _minutesFromStart(
+              a.entry,
+            ).compareTo(_minutesFromStart(b.entry));
+          });
+    final file = await _findOrCreateReadyToSubmitLivingDocument(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+    );
+    final dashboardTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: file.id,
+      title: _livingSupportReadyDashboardTabName,
+    );
+    final entriesByInvoiceTitle = <String, List<LivingSupportDocumentEntry>>{};
+
+    for (final item in readyEntries) {
+      final title = await _livingSupportInvoiceTabName(
+        item.entry,
+        payPeriodAnchorDate: payPeriodAnchorDate,
+      );
+      entriesByInvoiceTitle
+          .putIfAbsent(title, () => <LivingSupportDocumentEntry>[])
+          .add(item);
+    }
+
+    await _replaceLivingSupportTabBlock(
+      accessToken: accessToken,
+      documentId: file.id,
+      tabId: dashboardTab.id,
+      markerId: 'ready-to-submit-dashboard',
+      text: _livingSupportReadyDashboardBlock(entriesByInvoiceTitle),
+    );
+
+    final subTabTitles = <String>[_livingSupportReadyDashboardTabName];
+
+    for (final invoiceGroup in entriesByInvoiceTitle.entries) {
+      final invoiceTitle = invoiceGroup.key;
+      final invoiceEntries = invoiceGroup.value;
+      final invoiceTab = await _ensureLivingSupportTab(
+        accessToken: accessToken,
+        documentId: file.id,
+        title: invoiceTitle,
+      );
+      final totalsTab = await _ensureLivingSupportTab(
+        accessToken: accessToken,
+        documentId: file.id,
+        title: _livingSupportStatusTabName('Ready Totals', invoiceTitle),
+        parentTabId: invoiceTab.id,
+      );
+
+      subTabTitles
+        ..add(invoiceTitle)
+        ..add(totalsTab.title);
+
+      await _replaceLivingSupportTabBlock(
+        accessToken: accessToken,
+        documentId: file.id,
+        tabId: totalsTab.id,
+        markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'ready-totals'),
+        text: _livingSupportReadyTotalsBlock(invoiceTitle, invoiceEntries),
+      );
+
+      final entriesByType = <EntryType, List<LivingSupportDocumentEntry>>{};
+      for (final item in invoiceEntries) {
+        entriesByType
+            .putIfAbsent(item.entry.type, () => <LivingSupportDocumentEntry>[])
+            .add(item);
+      }
+      final typeGroups = entriesByType.entries.toList()
+        ..sort((a, b) => a.key.label.compareTo(b.key.label));
+
+      for (final typeGroup in typeGroups) {
+        final typeTab = await _ensureLivingSupportTab(
+          accessToken: accessToken,
+          documentId: file.id,
+          title: _livingSupportScopedTypeTabName(typeGroup.key, invoiceTitle),
+          parentTabId: invoiceTab.id,
+        );
+
+        subTabTitles.add(typeTab.title);
+
+        final entriesByPerson = <String, List<LivingSupportDocumentEntry>>{};
+        for (final item in typeGroup.value) {
+          entriesByPerson
+              .putIfAbsent(
+                _folderName(item.personName),
+                () => <LivingSupportDocumentEntry>[],
+              )
+              .add(item);
+        }
+        final personGroups = entriesByPerson.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+
+        for (final personGroup in personGroups) {
+          final personTab = await _ensureLivingSupportTab(
+            accessToken: accessToken,
+            documentId: file.id,
+            title: _livingSupportReadyPersonTabName(
+              personGroup.key,
+              typeGroup.key,
+              invoiceTitle,
+            ),
+            parentTabId: typeTab.id,
+          );
+
+          subTabTitles.add(personTab.title);
+
+          await _replaceLivingSupportTabBlock(
+            accessToken: accessToken,
+            documentId: file.id,
+            tabId: personTab.id,
+            markerId: _livingSupportSummaryMarkerId(
+              '$invoiceTitle-${typeGroup.key.name}-${personGroup.key}',
+              'ready-person',
+            ),
+            text: _livingSupportReadyPersonBlock(
+              invoiceTitle: invoiceTitle,
+              type: typeGroup.key,
+              personName: personGroup.key,
+              entries: personGroup.value,
+            ),
+          );
+        }
+      }
+    }
+
+    return LivingSupportDocumentSyncResult(
+      personName: 'Ready to submit',
+      file: file,
+      importedCount: readyEntries.length,
+      updatedCount: 0,
+      invoiceTabTitle: 'Ready to Submit',
+      subTabTitles: subTabTitles,
+    );
+  }
+
   Future<List<LivingSupportDocumentSummary>> listLivingSupportDocuments({
     required String accessToken,
     required String clientNotesFolderId,
@@ -1528,6 +1699,33 @@ class GoogleDriveService {
       name: documentName,
       mimeType: _googleDocsMimeType,
       bytes: utf8.encode('Master living support notes'),
+      parentId: livingFolder.id,
+      contentMimeType: 'text/plain',
+    );
+  }
+
+  Future<GoogleDriveFile> _findOrCreateReadyToSubmitLivingDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+  }) async {
+    final livingFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _livingSupportFolderName,
+    );
+    final existing = await _findChild(
+      accessToken: accessToken,
+      parentId: livingFolder.id,
+      name: _livingSupportReadyToSubmitDocumentName,
+      mimeType: _googleDocsMimeType,
+    );
+    if (existing != null) return existing;
+
+    return _api.uploadFile(
+      accessToken: accessToken,
+      name: _livingSupportReadyToSubmitDocumentName,
+      mimeType: _googleDocsMimeType,
+      bytes: utf8.encode('Ready to submit living support notes'),
       parentId: livingFolder.id,
       contentMimeType: 'text/plain',
     );
@@ -2054,6 +2252,113 @@ class GoogleDriveService {
     ].join('\n');
   }
 
+  String _livingSupportReadyDashboardBlock(
+    Map<String, List<LivingSupportDocumentEntry>> entriesByInvoiceTitle,
+  ) {
+    final allEntries = entriesByInvoiceTitle.values
+        .expand((entries) => entries)
+        .toList();
+    final people = {
+      for (final item in allEntries)
+        if (_folderName(item.personName).trim().isNotEmpty)
+          _folderName(item.personName),
+    }.toList()..sort();
+    final byType = <EntryType, int>{};
+    for (final item in allEntries) {
+      byType[item.entry.type] = (byType[item.entry.type] ?? 0) + 1;
+    }
+    final typeCounts = byType.entries.toList()
+      ..sort((a, b) => a.key.label.compareTo(b.key.label));
+
+    return [
+      'Ready to submit dashboard',
+      'Finished notes not yet submitted: ${allEntries.length}',
+      'Invoice periods: ${entriesByInvoiceTitle.length}',
+      'People: ${people.length}',
+      '',
+      'By invoice period',
+      if (entriesByInvoiceTitle.isEmpty)
+        '- None'
+      else
+        for (final group in entriesByInvoiceTitle.entries)
+          '- ${group.key}: ${group.value.length}',
+      '',
+      'By support type',
+      if (typeCounts.isEmpty)
+        '- None'
+      else
+        for (final item in typeCounts)
+          '- ${_livingSupportTypeTabName(item.key)}: ${item.value}',
+      '',
+      'People included',
+      if (people.isEmpty)
+        '- None'
+      else
+        for (final person in people) '- $person',
+    ].join('\n');
+  }
+
+  String _livingSupportReadyTotalsBlock(
+    String invoiceTitle,
+    List<LivingSupportDocumentEntry> entries,
+  ) {
+    final people = {
+      for (final item in entries)
+        if (_folderName(item.personName).trim().isNotEmpty)
+          _folderName(item.personName),
+    }.toList()..sort();
+    final byType = <EntryType, int>{};
+    for (final item in entries) {
+      byType[item.entry.type] = (byType[item.entry.type] ?? 0) + 1;
+    }
+    final typeCounts = byType.entries.toList()
+      ..sort((a, b) => a.key.label.compareTo(b.key.label));
+
+    return [
+      'Ready to submit totals',
+      invoiceTitle,
+      'Finished not submitted: ${entries.length}',
+      'People: ${people.length}',
+      '',
+      'By support type',
+      if (typeCounts.isEmpty)
+        '- None'
+      else
+        for (final item in typeCounts)
+          '- ${_livingSupportTypeTabName(item.key)}: ${item.value}',
+      '',
+      'People included',
+      if (people.isEmpty)
+        '- None'
+      else
+        for (final person in people) '- $person',
+    ].join('\n');
+  }
+
+  String _livingSupportReadyPersonBlock({
+    required String invoiceTitle,
+    required EntryType type,
+    required String personName,
+    required List<LivingSupportDocumentEntry> entries,
+  }) {
+    final ordered = [...entries]
+      ..sort((a, b) {
+        final dateCompare = a.entry.date.compareTo(b.entry.date);
+        if (dateCompare != 0) return dateCompare;
+        return _minutesFromStart(a.entry).compareTo(_minutesFromStart(b.entry));
+      });
+
+    return [
+      'Ready to submit',
+      invoiceTitle,
+      'Type: ${_livingSupportTypeTabName(type)}',
+      'Person: $personName',
+      'Finished not submitted: ${ordered.length}',
+      '',
+      for (final item in ordered) _livingSupportEntryBlock(item).trim(),
+    ].join('\n');
+  }
+
   String _livingSupportTemplateText(String noteText) {
     final cleaned = _removeLegacySvilText(noteText);
     final sections = _livingSupportSections(cleaned);
@@ -2249,6 +2554,9 @@ class GoogleDriveService {
 
   static const _livingSupportFolderName = 'Living Support Notes';
   static const _livingSupportMasterDocumentName = 'Master Living Support Notes';
+  static const _livingSupportReadyToSubmitDocumentName =
+      'Ready to Submit - Living Support Notes';
+  static const _livingSupportReadyDashboardTabName = 'Dashboard';
   static const _livingSupportSectionTitles = [
     'Attendance',
     'What happened',
@@ -2331,6 +2639,21 @@ class GoogleDriveService {
         : 'I${invoiceMatch.group(1)}';
 
     return _livingSupportTabTitle('$label $invoiceLabel');
+  }
+
+  String _livingSupportReadyPersonTabName(
+    String personName,
+    EntryType type,
+    String invoiceTitle,
+  ) {
+    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
+    final invoiceLabel = invoiceMatch == null
+        ? ''
+        : ' I${invoiceMatch.group(1)}';
+
+    return _livingSupportTabTitle(
+      '${_folderName(personName)} ${_livingSupportDateTabPrefix(type)}$invoiceLabel',
+    );
   }
 
   String _livingSupportSummaryMarkerId(String invoiceTitle, String suffix) {
