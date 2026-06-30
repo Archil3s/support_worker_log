@@ -284,6 +284,171 @@ class _LivingSupportTab {
   final int endIndex;
 }
 
+class _LivingSupportTabCache {
+  _LivingSupportTabCache(
+    this._service, {
+    required this.accessToken,
+    required this.documentId,
+  });
+
+  final GoogleDriveService _service;
+  final String accessToken;
+  final String documentId;
+
+  List<_LivingSupportTab> _tabs = const [];
+  String? _revisionId;
+  var _loaded = false;
+
+  List<_LivingSupportTab> get tabs => _tabs;
+
+  Future<void> load() async {
+    if (_loaded) return;
+    await refresh();
+  }
+
+  Future<void> refresh() async {
+    final document = await _service._docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    _tabs = _service._livingSupportTabsFromDocument(document);
+    _revisionId = _service._revisionId(document);
+    _loaded = true;
+  }
+
+  Future<_LivingSupportTab> ensureTab({
+    required String title,
+    String? parentTabId,
+    List<String> existingTitles = const [],
+  }) async {
+    await load();
+
+    final existing = _findTab(
+      titles: {title, ...existingTitles},
+      parentTabId: parentTabId,
+    );
+    if (existing != null) return existing;
+
+    await _service._docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: [
+        {
+          'addDocumentTab': {
+            'tabProperties': {
+              'title': title,
+              if (parentTabId != null && parentTabId.trim().isNotEmpty)
+                'parentTabId': parentTabId,
+            },
+          },
+        },
+      ],
+      targetRevisionId: _revisionId,
+    );
+
+    await refresh();
+    final created = _findTab(titles: {title}, parentTabId: parentTabId);
+    if (created == null) {
+      throw StateError('Google Docs tab "$title" was not found.');
+    }
+
+    return created;
+  }
+
+  Future<void> replaceBlock({
+    required String tabId,
+    required String markerId,
+    required String text,
+  }) async {
+    await load();
+
+    final tab = _tabs.firstWhere(
+      (candidate) => candidate.id == tabId,
+      orElse: () => throw StateError('Google Docs tab was not found.'),
+    );
+    final existingRange = _service._livingSupportEntryRange(
+      tab: tab,
+      entryId: markerId,
+    );
+    final replacement = [
+      _service._livingSupportStartMarker(markerId),
+      text.trim(),
+      _service._livingSupportEndMarker(markerId),
+      '',
+    ].join('\n');
+    final insertedText = existingRange == null ? '\n$replacement' : replacement;
+    final requests = <Map<String, dynamic>>[
+      if (existingRange != null)
+        {
+          'deleteContentRange': {
+            'range': {
+              'tabId': tab.id,
+              'startIndex': existingRange.startIndex,
+              'endIndex': existingRange.endIndex,
+            },
+          },
+        },
+      {
+        'insertText': {
+          if (existingRange != null)
+            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
+          else
+            'endOfSegmentLocation': {'tabId': tab.id},
+          'text': insertedText,
+        },
+      },
+    ];
+
+    await _service._docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: requests,
+      targetRevisionId: _revisionId,
+    );
+    _revisionId = null;
+    _replaceCachedTabText(tab, existingRange, insertedText);
+  }
+
+  _LivingSupportTab? _findTab({
+    required Set<String> titles,
+    String? parentTabId,
+  }) {
+    for (final tab in _tabs) {
+      if (titles.contains(tab.title) &&
+          (tab.parentId ?? '') == (parentTabId ?? '')) {
+        return tab;
+      }
+    }
+
+    return null;
+  }
+
+  void _replaceCachedTabText(
+    _LivingSupportTab tab,
+    _LivingSupportEntryRange? existingRange,
+    String insertedText,
+  ) {
+    final startIndex = existingRange == null
+        ? tab.text.length
+        : existingRange.startIndex - 1;
+    final endIndex = existingRange == null
+        ? tab.text.length
+        : existingRange.endIndex - 1;
+    final nextText = tab.text.replaceRange(startIndex, endIndex, insertedText);
+    final updated = _LivingSupportTab(
+      id: tab.id,
+      title: tab.title,
+      parentId: tab.parentId,
+      text: nextText,
+      endIndex: nextText.length + 1,
+    );
+    _tabs = [
+      for (final item in _tabs)
+        if (item.id == tab.id) updated else item,
+    ];
+  }
+}
+
 class _LivingSupportEntryRange {
   const _LivingSupportEntryRange({
     required this.startIndex,
@@ -1201,13 +1366,17 @@ class GoogleDriveService {
         clientNotesFolderId: clientNotesFolderId,
         personName: group.key,
       );
+      final tabCache = _LivingSupportTabCache(
+        this,
+        accessToken: accessToken,
+        documentId: file.id,
+      );
       var importedCount = 0;
       var updatedCount = 0;
 
       for (final item in ordered) {
-        final updated = await _syncLivingSupportEntry(
-          accessToken: accessToken,
-          documentId: file.id,
+        final updated = await _syncLivingSupportEntryCached(
+          tabCache: tabCache,
           item: item,
           payPeriodAnchorDate: payPeriodAnchorDate,
         );
@@ -1258,13 +1427,17 @@ class GoogleDriveService {
       clientNotesFolderId: clientNotesFolderId,
       invoiceTitle: invoiceTitle,
     );
+    final tabCache = _LivingSupportTabCache(
+      this,
+      accessToken: accessToken,
+      documentId: file.id,
+    );
     var importedCount = 0;
     var updatedCount = 0;
 
     for (final item in ordered) {
-      final updated = await _syncInvoicePeriodLivingEntry(
-        accessToken: accessToken,
-        documentId: file.id,
+      final updated = await _syncInvoicePeriodLivingEntryCached(
+        tabCache: tabCache,
         item: item,
         invoiceTitle: invoiceTitle,
       );
@@ -1276,17 +1449,12 @@ class GoogleDriveService {
     }
 
     await _syncInvoicePeriodStatusTabs(
-      accessToken: accessToken,
-      documentId: file.id,
+      tabCache: tabCache,
       invoiceTitle: invoiceTitle,
       entries: ordered,
     );
 
-    final document = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: file.id,
-    );
-    final tabs = _livingSupportTabsFromDocument(document);
+    final tabs = tabCache.tabs;
     _LivingSupportTab? invoiceTab;
     for (final tab in tabs) {
       if (tab.title == invoiceTitle) {
@@ -1350,9 +1518,12 @@ class GoogleDriveService {
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
     );
-    final dashboardTab = await _ensureLivingSupportTab(
+    final tabCache = _LivingSupportTabCache(
+      this,
       accessToken: accessToken,
       documentId: file.id,
+    );
+    final dashboardTab = await tabCache.ensureTab(
       title: _livingSupportReadyDashboardTabName,
     );
     final entriesByInvoiceTitle = <String, List<LivingSupportDocumentEntry>>{};
@@ -1367,9 +1538,7 @@ class GoogleDriveService {
           .add(item);
     }
 
-    await _replaceLivingSupportTabBlock(
-      accessToken: accessToken,
-      documentId: file.id,
+    await tabCache.replaceBlock(
       tabId: dashboardTab.id,
       markerId: 'ready-to-submit-dashboard',
       text: _livingSupportReadyDashboardBlock(entriesByInvoiceTitle),
@@ -1380,14 +1549,8 @@ class GoogleDriveService {
     for (final invoiceGroup in entriesByInvoiceTitle.entries) {
       final invoiceTitle = invoiceGroup.key;
       final invoiceEntries = invoiceGroup.value;
-      final invoiceTab = await _ensureLivingSupportTab(
-        accessToken: accessToken,
-        documentId: file.id,
-        title: invoiceTitle,
-      );
-      final totalsTab = await _ensureLivingSupportTab(
-        accessToken: accessToken,
-        documentId: file.id,
+      final invoiceTab = await tabCache.ensureTab(title: invoiceTitle);
+      final totalsTab = await tabCache.ensureTab(
         title: _livingSupportStatusTabName('Ready Totals', invoiceTitle),
         parentTabId: invoiceTab.id,
       );
@@ -1396,9 +1559,7 @@ class GoogleDriveService {
         ..add(invoiceTitle)
         ..add(totalsTab.title);
 
-      await _replaceLivingSupportTabBlock(
-        accessToken: accessToken,
-        documentId: file.id,
+      await tabCache.replaceBlock(
         tabId: totalsTab.id,
         markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'ready-totals'),
         text: _livingSupportReadyTotalsBlock(invoiceTitle, invoiceEntries),
@@ -1414,9 +1575,7 @@ class GoogleDriveService {
         ..sort((a, b) => a.key.label.compareTo(b.key.label));
 
       for (final typeGroup in typeGroups) {
-        final typeTab = await _ensureLivingSupportTab(
-          accessToken: accessToken,
-          documentId: file.id,
+        final typeTab = await tabCache.ensureTab(
           title: _livingSupportScopedTypeTabName(typeGroup.key, invoiceTitle),
           parentTabId: invoiceTab.id,
         );
@@ -1436,9 +1595,7 @@ class GoogleDriveService {
           ..sort((a, b) => a.key.compareTo(b.key));
 
         for (final personGroup in personGroups) {
-          final personTab = await _ensureLivingSupportTab(
-            accessToken: accessToken,
-            documentId: file.id,
+          final personTab = await tabCache.ensureTab(
             title: _livingSupportReadyPersonTabName(
               personGroup.key,
               typeGroup.key,
@@ -1449,9 +1606,7 @@ class GoogleDriveService {
 
           subTabTitles.add(personTab.title);
 
-          await _replaceLivingSupportTabBlock(
-            accessToken: accessToken,
-            documentId: file.id,
+          await tabCache.replaceBlock(
             tabId: personTab.id,
             markerId: _livingSupportSummaryMarkerId(
               '$invoiceTitle-${typeGroup.key.name}-${personGroup.key}',
@@ -1731,9 +1886,8 @@ class GoogleDriveService {
     );
   }
 
-  Future<bool> _syncLivingSupportEntry({
-    required String accessToken,
-    required String documentId,
+  Future<bool> _syncLivingSupportEntryCached({
+    required _LivingSupportTabCache tabCache,
     required LivingSupportDocumentEntry item,
     DateTime? payPeriodAnchorDate,
   }) async {
@@ -1745,90 +1899,47 @@ class GoogleDriveService {
       item.entry,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
-    final invoiceTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final invoiceTab = await tabCache.ensureTab(
       title: invoiceTitle,
       existingTitles: [legacyInvoiceTitle],
     );
-    final typeTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final typeTab = await tabCache.ensureTab(
       title: _livingSupportScopedTypeTabName(item.entry.type, invoiceTitle),
       parentTabId: invoiceTab.id,
     );
-    final dateTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final dateTab = await tabCache.ensureTab(
       title: _livingSupportDateTabName(item.entry),
       parentTabId: typeTab.id,
       existingTitles: [_legacyLivingSupportDateTabName(item.entry.date)],
     );
-    final document = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: documentId,
-    );
-    final tab = _livingSupportTabsFromDocument(document).firstWhere(
-      (candidate) => candidate.id == dateTab.id,
-      orElse: () => dateTab,
-    );
     final replacement = _livingSupportEntryBlock(item);
     final existingRange = _livingSupportEntryRange(
-      tab: tab,
+      tab: dateTab,
       entryId: item.entry.id,
     );
-    final requests = <Map<String, dynamic>>[
-      if (existingRange != null)
-        {
-          'deleteContentRange': {
-            'range': {
-              'tabId': tab.id,
-              'startIndex': existingRange.startIndex,
-              'endIndex': existingRange.endIndex,
-            },
-          },
-        },
-      {
-        'insertText': {
-          if (existingRange != null)
-            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
-          else
-            'endOfSegmentLocation': {'tabId': tab.id},
-          'text': existingRange == null ? '\n$replacement' : replacement,
-        },
-      },
-    ];
-
-    await _docsApi.batchUpdate(
-      accessToken: accessToken,
-      documentId: documentId,
-      requests: requests,
-      targetRevisionId: _revisionId(document),
+    await tabCache.replaceBlock(
+      tabId: dateTab.id,
+      markerId: item.entry.id,
+      text: replacement
+          .replaceAll(_livingSupportStartMarker(item.entry.id), '')
+          .replaceAll(_livingSupportEndMarker(item.entry.id), '')
+          .trim(),
     );
 
     return existingRange != null;
   }
 
-  Future<bool> _syncInvoicePeriodLivingEntry({
-    required String accessToken,
-    required String documentId,
+  Future<bool> _syncInvoicePeriodLivingEntryCached({
+    required _LivingSupportTabCache tabCache,
     required LivingSupportDocumentEntry item,
     required String invoiceTitle,
   }) async {
-    final invoiceTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
-      title: invoiceTitle,
-    );
-    final personTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final invoiceTab = await tabCache.ensureTab(title: invoiceTitle);
+    final personTab = await tabCache.ensureTab(
       title: _livingSupportPersonTabName(item.personName, invoiceTitle),
       parentTabId: invoiceTab.id,
     );
-    final typeTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final typeTab = await tabCache.ensureTab(
       title: _livingSupportPersonTypeTabName(
         item.entry.type,
         item.personName,
@@ -1836,196 +1947,51 @@ class GoogleDriveService {
       ),
       parentTabId: personTab.id,
     );
-    final dateTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final dateTab = await tabCache.ensureTab(
       title: _livingSupportPersonDateTabName(item.entry, item.personName),
       parentTabId: typeTab.id,
     );
-    final document = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: documentId,
-    );
-    final tab = _livingSupportTabsFromDocument(document).firstWhere(
-      (candidate) => candidate.id == dateTab.id,
-      orElse: () => dateTab,
-    );
     final replacement = _livingSupportEntryBlock(item);
     final existingRange = _livingSupportEntryRange(
-      tab: tab,
+      tab: dateTab,
       entryId: item.entry.id,
     );
-    final requests = <Map<String, dynamic>>[
-      if (existingRange != null)
-        {
-          'deleteContentRange': {
-            'range': {
-              'tabId': tab.id,
-              'startIndex': existingRange.startIndex,
-              'endIndex': existingRange.endIndex,
-            },
-          },
-        },
-      {
-        'insertText': {
-          if (existingRange != null)
-            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
-          else
-            'endOfSegmentLocation': {'tabId': tab.id},
-          'text': existingRange == null ? '\n$replacement' : replacement,
-        },
-      },
-    ];
-
-    await _docsApi.batchUpdate(
-      accessToken: accessToken,
-      documentId: documentId,
-      requests: requests,
-      targetRevisionId: _revisionId(document),
+    await tabCache.replaceBlock(
+      tabId: dateTab.id,
+      markerId: item.entry.id,
+      text: replacement
+          .replaceAll(_livingSupportStartMarker(item.entry.id), '')
+          .replaceAll(_livingSupportEndMarker(item.entry.id), '')
+          .trim(),
     );
 
     return existingRange != null;
   }
 
   Future<void> _syncInvoicePeriodStatusTabs({
-    required String accessToken,
-    required String documentId,
+    required _LivingSupportTabCache tabCache,
     required String invoiceTitle,
     required List<LivingSupportDocumentEntry> entries,
   }) async {
-    final invoiceTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
-      title: invoiceTitle,
-    );
-    final submittedTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final invoiceTab = await tabCache.ensureTab(title: invoiceTitle);
+    final submittedTab = await tabCache.ensureTab(
       title: _livingSupportStatusTabName('Submitted', invoiceTitle),
       parentTabId: invoiceTab.id,
     );
-    final totalsTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
+    final totalsTab = await tabCache.ensureTab(
       title: _livingSupportStatusTabName('Totals', invoiceTitle),
       parentTabId: invoiceTab.id,
     );
 
-    await _replaceLivingSupportTabBlock(
-      accessToken: accessToken,
-      documentId: documentId,
+    await tabCache.replaceBlock(
       tabId: submittedTab.id,
       markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'submitted'),
       text: _livingSupportSubmittedSummaryBlock(invoiceTitle, entries),
     );
-    await _replaceLivingSupportTabBlock(
-      accessToken: accessToken,
-      documentId: documentId,
+    await tabCache.replaceBlock(
       tabId: totalsTab.id,
       markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'totals'),
       text: _livingSupportTotalsBlock(invoiceTitle, entries),
-    );
-  }
-
-  Future<void> _replaceLivingSupportTabBlock({
-    required String accessToken,
-    required String documentId,
-    required String tabId,
-    required String markerId,
-    required String text,
-  }) async {
-    final document = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: documentId,
-    );
-    final tab = _livingSupportTabsFromDocument(document).firstWhere(
-      (candidate) => candidate.id == tabId,
-      orElse: () => throw StateError('Google Docs tab was not found.'),
-    );
-    final existingRange = _livingSupportEntryRange(tab: tab, entryId: markerId);
-    final replacement = [
-      _livingSupportStartMarker(markerId),
-      text.trim(),
-      _livingSupportEndMarker(markerId),
-      '',
-    ].join('\n');
-    final requests = <Map<String, dynamic>>[
-      if (existingRange != null)
-        {
-          'deleteContentRange': {
-            'range': {
-              'tabId': tab.id,
-              'startIndex': existingRange.startIndex,
-              'endIndex': existingRange.endIndex,
-            },
-          },
-        },
-      {
-        'insertText': {
-          if (existingRange != null)
-            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
-          else
-            'endOfSegmentLocation': {'tabId': tab.id},
-          'text': existingRange == null ? '\n$replacement' : replacement,
-        },
-      },
-    ];
-
-    await _docsApi.batchUpdate(
-      accessToken: accessToken,
-      documentId: documentId,
-      requests: requests,
-      targetRevisionId: _revisionId(document),
-    );
-  }
-
-  Future<_LivingSupportTab> _ensureLivingSupportTab({
-    required String accessToken,
-    required String documentId,
-    required String title,
-    String? parentTabId,
-    List<String> existingTitles = const [],
-  }) async {
-    final document = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: documentId,
-    );
-    _LivingSupportTab? existing;
-    final acceptedTitles = {title, ...existingTitles};
-    for (final tab in _livingSupportTabsFromDocument(document)) {
-      if (acceptedTitles.contains(tab.title) &&
-          (tab.parentId ?? '') == (parentTabId ?? '')) {
-        existing = tab;
-        break;
-      }
-    }
-    if (existing != null) return existing;
-
-    await _docsApi.batchUpdate(
-      accessToken: accessToken,
-      documentId: documentId,
-      requests: [
-        {
-          'addDocumentTab': {
-            'tabProperties': {
-              'title': title,
-              if (parentTabId != null && parentTabId.trim().isNotEmpty)
-                'parentTabId': parentTabId,
-            },
-          },
-        },
-      ],
-      targetRevisionId: _revisionId(document),
-    );
-
-    final updated = await _docsApi.getDocument(
-      accessToken: accessToken,
-      documentId: documentId,
-    );
-    return _livingSupportTabsFromDocument(updated).firstWhere(
-      (tab) =>
-          tab.title == title && (tab.parentId ?? '') == (parentTabId ?? ''),
-      orElse: () => throw StateError('Google Docs tab "$title" was not found.'),
     );
   }
 

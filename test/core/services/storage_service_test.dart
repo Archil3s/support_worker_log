@@ -184,6 +184,22 @@ void main() {
     );
   });
 
+  test('persists deleted entry ids for cloud merge tombstones', () {
+    const data = StoredAppData(
+      settings: AppSettings(),
+      clients: ['Brad Roberts'],
+      entries: [],
+      payeEntries: [],
+      deletedEntryIds: {'entry-1'},
+      deletedPayeEntryIds: {'paye-entry-1'},
+    );
+
+    final restored = StoredAppData.fromJson(data.toJson());
+
+    expect(restored.deletedEntryIds, {'entry-1'});
+    expect(restored.deletedPayeEntryIds, {'paye-entry-1'});
+  });
+
   test('legacy data derives PAYE people only from PAYE entries', () {
     final restored = StoredAppData.fromJson({
       'settings': const AppSettings().toJson(),

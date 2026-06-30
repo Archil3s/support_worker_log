@@ -618,24 +618,19 @@ class _EntryCard extends StatelessWidget {
 
     if (!confirmed) return;
 
-    var deletedDriveFileCount = 0;
     if (appState.isPayeMode) {
       try {
-        deletedDriveFileCount = (await appState.deletePayeDriveNoteForEntry(
-          entry,
-        )).length;
+        await appState.deletePayeDriveNoteForEntry(entry);
       } catch (error) {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              'Entry not deleted. Could not permanently delete PAYE Google Doc: $error',
+              'Entry not deleted. Could not check PAYE Google Doc: $error',
             ),
           ),
         );
         return;
       }
-    } else {
-      await appState.deleteStoredSupportNoteData(entry.id);
     }
 
     final removed = appState.deleteEntry(entry);
@@ -644,18 +639,14 @@ class _EntryCard extends StatelessWidget {
 
     if (appState.isPayeMode) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            deletedDriveFileCount == 0
-                ? 'PAYE entry deleted'
-                : 'PAYE entry deleted and $deletedDriveFileCount Google Drive/Docs file(s) permanently deleted',
-          ),
-        ),
+        const SnackBar(content: Text('PAYE entry deleted. Notes kept.')),
       );
       return;
     }
 
-    messenger.showSnackBar(const SnackBar(content: Text('Entry deleted')));
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Entry deleted. Notes kept.')),
+    );
   }
 
   void _showActions(BuildContext context, AppSettings settings) {
@@ -888,9 +879,9 @@ Future<bool> _confirmDeleteEntry(BuildContext context, WorkEntry entry) async {
             content: Text(
               payeMode
                   ? 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
-                        'Any matching PAYE Google Doc under this Google account will be permanently deleted, not moved to bin.'
+                        'Saved PAYE notes and Google Docs will be kept.'
                   : 'Delete ${entry.client} on ${formatDate(entry.date)} from the app? '
-                        'Local saved note metadata will be permanently removed. This cannot be undone.',
+                        'Saved notes and Drive links will be kept for review.',
             ),
             actions: [
               TextButton(

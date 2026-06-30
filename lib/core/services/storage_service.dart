@@ -27,6 +27,8 @@ class StoredAppData {
     this.personalLogEntries = const [],
     this.supportNoteMetas = const {},
     this.driveSupportNoteMetas = const {},
+    this.deletedEntryIds = const {},
+    this.deletedPayeEntryIds = const {},
   });
 
   final AppSettings settings;
@@ -42,6 +44,8 @@ class StoredAppData {
   final List<PersonalLogEntry> personalLogEntries;
   final Map<String, EntrySupportNoteMeta> supportNoteMetas;
   final Map<String, EntryDriveSupportNoteMeta> driveSupportNoteMetas;
+  final Set<String> deletedEntryIds;
+  final Set<String> deletedPayeEntryIds;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -74,6 +78,8 @@ class StoredAppData {
       'driveSupportNoteMetas': driveSupportNoteMetas.map(
         (key, meta) => MapEntry(key, meta.toJson()),
       ),
+      'deletedEntryIds': deletedEntryIds.toList()..sort(),
+      'deletedPayeEntryIds': deletedPayeEntryIds.toList()..sort(),
     };
   }
 
@@ -159,6 +165,8 @@ class StoredAppData {
     final rawPersonalLogEntries = json['personalLogEntries'];
     final rawSupportNoteMetas = json['supportNoteMetas'];
     final rawDriveSupportNoteMetas = json['driveSupportNoteMetas'];
+    final deletedEntryIds = _entryIdsFromJson(json['deletedEntryIds']);
+    final deletedPayeEntryIds = _entryIdsFromJson(json['deletedPayeEntryIds']);
     final personalLogEntries = <PersonalLogEntry>[];
     final supportNoteMetas = <String, EntrySupportNoteMeta>{};
     final driveSupportNoteMetas = <String, EntryDriveSupportNoteMeta>{};
@@ -258,7 +266,19 @@ class StoredAppData {
       personalLogEntries: personalLogEntries,
       supportNoteMetas: supportNoteMetas,
       driveSupportNoteMetas: driveSupportNoteMetas,
+      deletedEntryIds: deletedEntryIds,
+      deletedPayeEntryIds: deletedPayeEntryIds,
     );
+  }
+
+  static Set<String> _entryIdsFromJson(Object? value) {
+    if (value is! List) return const {};
+
+    return value
+        .whereType<String>()
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
   }
 }
 

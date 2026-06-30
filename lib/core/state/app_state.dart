@@ -59,6 +59,8 @@ class AppState extends ChangeNotifier {
   final Map<String, double> _invoiceBaselineTotals = {};
   final Map<String, EntrySupportNoteMeta> _supportNoteMetas = {};
   final Map<String, EntryDriveSupportNoteMeta> _driveSupportNoteMetas = {};
+  final Set<String> _deletedEntryIds = {};
+  final Set<String> _deletedPayeEntryIds = {};
 
   late final List<String> _clientsView = UnmodifiableListView(_clients);
   late final List<String> _payeClientsView = UnmodifiableListView(_payeClients);
@@ -948,74 +950,9 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
-  Future<List<String>> deletePayeDriveNoteForEntry(WorkEntry entry) async {
-    final savedMeta = await _googleDriveService.loadSupportNoteMeta(entry.id);
-    final notesFolderId = _settings.payeGoogleDriveNotesFolderId;
-    final hasNotesFolder = notesFolderId != null && notesFolderId.isNotEmpty;
-
-    if (!_googleExportAccountService.isConnected(
-      GoogleExportAccountScope.paye,
-    )) {
-      if (hasNotesFolder || savedMeta != null) {
-        throw StateError(
-          'Connect the PAYE Google account first so the Google Doc can be permanently deleted everywhere.',
-        );
-      }
-
-      await deleteStoredSupportNoteData(entry.id);
-      return const [];
-    }
-
-    final accessToken = await requireGoogleDriveAccessToken(
-      scope: GoogleExportAccountScope.paye,
-    );
-    if (!hasNotesFolder) {
-      await deleteStoredSupportNoteData(entry.id);
-      return const [];
-    }
-
-    final accountEmail = payeGoogleAccountEmail?.trim().toLowerCase();
-    final savedAccountEmail = savedMeta?.googleAccountEmail
-        ?.trim()
-        .toLowerCase();
-    final metaMatchesAccount =
-        savedMeta != null &&
-        (accountEmail == null ||
-            accountEmail.isEmpty ||
-            savedAccountEmail == null ||
-            savedAccountEmail.isEmpty ||
-            savedAccountEmail == accountEmail);
-    final driveMatches = await _googleDriveService.findPayeNotesInDrive(
-      accessToken: accessToken,
-      notesFolderId: notesFolderId,
-      entry: entry,
-      googleAccountEmail: payeGoogleAccountEmail,
-    );
-    final metasByFileId = <String, EntryDriveSupportNoteMeta>{};
-    for (final meta in driveMatches) {
-      final fileId = meta.fileId.trim();
-      if (fileId.isNotEmpty) metasByFileId[fileId] = meta;
-    }
-    if (metaMatchesAccount) {
-      final fileId = savedMeta.fileId.trim();
-      if (fileId.isNotEmpty) metasByFileId[fileId] = savedMeta;
-    }
-    if (metasByFileId.isEmpty) {
-      await deleteStoredSupportNoteData(entry.id);
-      return const [];
-    }
-
-    final deletedFileNames = <String>[];
-    for (final meta in metasByFileId.values) {
-      await _googleDriveService.deleteFile(
-        accessToken: accessToken,
-        fileId: meta.fileId,
-      );
-      deletedFileNames.add(meta.fileName);
-    }
-    await deleteStoredSupportNoteData(entry.id);
-
-    return deletedFileNames;
+  Future<List<String>> deletePayeDriveNoteForEntry(WorkEntry entry) {
+    if (entry.id.trim().isEmpty) return Future.value(const []);
+    return Future.value(const []);
   }
 
   Future<EntryDriveSupportNoteMeta?> findEntryNoteInCurrentDrive(
@@ -1212,6 +1149,8 @@ class AppState extends ChangeNotifier {
     _personalLogEntries.clear();
     _invoiceStatuses.clear();
     _invoiceBaselineTotals.clear();
+    _deletedEntryIds.clear();
+    _deletedPayeEntryIds.clear();
 
     await _save();
     notifyListeners();
@@ -1259,8 +1198,10 @@ class AppState extends ChangeNotifier {
 
   void completeActiveVisit(WorkEntry entry) {
     if (isPayeMode) {
+      _deletedPayeEntryIds.remove(entry.id.trim());
       _payeEntries.insert(0, entry);
     } else {
+      _deletedEntryIds.remove(entry.id.trim());
       _entries.insert(0, entry);
     }
     _activeVisit = null;
@@ -1270,8 +1211,10 @@ class AppState extends ChangeNotifier {
 
   void addEntry(WorkEntry entry) {
     if (isPayeMode) {
+      _deletedPayeEntryIds.remove(entry.id.trim());
       _payeEntries.insert(0, entry);
     } else {
+      _deletedEntryIds.remove(entry.id.trim());
       _entries.insert(0, entry);
     }
     _persistAndNotify();
@@ -1279,6 +1222,7 @@ class AppState extends ChangeNotifier {
   }
 
   void addPayeEntry(WorkEntry entry) {
+    _deletedPayeEntryIds.remove(entry.id.trim());
     _payeEntries.insert(0, entry);
     _persistAndNotify();
   }
@@ -1338,8 +1282,14 @@ class AppState extends ChangeNotifier {
     if (entries.isEmpty) return;
 
     if (isPayeMode) {
+      _deletedPayeEntryIds.removeAll(
+        entries.map((entry) => entry.id.trim()).where((id) => id.isNotEmpty),
+      );
       _payeEntries.insertAll(0, entries);
     } else {
+      _deletedEntryIds.removeAll(
+        entries.map((entry) => entry.id.trim()).where((id) => id.isNotEmpty),
+      );
       _entries.insertAll(0, entries);
     }
     _persistAndNotify();
@@ -1382,6 +1332,14 @@ class AppState extends ChangeNotifier {
     if (index == -1) return null;
 
     final removed = activeEntries.removeAt(index);
+    final removedId = removed.id.trim();
+    if (removedId.isNotEmpty) {
+      if (isPayeMode) {
+        _deletedPayeEntryIds.add(removedId);
+      } else {
+        _deletedEntryIds.add(removedId);
+      }
+    }
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
 
@@ -1393,6 +1351,8 @@ class AppState extends ChangeNotifier {
     if (index == -1) return null;
 
     final removed = _payeEntries.removeAt(index);
+    final removedId = removed.id.trim();
+    if (removedId.isNotEmpty) _deletedPayeEntryIds.add(removedId);
     _persistAndNotify();
 
     return RemovedEntry(entry: removed, index: index);
@@ -1400,6 +1360,7 @@ class AppState extends ChangeNotifier {
 
   void restorePayeEntry(RemovedEntry removedEntry) {
     final index = _boundedPayeIndex(removedEntry.index);
+    _deletedPayeEntryIds.remove(removedEntry.entry.id.trim());
     _payeEntries.insert(index, removedEntry.entry);
     _persistAndNotify();
   }
@@ -1409,6 +1370,11 @@ class AppState extends ChangeNotifier {
     final index = isPayeMode
         ? _boundedPayeIndex(removedEntry.index)
         : _boundedIndex(removedEntry.index);
+    if (isPayeMode) {
+      _deletedPayeEntryIds.remove(removedEntry.entry.id.trim());
+    } else {
+      _deletedEntryIds.remove(removedEntry.entry.id.trim());
+    }
     activeEntries.insert(index, removedEntry.entry);
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
@@ -1774,7 +1740,11 @@ class AppState extends ChangeNotifier {
   Future<void> _applyCloudData(StoredAppData? cloudData) async {
     if (cloudData == null) return;
 
-    _replaceInMemory(cloudData);
+    final mergedData = _mergeStoredData(
+      localData: _currentStoredData(),
+      cloudData: cloudData,
+    );
+    _replaceInMemory(mergedData);
     _applyLaunchAppModeOverride();
     final dataToSave = _currentStoredData();
     await _storageService.save(dataToSave);
@@ -2093,13 +2063,26 @@ class AppState extends ChangeNotifier {
       ..addAll(_payeClientListFrom(data))
       ..sort();
 
-    final cleanedEntries = _dedupeEntries(data.entries);
+    _deletedEntryIds
+      ..clear()
+      ..addAll(data.deletedEntryIds);
+    _deletedPayeEntryIds
+      ..clear()
+      ..addAll(data.deletedPayeEntryIds);
+
+    final cleanedEntries = _dedupeEntries(
+      _withoutDeletedEntries(data.entries, _deletedEntryIds),
+    );
     _entries
       ..clear()
       ..addAll(cleanedEntries);
     _payeEntries
       ..clear()
-      ..addAll(_dedupeEntries(data.payeEntries));
+      ..addAll(
+        _dedupeEntries(
+          _withoutDeletedEntries(data.payeEntries, _deletedPayeEntryIds),
+        ),
+      );
 
     _invoiceStatuses
       ..clear()
@@ -2228,18 +2211,30 @@ class AppState extends ChangeNotifier {
       ..._payeClientListFrom(localData),
     }.where((client) => client.trim().isNotEmpty).toList()..sort();
 
-    final mergedEntries = _dedupeEntries([
-      ...cloudData.entries,
-      ...localData.entries,
-    ]);
+    final deletedEntryIds = {
+      ...cloudData.deletedEntryIds,
+      ...localData.deletedEntryIds,
+    };
+    final deletedPayeEntryIds = {
+      ...cloudData.deletedPayeEntryIds,
+      ...localData.deletedPayeEntryIds,
+    };
+    final mergedEntries = _dedupeEntries(
+      _withoutDeletedEntries([
+        ...cloudData.entries,
+        ...localData.entries,
+      ], deletedEntryIds),
+    );
     final mergedGeneralActions = _dedupeGeneralActions([
       ...cloudData.generalActions,
       ...localData.generalActions,
     ]);
-    final mergedPayeEntries = _dedupeEntries([
-      ...cloudData.payeEntries,
-      ...localData.payeEntries,
-    ]);
+    final mergedPayeEntries = _dedupeEntries(
+      _withoutDeletedEntries([
+        ...cloudData.payeEntries,
+        ...localData.payeEntries,
+      ], deletedPayeEntryIds),
+    );
     final mergedPersonalLogs = _dedupePersonalLogEntries([
       ...cloudData.personalLogEntries,
       ...localData.personalLogEntries,
@@ -2273,6 +2268,8 @@ class AppState extends ChangeNotifier {
       personalLogEntries: mergedPersonalLogs,
       supportNoteMetas: mergedSupportNoteMetas,
       driveSupportNoteMetas: mergedDriveSupportNoteMetas,
+      deletedEntryIds: deletedEntryIds,
+      deletedPayeEntryIds: deletedPayeEntryIds,
     );
   }
 
@@ -2291,7 +2288,20 @@ class AppState extends ChangeNotifier {
       personalLogEntries: _personalLogEntries,
       supportNoteMetas: _supportNoteMetas,
       driveSupportNoteMetas: _driveSupportNoteMetas,
+      deletedEntryIds: _deletedEntryIds,
+      deletedPayeEntryIds: _deletedPayeEntryIds,
     );
+  }
+
+  List<WorkEntry> _withoutDeletedEntries(
+    List<WorkEntry> entries,
+    Set<String> deletedIds,
+  ) {
+    if (deletedIds.isEmpty) return entries;
+
+    return entries
+        .where((entry) => !deletedIds.contains(entry.id.trim()))
+        .toList();
   }
 
   Map<String, EntrySupportNoteMeta> _mergeSupportNoteMetas(
