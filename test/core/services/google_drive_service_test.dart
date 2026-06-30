@@ -13,6 +13,7 @@ import 'package:support_worker_log/core/services/google_docs/google_docs_api_pla
 import 'package:support_worker_log/core/services/google_drive/google_drive_api_platform.dart';
 import 'package:support_worker_log/core/services/google_drive_service.dart';
 import 'package:support_worker_log/core/services/local_support_note_service.dart';
+import 'package:support_worker_log/core/utils/pay_period_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -599,7 +600,10 @@ void main() {
             ),
             personName: 'AB',
             status: EntrySupportNoteStatus.finished,
-            noteText: 'Main topic(s)\nCalled client about appointment.',
+            noteText:
+                'Main topic(s)\nCalled client about appointment.\n\n'
+                'Safety concerns for sexual harm survivors and mental health\n'
+                'No safety concerns noted.',
           ),
         ],
       );
@@ -613,18 +617,22 @@ void main() {
         'client-notes/AB/Living Support Notes',
       );
       expect(docsApi.addedTabs.map((tab) => tab.title), [
-        'Phone Calls',
-        'Phone Inv 10 2026-05-31 to 2026-06-13',
+        'Invoice 10 2026-05-31 to 2026-06-13',
+        'Phone Calls - Inv 10',
         'Phone 2026-06-02',
       ]);
       expect(docsApi.insertedText.single, contains('Note status: Finished'));
       expect(
         docsApi.insertedText.single,
-        contains('Living document sync: Imported'),
+        contains('Updated to living doc: Yes'),
       );
       expect(
         docsApi.insertedText.single,
         contains('Called client about appointment.'),
+      );
+      expect(
+        docsApi.insertedText.single,
+        isNot(contains('sexual harm survivors')),
       );
     },
   );
@@ -672,14 +680,84 @@ void main() {
       );
 
       expect(docsApi.addedTabs.map((tab) => tab.title), [
-        'Phone Calls',
-        'Phone Inv 10 2026-05-31 to 2026-06-13',
+        'Invoice 10 2026-05-31 to 2026-06-13',
+        'Phone Calls - Inv 10',
         'Phone 2026-06-02',
-        'Texts',
-        'Texts Inv 10 2026-05-31 to 2026-06-13',
+        'Texts - Inv 10',
         'Texts 2026-06-02',
       ]);
       expect(docsApi.addedTabs.every((tab) => tab.title.length <= 50), true);
+    },
+  );
+
+  test(
+    'syncInvoicePeriodLivingDocument creates one doc for all people',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(children: const []);
+      final docsApi = _FakeGoogleDocsApi();
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final result = await service.syncInvoicePeriodLivingDocument(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        range: PayPeriodRange(
+          start: DateTime(2026, 5, 31),
+          end: DateTime(2026, 6, 13),
+        ),
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'phone-entry',
+              client: 'AB',
+              type: EntryType.phoneCall,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Called client'],
+            ),
+            personName: 'Joseph W',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'What happened\nPhone note.',
+          ),
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'text-entry',
+              client: 'CD',
+              type: EntryType.textNote,
+              date: DateTime(2026, 6, 3),
+              startTime: const TimeOfDay(hour: 10, minute: 15),
+              minutes: 10,
+              notes: const ['Texted client'],
+            ),
+            personName: 'Pierre',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'What happened\nText note.',
+          ),
+        ],
+      );
+
+      expect(result.personName, 'All people');
+      expect(result.importedCount, 2);
+      expect(result.updatedCount, 0);
+      expect(
+        driveApi.uploads.single.parentId,
+        'client-notes/Living Support Notes',
+      );
+      expect(driveApi.uploads.single.name, 'Master Living Support Notes');
+      expect(result.invoiceTabTitle, 'Invoice 10 2026-05-31 to 2026-06-13');
+      expect(
+        result.subTabTitles,
+        containsAll([
+          'Joseph W Inv 10',
+          'Phone Joseph W I10',
+          'Phone Joseph W 2026-06-02',
+          'Pierre Inv 10',
+          'Texts Pierre I10',
+          'Texts Pierre 2026-06-03',
+        ]),
+      );
+      expect(docsApi.insertedText.join('\n'), contains('Phone note.'));
+      expect(docsApi.insertedText.join('\n'), contains('Text note.'));
     },
   );
 
@@ -716,13 +794,17 @@ void main() {
           _FakeGoogleDocTab(id: 'type-tab', title: 'Texts'),
           _FakeGoogleDocTab(
             id: 'invoice-tab',
-            title: 'Invoice 10 - 2026-05-31 to 2026-06-13',
-            parentId: 'type-tab',
+            title: 'Invoice 10 2026-05-31 to 2026-06-13',
+          ),
+          _FakeGoogleDocTab(
+            id: 'type-tab-new',
+            title: 'Texts - Inv 10',
+            parentId: 'invoice-tab',
           ),
           _FakeGoogleDocTab(
             id: 'date-tab',
-            title: '2026-06-02',
-            parentId: 'invoice-tab',
+            title: 'Texts 2026-06-02',
+            parentId: 'type-tab-new',
             text:
                 '[[SWL_ENTRY:entry-1:START]]\nOld text\n[[SWL_ENTRY:entry-1:END]]\n',
           ),
@@ -814,6 +896,68 @@ void main() {
     expect(results.single.file.id, 'ab-living-doc');
     expect(results.single.openLink, 'https://docs.example/ab-living-doc');
   });
+
+  test(
+    'listLivingSupportDocuments loads selected invoice period tabs',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'living-folder',
+              name: 'Living Support Notes',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'living-folder': [
+            const GoogleDriveFile(
+              id: 'master-living-doc',
+              name: 'Master Living Support Notes',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final docsApi = _FakeGoogleDocsApi(
+        tabs: [
+          _FakeGoogleDocTab(
+            id: 'invoice-tab',
+            title: 'Invoice 10 2026-05-31 to 2026-06-13',
+          ),
+          _FakeGoogleDocTab(
+            id: 'phone-tab',
+            title: 'Phone Calls - Inv 10',
+            parentId: 'invoice-tab',
+          ),
+          _FakeGoogleDocTab(
+            id: 'phone-date-tab',
+            title: 'Phone 2026-06-02',
+            parentId: 'phone-tab',
+          ),
+        ],
+      );
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final results = await service.listLivingSupportDocuments(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        range: PayPeriodRange(
+          start: DateTime(2026, 5, 31),
+          end: DateTime(2026, 6, 13),
+        ),
+      );
+
+      expect(results.single.personName, 'All people');
+      expect(
+        results.single.invoiceTabTitle,
+        'Invoice 10 2026-05-31 to 2026-06-13',
+      );
+      expect(results.single.subTabTitles, [
+        'Phone Calls - Inv 10',
+        'Phone 2026-06-02',
+      ]);
+    },
+  );
 
   test(
     'saveSupportNote replaces existing Google Docs notes through Drive',

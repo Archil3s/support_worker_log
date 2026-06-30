@@ -16,6 +16,7 @@ import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/pay_period_utils.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
@@ -117,7 +118,7 @@ class _NotesScreenState extends State<NotesScreen> {
   String search = '';
   String? clientFilter;
   EntrySupportNoteStatus? statusFilter;
-  bool syncingLivingDocs = false;
+  String? selectedPayPeriodKey;
   bool syncingCurrentPeriodLivingDocs = false;
   bool loadingLivingDocs = false;
   List<LivingSupportDocumentSummary> livingDocs = const [];
@@ -171,65 +172,24 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
-  Future<void> _syncLivingDocuments() async {
-    if (syncingLivingDocs) return;
-
-    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-    setState(() => syncingLivingDocs = true);
-
-    try {
-      final results = await context
-          .read<AppState>()
-          .syncLivingSupportDocumentsFromEntries();
-      final imported = results.fold<int>(
-        0,
-        (total, result) => total + result.importedCount,
-      );
-      final updated = results.fold<int>(
-        0,
-        (total, result) => total + result.updatedCount,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        livingDocs = [
-          for (final result in results)
-            LivingSupportDocumentSummary(
-              personName: result.personName,
-              file: result.file,
-            ),
-        ];
-      });
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Synced ${results.length} living docs. Imported $imported, updated $updated.',
-          ),
-        ),
-      );
-    } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Living Google Docs sync failed: ${_friendlyErrorText(error)}',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => syncingLivingDocs = false);
-    }
-  }
-
   Future<void> _syncCurrentPayPeriodLivingDocuments() async {
     if (syncingCurrentPeriodLivingDocs) return;
 
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final appState = context.read<AppState>();
+    final selectedRange = _payPeriodRangeForKey(
+      selectedPayPeriodKey,
+      _livingDocsPayPeriodRanges(
+        appState.entries,
+        appState.settings.payPeriodAnchorDate,
+      ),
+    );
     setState(() => syncingCurrentPeriodLivingDocs = true);
 
     try {
-      final results = await context
-          .read<AppState>()
-          .syncCurrentPayPeriodLivingSupportDocumentsFromEntries();
+      final results = await appState.syncLivingSupportDocumentsForPayPeriod(
+        range: selectedRange,
+      );
       final imported = results.fold<int>(
         0,
         (total, result) => total + result.importedCount,
@@ -246,13 +206,15 @@ class _NotesScreenState extends State<NotesScreen> {
             LivingSupportDocumentSummary(
               personName: result.personName,
               file: result.file,
+              invoiceTabTitle: result.invoiceTabTitle,
+              subTabTitles: result.subTabTitles,
             ),
         ];
       });
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Imported current pay period into ${results.length} living docs. Imported $imported, updated $updated.',
+            'Master living doc updated. Imported $imported, updated $updated.',
           ),
         ),
       );
@@ -260,7 +222,7 @@ class _NotesScreenState extends State<NotesScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Current pay period import failed: ${_friendlyErrorText(error)}',
+            'Selected pay period generate/load failed: ${_friendlyErrorText(error)}',
           ),
         ),
       );
@@ -273,23 +235,37 @@ class _NotesScreenState extends State<NotesScreen> {
     if (loadingLivingDocs) return;
 
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final appState = context.read<AppState>();
+    final selectedRange = _payPeriodRangeForKey(
+      selectedPayPeriodKey,
+      _livingDocsPayPeriodRanges(
+        appState.entries,
+        appState.settings.payPeriodAnchorDate,
+      ),
+    );
     setState(() => loadingLivingDocs = true);
 
     try {
-      final results = await context
-          .read<AppState>()
-          .loadLivingSupportDocuments();
+      final results = await appState.loadLivingSupportDocumentsForPayPeriod(
+        range: selectedRange,
+      );
       if (!mounted) return;
 
       setState(() => livingDocs = results);
       messenger.showSnackBar(
-        SnackBar(content: Text('Loaded ${results.length} living docs.')),
+        SnackBar(
+          content: Text(
+            results.isEmpty
+                ? 'Master living doc has no tab for this pay period.'
+                : 'Loaded master living doc.',
+          ),
+        ),
       );
     } catch (error) {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Living Google Docs load failed: ${_friendlyErrorText(error)}',
+            'Master living doc load failed: ${_friendlyErrorText(error)}',
           ),
         ),
       );
@@ -318,6 +294,12 @@ class _NotesScreenState extends State<NotesScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final allEntries = appState.entries;
+    final payPeriodRanges = _livingDocsPayPeriodRanges(
+      allEntries,
+      appState.settings.payPeriodAnchorDate,
+    );
+    final selectedPeriodKey =
+        selectedPayPeriodKey ?? _payPeriodKey(payPeriodRanges.first);
     final clients = {
       ...appState.clients,
       ...allEntries.map((entry) => entry.client),
@@ -344,13 +326,17 @@ class _NotesScreenState extends State<NotesScreen> {
         onStatusFilterChanged: (value) {
           setState(() => statusFilter = value);
         },
+        payPeriodRanges: payPeriodRanges,
+        selectedPayPeriodKey: selectedPeriodKey,
+        onPayPeriodChanged: (value) {
+          if (value == null) return;
+          setState(() => selectedPayPeriodKey = value);
+        },
         onChooseFolder: _chooseFolder,
-        onSyncLivingDocuments: _syncLivingDocuments,
         onSyncCurrentPayPeriodLivingDocuments:
             _syncCurrentPayPeriodLivingDocuments,
         onLoadLivingDocuments: _loadLivingDocuments,
         onOpenLivingDocument: _openLivingDocument,
-        syncingLivingDocs: syncingLivingDocs,
         syncingCurrentPeriodLivingDocs: syncingCurrentPeriodLivingDocs,
         loadingLivingDocs: loadingLivingDocs,
         livingDocs: livingDocs,
@@ -371,12 +357,13 @@ class _NotesListTab extends StatelessWidget {
     required this.onClearSearch,
     required this.onClientFilterChanged,
     required this.onStatusFilterChanged,
+    required this.payPeriodRanges,
+    required this.selectedPayPeriodKey,
+    required this.onPayPeriodChanged,
     required this.onChooseFolder,
-    required this.onSyncLivingDocuments,
     required this.onSyncCurrentPayPeriodLivingDocuments,
     required this.onLoadLivingDocuments,
     required this.onOpenLivingDocument,
-    required this.syncingLivingDocs,
     required this.syncingCurrentPeriodLivingDocs,
     required this.loadingLivingDocs,
     required this.livingDocs,
@@ -392,12 +379,13 @@ class _NotesListTab extends StatelessWidget {
   final VoidCallback onClearSearch;
   final ValueChanged<String?> onClientFilterChanged;
   final ValueChanged<EntrySupportNoteStatus?> onStatusFilterChanged;
+  final List<PayPeriodRange> payPeriodRanges;
+  final String selectedPayPeriodKey;
+  final ValueChanged<String?> onPayPeriodChanged;
   final VoidCallback onChooseFolder;
-  final VoidCallback onSyncLivingDocuments;
   final VoidCallback onSyncCurrentPayPeriodLivingDocuments;
   final VoidCallback onLoadLivingDocuments;
   final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
-  final bool syncingLivingDocs;
   final bool syncingCurrentPeriodLivingDocs;
   final bool loadingLivingDocs;
   final List<LivingSupportDocumentSummary> livingDocs;
@@ -427,23 +415,30 @@ class _NotesListTab extends StatelessWidget {
               ),
               if (!payeMode) ...[
                 const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: syncingLivingDocs ? null : onSyncLivingDocuments,
-                  icon: syncingLivingDocs
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.sync_outlined),
-                  label: Text(
-                    syncingLivingDocs
-                        ? 'Syncing Living Google Docs'
-                        : 'Sync Living Google Docs',
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: selectedPayPeriodKey,
+                  decoration: const InputDecoration(
+                    labelText: 'Pay period for notes',
+                    prefixIcon: Icon(Icons.date_range_outlined),
                   ),
+                  items: [
+                    for (final range in payPeriodRanges)
+                      DropdownMenuItem<String>(
+                        value: _payPeriodKey(range),
+                        child: Text(
+                          _payPeriodLabel(range),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: syncingCurrentPeriodLivingDocs
+                      ? null
+                      : onPayPeriodChanged,
                 ),
                 const SizedBox(height: 10),
                 FilledButton.icon(
-                  onPressed: syncingCurrentPeriodLivingDocs
+                  onPressed: syncingCurrentPeriodLivingDocs || loadingLivingDocs
                       ? null
                       : onSyncCurrentPayPeriodLivingDocuments,
                   icon: syncingCurrentPeriodLivingDocs
@@ -454,8 +449,8 @@ class _NotesListTab extends StatelessWidget {
                       : const Icon(Icons.date_range_outlined),
                   label: Text(
                     syncingCurrentPeriodLivingDocs
-                        ? 'Importing Current Pay Period'
-                        : 'Import Current Pay Period to Living Docs',
+                        ? 'Syncing Master Living Doc'
+                        : 'Sync Master Living Doc',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -469,8 +464,8 @@ class _NotesListTab extends StatelessWidget {
                       : const Icon(Icons.tab_outlined),
                   label: Text(
                     loadingLivingDocs
-                        ? 'Loading Living Google Docs'
-                        : 'Load Living Google Docs',
+                        ? 'Loading Master Living Doc'
+                        : 'Load Master Living Doc',
                   ),
                 ),
                 if (livingDocs.isNotEmpty) ...[
@@ -488,7 +483,7 @@ class _NotesListTab extends StatelessWidget {
               Text(
                 payeMode
                     ? 'Create, test, save, open, and remove PAYE Google Docs notes from saved PAYE entries.'
-                    : 'Create and sync Google Docs notes attached to saved entries.',
+                    : 'Load and update one master Google Doc with invoice-period tabs for all people and interactions.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
@@ -569,6 +564,53 @@ class _NotesListTab extends StatelessWidget {
   }
 }
 
+List<PayPeriodRange> _livingDocsPayPeriodRanges(
+  Iterable<WorkEntry> entries,
+  DateTime? anchorDate,
+) {
+  final rangesByKey = <String, PayPeriodRange>{};
+  final current = currentFortnight(anchorDate: anchorDate);
+
+  rangesByKey[_payPeriodKey(current)] = current;
+
+  for (final entry in entries) {
+    final range = fortnightForDate(entry.date, anchorDate: anchorDate);
+    rangesByKey[_payPeriodKey(range)] = range;
+  }
+
+  final ranges = rangesByKey.values.toList()
+    ..sort((a, b) => b.start.compareTo(a.start));
+
+  return ranges;
+}
+
+PayPeriodRange _payPeriodRangeForKey(String? key, List<PayPeriodRange> ranges) {
+  if (ranges.isEmpty) {
+    return currentFortnight();
+  }
+
+  return ranges.firstWhere(
+    (range) => _payPeriodKey(range) == key,
+    orElse: () => ranges.first,
+  );
+}
+
+String _payPeriodKey(PayPeriodRange range) {
+  return '${_payPeriodDateKey(range.start)}_${_payPeriodDateKey(range.end)}';
+}
+
+String _payPeriodDateKey(DateTime date) {
+  final year = date.year.toString().padLeft(4, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+
+  return '$year-$month-$day';
+}
+
+String _payPeriodLabel(PayPeriodRange range) {
+  return '${formatDate(range.start)} - ${formatDate(range.end)}';
+}
+
 class _LivingDocumentTile extends StatelessWidget {
   const _LivingDocumentTile({required this.document, required this.onOpen});
 
@@ -608,6 +650,36 @@ class _LivingDocumentTile extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (document.invoiceTabTitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      document.invoiceTabTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF31E981),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  if (document.subTabTitles.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final title in document.subTabTitles.take(6))
+                          Chip(
+                            label: Text(title),
+                            visualDensity: VisualDensity.compact,
+                            side: const BorderSide(color: Color(0xFF34405F)),
+                            backgroundColor: const Color(0xFF20283B),
+                            labelStyle: const TextStyle(fontSize: 11),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2144,11 +2216,15 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       await _saveDraftOnly('Draft status saved.', showMessage: false);
       if (_shouldAutoSyncGoogleDoc(next)) {
         await _autoSaveAttachedFiles(syncDrive: true);
+        await _updateLivingDocForPayPeriod();
       }
       return;
     }
 
     await _autoSaveAttachedFiles(syncDrive: true);
+    if (_shouldAutoSyncGoogleDoc(next)) {
+      await _updateLivingDocForPayPeriod();
+    }
   }
 
   Future<void> _autoSaveAttachedFiles({bool syncDrive = false}) async {
@@ -2345,6 +2421,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   Future<void> _syncFromGoogleDoc({bool silent = false}) async {
     final appState = context.read<AppState>();
+    final previousStatus = status;
 
     if (!silent) {
       setState(() {
@@ -2375,6 +2452,10 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         }
       });
       suppressAutoSave = false;
+      if (_shouldAutoSyncGoogleDoc(updated.status) &&
+          (!silent || previousStatus != updated.status)) {
+        await _updateLivingDocForPayPeriod();
+      }
     } catch (error) {
       if (!mounted) return;
 
@@ -2389,6 +2470,36 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
           busy = false;
         });
       }
+    }
+  }
+
+  Future<void> _updateLivingDocForPayPeriod() async {
+    final appState = context.read<AppState>();
+    if (appState.isPayeMode) return;
+
+    try {
+      final range = fortnightForDate(
+        widget.entry.date,
+        anchorDate: appState.settings.payPeriodAnchorDate,
+      );
+      final results = await appState.syncLivingSupportDocumentsForPayPeriod(
+        range: range,
+      );
+
+      if (!mounted) return;
+
+      noteFocusNode.requestFocus();
+      setState(() {
+        message = results.length == 1
+            ? 'Updated master living doc.'
+            : 'Updated ${results.length} living docs for this pay period.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Living doc update failed: ${_friendlyError(error)}';
+      });
     }
   }
 

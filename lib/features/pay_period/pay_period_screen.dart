@@ -226,11 +226,19 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
           ),
           action: SnackBarAction(
             label: 'Open',
-            onPressed: () => _openDriveFolder(folder.id),
+            onPressed: () async {
+              final opened = await _openDriveFolder(folder.id);
+              if (!opened && context.mounted) {
+                _showDriveOpenFailed(context);
+              }
+            },
           ),
         ),
       );
-      await _openDriveFolder(folder.id);
+      final opened = await _openDriveFolder(folder.id);
+      if (!opened && context.mounted) {
+        _showDriveOpenFailed(context);
+      }
     } catch (error) {
       if (!mounted) return;
 
@@ -292,6 +300,9 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
               )
               .toList()
         : invoiceRows;
+    final selectedInvoiceRowInList = invoiceRows.any(
+      (row) => _sameRange(row.range, selectedRange),
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -305,6 +316,34 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
                 '${formatDate(selectedRange.start)} - ${formatDate(selectedRange.end)}',
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: selectedInvoiceRowInList
+                    ? _invoiceKey(selectedRange)
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Pay period for notes',
+                  prefixIcon: Icon(Icons.date_range_outlined),
+                ),
+                items: [
+                  for (final row in invoiceRows)
+                    DropdownMenuItem<String>(
+                      value: _invoiceKey(row.range),
+                      child: Text(
+                        'Invoice ${row.index} | ${_formatReadableDate(row.range.start)} - ${_formatReadableDate(row.range.end)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  final row = invoiceRows.firstWhere(
+                    (item) => _invoiceKey(item.range) == value,
+                  );
+                  selectInvoicePeriod(row.range);
+                },
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -395,7 +434,7 @@ class _PayPeriodScreenState extends State<PayPeriodScreen> {
                   entries: periodEntries,
                 ),
           icon: const Icon(Icons.drive_folder_upload_outlined),
-          label: Text('Create Invoice $selectedInvoiceNumber Total Folder'),
+          label: Text('Load Invoice $selectedInvoiceNumber Total Notes'),
         ),
         const SizedBox(height: 12),
         SectionCard(
@@ -934,11 +973,19 @@ class _InvoicePeriodTile extends StatelessWidget {
           ),
           action: SnackBarAction(
             label: 'Open',
-            onPressed: () => _openDriveFolder(folder.id),
+            onPressed: () async {
+              final opened = await _openDriveFolder(folder.id);
+              if (!opened && context.mounted) {
+                _showDriveOpenFailed(context);
+              }
+            },
           ),
         ),
       );
-      await _openDriveFolder(folder.id);
+      final opened = await _openDriveFolder(folder.id);
+      if (!opened && context.mounted) {
+        _showDriveOpenFailed(context);
+      }
     } catch (error) {
       messenger.clearSnackBars();
       messenger.showSnackBar(
@@ -1388,16 +1435,31 @@ String _formatInvoiceDateRange(PayPeriodRange range) {
   return '${_formatNumericDate(range.start)} - ${_formatNumericDate(range.end)}';
 }
 
-Future<void> _openDriveFolder(String folderId) async {
+Future<bool> _openDriveFolder(String folderId) async {
   final id = folderId.trim();
-  if (id.isEmpty) return;
+  if (id.isEmpty) return false;
 
-  await launchUrl(
+  return launchUrl(
     Uri.parse(
       'https://drive.google.com/drive/folders/${Uri.encodeComponent(id)}',
     ),
     webOnlyWindowName: '_blank',
   );
+}
+
+void _showDriveOpenFailed(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Google Drive folder is ready, but the browser blocked opening it.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
 }
 
 String _formatNumericDate(DateTime date) {

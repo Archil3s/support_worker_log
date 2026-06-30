@@ -226,12 +226,16 @@ class LivingSupportDocumentSyncResult {
     required this.file,
     required this.importedCount,
     required this.updatedCount,
+    this.invoiceTabTitle,
+    this.subTabTitles = const [],
   });
 
   final String personName;
   final GoogleDriveFile file;
   final int importedCount;
   final int updatedCount;
+  final String? invoiceTabTitle;
+  final List<String> subTabTitles;
 
   String? get openLink {
     final link = file.webViewLink?.trim();
@@ -246,10 +250,14 @@ class LivingSupportDocumentSummary {
   const LivingSupportDocumentSummary({
     required this.personName,
     required this.file,
+    this.invoiceTabTitle,
+    this.subTabTitles = const [],
   });
 
   final String personName;
   final GoogleDriveFile file;
+  final String? invoiceTabTitle;
+  final List<String> subTabTitles;
 
   String? get openLink {
     final link = file.webViewLink?.trim();
@@ -1223,15 +1231,121 @@ class GoogleDriveService {
     return results;
   }
 
+  Future<LivingSupportDocumentSyncResult> syncInvoicePeriodLivingDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required PayPeriodRange range,
+    required List<LivingSupportDocumentEntry> entries,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final ordered = [...entries]
+      ..sort((a, b) {
+        final personCompare = _folderName(
+          a.personName,
+        ).compareTo(_folderName(b.personName));
+        if (personCompare != 0) return personCompare;
+
+        final dateCompare = a.entry.date.compareTo(b.entry.date);
+        if (dateCompare != 0) return dateCompare;
+        return _minutesFromStart(a.entry).compareTo(_minutesFromStart(b.entry));
+      });
+    final invoiceTitle = await _livingSupportInvoiceTabNameForRange(
+      range,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+    final file = await _findOrCreateInvoicePeriodLivingDocument(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      invoiceTitle: invoiceTitle,
+    );
+    var importedCount = 0;
+    var updatedCount = 0;
+
+    for (final item in ordered) {
+      final updated = await _syncInvoicePeriodLivingEntry(
+        accessToken: accessToken,
+        documentId: file.id,
+        item: item,
+        invoiceTitle: invoiceTitle,
+      );
+      if (updated) {
+        updatedCount += 1;
+      } else {
+        importedCount += 1;
+      }
+    }
+
+    final document = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: file.id,
+    );
+    final tabs = _livingSupportTabsFromDocument(document);
+    _LivingSupportTab? invoiceTab;
+    for (final tab in tabs) {
+      if (tab.title == invoiceTitle) {
+        invoiceTab = tab;
+        break;
+      }
+    }
+
+    return LivingSupportDocumentSyncResult(
+      personName: 'All people',
+      file: file,
+      importedCount: importedCount,
+      updatedCount: updatedCount,
+      invoiceTabTitle: invoiceTitle,
+      subTabTitles: invoiceTab == null
+          ? const []
+          : _livingSupportDescendantTabTitles(tabs, invoiceTab.id),
+    );
+  }
+
   Future<List<LivingSupportDocumentSummary>> listLivingSupportDocuments({
     required String accessToken,
     required String clientNotesFolderId,
+    PayPeriodRange? range,
+    DateTime? payPeriodAnchorDate,
   }) async {
+    final masterDocument = await _findMasterLivingSupportDocument(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+    );
+    if (masterDocument != null) {
+      if (range == null) {
+        return [
+          LivingSupportDocumentSummary(
+            personName: 'All people',
+            file: masterDocument,
+          ),
+        ];
+      }
+
+      final masterSummary = await _masterLivingSupportDocumentSummary(
+        accessToken: accessToken,
+        file: masterDocument,
+        range: range,
+        payPeriodAnchorDate: payPeriodAnchorDate,
+      );
+      return masterSummary == null ? const [] : [masterSummary];
+    }
+
     final clientFolders = await listFolder(
       accessToken: accessToken,
       folderId: clientNotesFolderId,
     );
     final results = <LivingSupportDocumentSummary>[];
+    final invoiceTabTitle = range == null
+        ? null
+        : await _livingSupportInvoiceTabNameForRange(
+            range,
+            payPeriodAnchorDate: payPeriodAnchorDate,
+          );
+    final legacyInvoiceTabTitle = range == null
+        ? null
+        : await _legacyLivingSupportInvoiceTabNameForRange(
+            range,
+            payPeriodAnchorDate: payPeriodAnchorDate,
+          );
 
     for (final clientFolder in clientFolders) {
       if (clientFolder.mimeType != 'application/vnd.google-apps.folder') {
@@ -1256,16 +1370,97 @@ class GoogleDriveService {
       );
       if (document == null) continue;
 
+      List<String> subTabTitles = const [];
+      String? matchedInvoiceTitle;
+      if (invoiceTabTitle != null) {
+        final googleDoc = await _docsApi.getDocument(
+          accessToken: accessToken,
+          documentId: document.id,
+        );
+        final tabs = _livingSupportTabsFromDocument(googleDoc);
+        _LivingSupportTab? invoiceTab;
+        for (final tab in tabs) {
+          if (tab.title == invoiceTabTitle ||
+              tab.title == legacyInvoiceTabTitle) {
+            invoiceTab = tab;
+            break;
+          }
+        }
+        if (invoiceTab == null) continue;
+
+        matchedInvoiceTitle = invoiceTab.title;
+        subTabTitles = _livingSupportDescendantTabTitles(tabs, invoiceTab.id);
+      }
+
       results.add(
         LivingSupportDocumentSummary(
           personName: clientFolder.name,
           file: document,
+          invoiceTabTitle: matchedInvoiceTitle,
+          subTabTitles: subTabTitles,
         ),
       );
     }
 
     results.sort((a, b) => a.personName.compareTo(b.personName));
     return results;
+  }
+
+  Future<GoogleDriveFile?> _findMasterLivingSupportDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+  }) async {
+    final livingFolder = await _findChild(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _livingSupportFolderName,
+      mimeType: 'application/vnd.google-apps.folder',
+    );
+    if (livingFolder == null) return null;
+
+    return _findChild(
+      accessToken: accessToken,
+      parentId: livingFolder.id,
+      name: _livingSupportMasterDocumentName,
+      mimeType: _googleDocsMimeType,
+    );
+  }
+
+  Future<LivingSupportDocumentSummary?> _masterLivingSupportDocumentSummary({
+    required String accessToken,
+    required GoogleDriveFile file,
+    required PayPeriodRange range,
+    DateTime? payPeriodAnchorDate,
+  }) async {
+    final invoiceTabTitle = await _livingSupportInvoiceTabNameForRange(
+      range,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+    final legacyInvoiceTabTitle =
+        await _legacyLivingSupportInvoiceTabNameForRange(
+          range,
+          payPeriodAnchorDate: payPeriodAnchorDate,
+        );
+    final googleDoc = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: file.id,
+    );
+    final tabs = _livingSupportTabsFromDocument(googleDoc);
+    _LivingSupportTab? invoiceTab;
+    for (final tab in tabs) {
+      if (tab.title == invoiceTabTitle || tab.title == legacyInvoiceTabTitle) {
+        invoiceTab = tab;
+        break;
+      }
+    }
+    if (invoiceTab == null) return null;
+
+    return LivingSupportDocumentSummary(
+      personName: 'All people',
+      file: file,
+      invoiceTabTitle: invoiceTab.title,
+      subTabTitles: _livingSupportDescendantTabTitles(tabs, invoiceTab.id),
+    );
   }
 
   Future<GoogleDriveFile> _findOrCreateLivingSupportDocument({
@@ -1302,22 +1497,43 @@ class GoogleDriveService {
     );
   }
 
+  Future<GoogleDriveFile> _findOrCreateInvoicePeriodLivingDocument({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required String invoiceTitle,
+  }) async {
+    final livingFolder = await findOrCreateFolder(
+      accessToken: accessToken,
+      parentId: clientNotesFolderId,
+      name: _livingSupportFolderName,
+    );
+    final documentName = _livingSupportMasterDocumentName;
+    final existing = await _findChild(
+      accessToken: accessToken,
+      parentId: livingFolder.id,
+      name: documentName,
+      mimeType: _googleDocsMimeType,
+    );
+    if (existing != null) return existing;
+
+    return _api.uploadFile(
+      accessToken: accessToken,
+      name: documentName,
+      mimeType: _googleDocsMimeType,
+      bytes: utf8.encode('Master living support notes'),
+      parentId: livingFolder.id,
+      contentMimeType: 'text/plain',
+    );
+  }
+
   Future<bool> _syncLivingSupportEntry({
     required String accessToken,
     required String documentId,
     required LivingSupportDocumentEntry item,
     DateTime? payPeriodAnchorDate,
   }) async {
-    final typeTabName = _livingSupportTypeTabName(item.entry.type);
-    final childPrefix = _livingSupportChildTabPrefix(item.entry.type);
-    final typeTab = await _ensureLivingSupportTab(
-      accessToken: accessToken,
-      documentId: documentId,
-      title: typeTabName,
-    );
     final invoiceTitle = await _livingSupportInvoiceTabName(
       item.entry,
-      typePrefix: childPrefix,
       payPeriodAnchorDate: payPeriodAnchorDate,
     );
     final legacyInvoiceTitle = await _legacyLivingSupportInvoiceTabName(
@@ -1328,24 +1544,98 @@ class GoogleDriveService {
       accessToken: accessToken,
       documentId: documentId,
       title: invoiceTitle,
-      parentTabId: typeTab.id,
-      existingTitles: [
-        legacyInvoiceTitle,
-        '$typeTabName - $legacyInvoiceTitle',
-      ],
+      existingTitles: [legacyInvoiceTitle],
+    );
+    final typeTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportScopedTypeTabName(item.entry.type, invoiceTitle),
+      parentTabId: invoiceTab.id,
     );
     final dateTab = await _ensureLivingSupportTab(
       accessToken: accessToken,
       documentId: documentId,
-      title: _livingSupportDateTabName(
-        item.entry.date,
-        typePrefix: childPrefix,
-      ),
+      title: _livingSupportDateTabName(item.entry),
+      parentTabId: typeTab.id,
+      existingTitles: [_legacyLivingSupportDateTabName(item.entry.date)],
+    );
+    final document = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    final tab = _livingSupportTabsFromDocument(document).firstWhere(
+      (candidate) => candidate.id == dateTab.id,
+      orElse: () => dateTab,
+    );
+    final replacement = _livingSupportEntryBlock(item);
+    final existingRange = _livingSupportEntryRange(
+      tab: tab,
+      entryId: item.entry.id,
+    );
+    final requests = <Map<String, dynamic>>[
+      if (existingRange != null)
+        {
+          'deleteContentRange': {
+            'range': {
+              'tabId': tab.id,
+              'startIndex': existingRange.startIndex,
+              'endIndex': existingRange.endIndex,
+            },
+          },
+        },
+      {
+        'insertText': {
+          if (existingRange != null)
+            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
+          else
+            'endOfSegmentLocation': {'tabId': tab.id},
+          'text': existingRange == null ? '\n$replacement' : replacement,
+        },
+      },
+    ];
+
+    await _docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: requests,
+      targetRevisionId: _revisionId(document),
+    );
+
+    return existingRange != null;
+  }
+
+  Future<bool> _syncInvoicePeriodLivingEntry({
+    required String accessToken,
+    required String documentId,
+    required LivingSupportDocumentEntry item,
+    required String invoiceTitle,
+  }) async {
+    final invoiceTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: invoiceTitle,
+    );
+    final personTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportPersonTabName(item.personName, invoiceTitle),
       parentTabId: invoiceTab.id,
-      existingTitles: [
-        _legacyLivingSupportDateTabName(item.entry.date),
-        '$typeTabName - ${_legacyLivingSupportDateTabName(item.entry.date)}',
-      ],
+    );
+    final typeTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportPersonTypeTabName(
+        item.entry.type,
+        item.personName,
+        invoiceTitle,
+      ),
+      parentTabId: personTab.id,
+    );
+    final dateTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportPersonDateTabName(item.entry, item.personName),
+      parentTabId: typeTab.id,
     );
     final document = await _docsApi.getDocument(
       accessToken: accessToken,
@@ -1456,6 +1746,25 @@ class GoogleDriveService {
     return tabs;
   }
 
+  List<String> _livingSupportDescendantTabTitles(
+    List<_LivingSupportTab> tabs,
+    String parentId,
+  ) {
+    final results = <String>[];
+
+    void collect(String id) {
+      final children = tabs.where((tab) => tab.parentId == id).toList()
+        ..sort((a, b) => a.title.compareTo(b.title));
+      for (final child in children) {
+        results.add(child.title);
+        collect(child.id);
+      }
+    }
+
+    collect(parentId);
+    return results;
+  }
+
   void _collectLivingSupportTabs(
     Object? rawTab,
     String? inheritedParentId,
@@ -1553,9 +1862,11 @@ class GoogleDriveService {
 
   String _livingSupportEntryBlock(LivingSupportDocumentEntry item) {
     final entry = item.entry;
-    final notes = item.noteText.trim().isNotEmpty
-        ? item.noteText.trim()
-        : entry.notes.join('\n').trim();
+    final notes = _livingSupportTemplateText(
+      item.noteText.trim().isNotEmpty
+          ? item.noteText.trim()
+          : entry.notes.join('\n').trim(),
+    );
     final nextActions = entry.nextActions
         .map((action) {
           final status = action.isCompleted ? 'Done' : 'Open';
@@ -1569,7 +1880,7 @@ class GoogleDriveService {
       'Person: ${item.personName}',
       'Invoice period: ${_livingSupportInvoiceRangeLabel(entry.date)}',
       'Note status: ${item.status.label}',
-      'Living document sync: Imported',
+      'Updated to living doc: Yes',
       if (entry.type == EntryType.textNote)
         'Text direction: ${entry.textContactDirection.label}',
       if (entry.textReplyNeeded) 'Reply needed: Yes',
@@ -1581,6 +1892,113 @@ class GoogleDriveService {
       _livingSupportEndMarker(entry.id),
       '',
     ].join('\n');
+  }
+
+  String _livingSupportTemplateText(String noteText) {
+    final cleaned = _removeLegacySvilText(noteText);
+    final sections = _livingSupportSections(cleaned);
+
+    return [
+      for (final title in _livingSupportSectionTitles) ...[
+        title,
+        sections[title]?.trim().isNotEmpty == true
+            ? sections[title]!.trim()
+            : '',
+        '',
+      ],
+    ].join('\n').trim();
+  }
+
+  Map<String, String> _livingSupportSections(String noteText) {
+    final sections = <String, String>{};
+    String? current;
+    final buffer = StringBuffer();
+
+    void flush() {
+      final title = current;
+      if (title == null) return;
+      sections[title] = buffer.toString().trim();
+      buffer.clear();
+    }
+
+    for (final rawLine in noteText.split(RegExp(r'\r?\n'))) {
+      final line = rawLine.trimRight();
+      final title = _livingSupportSectionTitle(line);
+      if (title != null) {
+        flush();
+        current = title;
+        continue;
+      }
+
+      current ??= 'What happened';
+      buffer.writeln(line.trimLeft());
+    }
+
+    flush();
+
+    if (sections.values.every((value) => value.trim().isEmpty) &&
+        noteText.trim().isNotEmpty) {
+      sections['What happened'] = noteText.trim();
+    }
+
+    return sections;
+  }
+
+  String _removeLegacySvilText(String noteText) {
+    final lines = noteText.split(RegExp(r'\r?\n'));
+    final kept = <String>[];
+    var skippingLegacySection = false;
+
+    for (final line in lines) {
+      final normalized = line.trim().toLowerCase();
+      final startsLegacySection =
+          normalized ==
+              'safety concerns for sexual harm survivors and mental health' ||
+          normalized.contains('template for reporting of interactions') ||
+          normalized.startsWith('geographical area');
+
+      if (startsLegacySection) {
+        skippingLegacySection = true;
+        continue;
+      }
+
+      if (skippingLegacySection && _livingSupportSectionTitle(line) != null) {
+        skippingLegacySection = false;
+      }
+
+      if (skippingLegacySection) continue;
+      if (normalized.contains('sexual harm survivor')) continue;
+      if (normalized.contains('svil')) continue;
+
+      kept.add(line);
+    }
+
+    return kept.join('\n').trim();
+  }
+
+  String? _livingSupportSectionTitle(String value) {
+    final normalized = value.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z]'),
+      '',
+    );
+
+    return switch (normalized) {
+      'attendance' => 'Attendance',
+      'maintopics' => 'What happened',
+      'whathappened' => 'What happened',
+      'worktaskcompleted' => 'Work/task completed',
+      'supportgiven' => 'Support given',
+      'issueproblem' => 'Issue/problem',
+      'outcomes' => 'Outcome',
+      'outcome' => 'Outcome',
+      'nextactions' => 'Next step',
+      'nextaction' => 'Next step',
+      'nextstep' => 'Next step',
+      'anythingtofollowup' => 'Anything to follow up',
+      'overallimpression' => 'Anything to follow up',
+      'referrals' => 'Referrals',
+      _ => null,
+    };
   }
 
   String _livingSupportStartMarker(String entryId) {
@@ -1670,6 +2088,18 @@ class GoogleDriveService {
   }
 
   static const _livingSupportFolderName = 'Living Support Notes';
+  static const _livingSupportMasterDocumentName = 'Master Living Support Notes';
+  static const _livingSupportSectionTitles = [
+    'Attendance',
+    'What happened',
+    'Work/task completed',
+    'Support given',
+    'Issue/problem',
+    'Outcome',
+    'Next step',
+    'Anything to follow up',
+    'Referrals',
+  ];
 
   String _livingSupportTypeTabName(EntryType type) {
     switch (type) {
@@ -1691,7 +2121,50 @@ class GoogleDriveService {
     }
   }
 
-  String _livingSupportChildTabPrefix(EntryType type) {
+  String _livingSupportScopedTypeTabName(EntryType type, String invoiceTitle) {
+    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
+    final invoiceLabel = invoiceMatch == null
+        ? invoiceTitle
+        : 'Inv ${invoiceMatch.group(1)}';
+
+    return _livingSupportTabTitle(
+      '${_livingSupportTypeTabName(type)} - $invoiceLabel',
+    );
+  }
+
+  String _livingSupportPersonTabName(String personName, String invoiceTitle) {
+    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
+    final invoiceLabel = invoiceMatch == null
+        ? ''
+        : ' Inv ${invoiceMatch.group(1)}';
+
+    return _livingSupportTabTitle('${_folderName(personName)}$invoiceLabel');
+  }
+
+  String _livingSupportPersonTypeTabName(
+    EntryType type,
+    String personName,
+    String invoiceTitle,
+  ) {
+    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
+    final invoiceLabel = invoiceMatch == null
+        ? ''
+        : ' I${invoiceMatch.group(1)}';
+    final person = _folderName(personName);
+
+    return _livingSupportTabTitle(
+      '${_livingSupportDateTabPrefix(type)} $person$invoiceLabel',
+    );
+  }
+
+  String _livingSupportPersonDateTabName(WorkEntry entry, String personName) {
+    final person = _folderName(personName);
+    return _livingSupportTabTitle(
+      '${_livingSupportDateTabPrefix(entry.type)} $person ${_dateKey(entry.date)}',
+    );
+  }
+
+  String _livingSupportDateTabPrefix(EntryType type) {
     switch (type) {
       case EntryType.textNote:
         return 'Texts';
@@ -1713,16 +2186,26 @@ class GoogleDriveService {
 
   Future<String> _livingSupportInvoiceTabName(
     WorkEntry entry, {
-    required String typePrefix,
     DateTime? payPeriodAnchorDate,
   }) async {
     final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+
+    return _livingSupportInvoiceTabNameForRange(
+      range,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+  }
+
+  Future<String> _livingSupportInvoiceTabNameForRange(
+    PayPeriodRange range, {
+    DateTime? payPeriodAnchorDate,
+  }) async {
     final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
       range,
       anchorDate: payPeriodAnchorDate,
     );
 
-    return '$typePrefix Inv $invoiceNumber ${_dateKey(range.start)} to ${_dateKey(range.end)}';
+    return 'Invoice $invoiceNumber ${_dateKey(range.start)} to ${_dateKey(range.end)}';
   }
 
   Future<String> _legacyLivingSupportInvoiceTabName(
@@ -1730,6 +2213,17 @@ class GoogleDriveService {
     DateTime? payPeriodAnchorDate,
   }) async {
     final range = fortnightForDate(entry.date, anchorDate: payPeriodAnchorDate);
+
+    return _legacyLivingSupportInvoiceTabNameForRange(
+      range,
+      payPeriodAnchorDate: payPeriodAnchorDate,
+    );
+  }
+
+  Future<String> _legacyLivingSupportInvoiceTabNameForRange(
+    PayPeriodRange range, {
+    DateTime? payPeriodAnchorDate,
+  }) async {
     final invoiceNumber = await InvoicePdfService.invoiceNumberForPeriod(
       range,
       anchorDate: payPeriodAnchorDate,
@@ -1743,11 +2237,16 @@ class GoogleDriveService {
     return '${_dateKey(range.start)} to ${_dateKey(range.end)}';
   }
 
-  String _livingSupportDateTabName(
-    DateTime date, {
-    required String typePrefix,
-  }) {
-    return '$typePrefix ${_dateKey(date)}';
+  String _livingSupportDateTabName(WorkEntry entry) {
+    return _livingSupportTabTitle(
+      '${_livingSupportDateTabPrefix(entry.type)} ${_dateKey(entry.date)}',
+    );
+  }
+
+  String _livingSupportTabTitle(String value) {
+    final cleaned = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (cleaned.length <= 50) return cleaned;
+    return cleaned.substring(0, 50).trimRight();
   }
 
   String _legacyLivingSupportDateTabName(DateTime date) {

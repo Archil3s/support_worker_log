@@ -563,11 +563,16 @@ class AppState extends ChangeNotifier {
     final noteText = payeMode
         ? exportedNoteText
         : LocalSupportNoteService.canonicalSupportNoteText(exportedNoteText);
+    final syncedStatus = _supportNoteStatusFromText(
+      exportedNoteText,
+      fallback: googleDocMeta.status,
+    );
     final initials = googleDocMeta.initials.trim().isNotEmpty
         ? googleDocMeta.initials
         : LocalSupportNoteService.defaultInitialsForEntry(entry);
     final updatedMeta = googleDocMeta.copyWith(
       initials: initials,
+      status: syncedStatus,
       noteText: noteText,
       googleAccountEmail: accountEmail,
     );
@@ -601,11 +606,20 @@ class AppState extends ChangeNotifier {
       today ?? DateTime.now(),
       anchorDate: _settings.payPeriodAnchorDate,
     );
+
+    return syncLivingSupportDocumentsForPayPeriod(range: range);
+  }
+
+  Future<List<LivingSupportDocumentSyncResult>>
+  syncLivingSupportDocumentsForPayPeriod({
+    required PayPeriodRange range,
+  }) async {
     final currentEntries = entriesInRange(_entries, range);
 
     return _syncLivingSupportDocumentsFromWorkEntries(
       entries: currentEntries,
-      emptyMessage: 'No work notes in the current pay period to import.',
+      emptyMessage: 'No work notes in the selected pay period to import.',
+      invoicePeriodRange: range,
     );
   }
 
@@ -613,6 +627,7 @@ class AppState extends ChangeNotifier {
   _syncLivingSupportDocumentsFromWorkEntries({
     required List<WorkEntry> entries,
     required String emptyMessage,
+    PayPeriodRange? invoicePeriodRange,
   }) async {
     if (entries.isEmpty) {
       throw StateError(emptyMessage);
@@ -664,12 +679,22 @@ class AppState extends ChangeNotifier {
       );
     }
 
-    final results = await _googleDriveService.syncLivingSupportDocuments(
-      accessToken: accessToken,
-      clientNotesFolderId: clientNotesFolderId,
-      entries: livingEntries,
-      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
-    );
+    final results = invoicePeriodRange == null
+        ? await _googleDriveService.syncLivingSupportDocuments(
+            accessToken: accessToken,
+            clientNotesFolderId: clientNotesFolderId,
+            entries: livingEntries,
+            payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+          )
+        : [
+            await _googleDriveService.syncInvoicePeriodLivingDocument(
+              accessToken: accessToken,
+              clientNotesFolderId: clientNotesFolderId,
+              range: invoicePeriodRange,
+              entries: livingEntries,
+              payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
+            ),
+          ];
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
@@ -680,6 +705,19 @@ class AppState extends ChangeNotifier {
 
   Future<List<LivingSupportDocumentSummary>>
   loadLivingSupportDocuments() async {
+    return _loadLivingSupportDocuments();
+  }
+
+  Future<List<LivingSupportDocumentSummary>>
+  loadLivingSupportDocumentsForPayPeriod({
+    required PayPeriodRange range,
+  }) async {
+    return _loadLivingSupportDocuments(range: range);
+  }
+
+  Future<List<LivingSupportDocumentSummary>> _loadLivingSupportDocuments({
+    PayPeriodRange? range,
+  }) async {
     if (!workGoogleServicesConnected) {
       await connectWorkGoogle();
     }
@@ -695,6 +733,8 @@ class AppState extends ChangeNotifier {
     final results = await _googleDriveService.listLivingSupportDocuments(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
+      range: range,
+      payPeriodAnchorDate: syncSettings.payPeriodAnchorDate,
     );
 
     _cloudSyncReady = true;
@@ -2277,6 +2317,52 @@ class AppState extends ChangeNotifier {
       EntrySupportNoteStatus.inProgress => 1,
       EntrySupportNoteStatus.finished => 2,
       EntrySupportNoteStatus.submitted => 3,
+    };
+  }
+
+  EntrySupportNoteStatus _supportNoteStatusFromText(
+    String text, {
+    required EntrySupportNoteStatus fallback,
+  }) {
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    for (var index = 0; index < lines.length; index++) {
+      final line = lines[index];
+      final lower = line.toLowerCase();
+
+      if (lower.startsWith('note status:') || lower.startsWith('status:')) {
+        final status = _supportNoteStatusLabelFromText(
+          line.split(':').skip(1).join(':'),
+        );
+        if (status != null) return status;
+      }
+
+      if ((lower == 'note status' || lower == 'status') &&
+          index + 1 < lines.length) {
+        final status = _supportNoteStatusLabelFromText(lines[index + 1]);
+        if (status != null) return status;
+      }
+    }
+
+    return fallback;
+  }
+
+  EntrySupportNoteStatus? _supportNoteStatusLabelFromText(String value) {
+    final cleaned = value.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z]'),
+      '',
+    );
+
+    return switch (cleaned) {
+      'incomplete' => EntrySupportNoteStatus.incomplete,
+      'inprogress' => EntrySupportNoteStatus.inProgress,
+      'finished' => EntrySupportNoteStatus.finished,
+      'submitted' => EntrySupportNoteStatus.submitted,
+      _ => null,
     };
   }
 
