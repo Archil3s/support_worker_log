@@ -1275,6 +1275,13 @@ class GoogleDriveService {
       }
     }
 
+    await _syncInvoicePeriodStatusTabs(
+      accessToken: accessToken,
+      documentId: file.id,
+      invoiceTitle: invoiceTitle,
+      entries: ordered,
+    );
+
     final document = await _docsApi.getDocument(
       accessToken: accessToken,
       documentId: file.id,
@@ -1682,6 +1689,98 @@ class GoogleDriveService {
     return existingRange != null;
   }
 
+  Future<void> _syncInvoicePeriodStatusTabs({
+    required String accessToken,
+    required String documentId,
+    required String invoiceTitle,
+    required List<LivingSupportDocumentEntry> entries,
+  }) async {
+    final invoiceTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: invoiceTitle,
+    );
+    final submittedTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportStatusTabName('Submitted', invoiceTitle),
+      parentTabId: invoiceTab.id,
+    );
+    final totalsTab = await _ensureLivingSupportTab(
+      accessToken: accessToken,
+      documentId: documentId,
+      title: _livingSupportStatusTabName('Totals', invoiceTitle),
+      parentTabId: invoiceTab.id,
+    );
+
+    await _replaceLivingSupportTabBlock(
+      accessToken: accessToken,
+      documentId: documentId,
+      tabId: submittedTab.id,
+      markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'submitted'),
+      text: _livingSupportSubmittedSummaryBlock(invoiceTitle, entries),
+    );
+    await _replaceLivingSupportTabBlock(
+      accessToken: accessToken,
+      documentId: documentId,
+      tabId: totalsTab.id,
+      markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'totals'),
+      text: _livingSupportTotalsBlock(invoiceTitle, entries),
+    );
+  }
+
+  Future<void> _replaceLivingSupportTabBlock({
+    required String accessToken,
+    required String documentId,
+    required String tabId,
+    required String markerId,
+    required String text,
+  }) async {
+    final document = await _docsApi.getDocument(
+      accessToken: accessToken,
+      documentId: documentId,
+    );
+    final tab = _livingSupportTabsFromDocument(document).firstWhere(
+      (candidate) => candidate.id == tabId,
+      orElse: () => throw StateError('Google Docs tab was not found.'),
+    );
+    final existingRange = _livingSupportEntryRange(tab: tab, entryId: markerId);
+    final replacement = [
+      _livingSupportStartMarker(markerId),
+      text.trim(),
+      _livingSupportEndMarker(markerId),
+      '',
+    ].join('\n');
+    final requests = <Map<String, dynamic>>[
+      if (existingRange != null)
+        {
+          'deleteContentRange': {
+            'range': {
+              'tabId': tab.id,
+              'startIndex': existingRange.startIndex,
+              'endIndex': existingRange.endIndex,
+            },
+          },
+        },
+      {
+        'insertText': {
+          if (existingRange != null)
+            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
+          else
+            'endOfSegmentLocation': {'tabId': tab.id},
+          'text': existingRange == null ? '\n$replacement' : replacement,
+        },
+      },
+    ];
+
+    await _docsApi.batchUpdate(
+      accessToken: accessToken,
+      documentId: documentId,
+      requests: requests,
+      targetRevisionId: _revisionId(document),
+    );
+  }
+
   Future<_LivingSupportTab> _ensureLivingSupportTab({
     required String accessToken,
     required String documentId,
@@ -1891,6 +1990,67 @@ class GoogleDriveService {
       if (nextActions.isNotEmpty) ...['', 'Next actions', nextActions],
       _livingSupportEndMarker(entry.id),
       '',
+    ].join('\n');
+  }
+
+  String _livingSupportSubmittedSummaryBlock(
+    String invoiceTitle,
+    List<LivingSupportDocumentEntry> entries,
+  ) {
+    final submitted = entries
+        .where((item) => item.status == EntrySupportNoteStatus.submitted)
+        .toList();
+
+    return [
+      'Submitted notes',
+      invoiceTitle,
+      'Total submitted: ${submitted.length}',
+      '',
+      if (submitted.isEmpty)
+        'No notes are marked Submitted for this invoice period.'
+      else
+        for (final item in submitted) _livingSupportEntryBlock(item).trim(),
+    ].join('\n');
+  }
+
+  String _livingSupportTotalsBlock(
+    String invoiceTitle,
+    List<LivingSupportDocumentEntry> entries,
+  ) {
+    final total = entries.length;
+    final submitted = entries
+        .where((item) => item.status == EntrySupportNoteStatus.submitted)
+        .length;
+    final finished = entries
+        .where((item) => item.status == EntrySupportNoteStatus.finished)
+        .length;
+    final inProgress = entries
+        .where((item) => item.status == EntrySupportNoteStatus.inProgress)
+        .length;
+    final incomplete = entries
+        .where((item) => item.status == EntrySupportNoteStatus.incomplete)
+        .length;
+    final people = {
+      for (final item in entries)
+        if (_folderName(item.personName).trim().isNotEmpty)
+          _folderName(item.personName),
+    }.toList()..sort();
+
+    return [
+      'Invoice period totals',
+      invoiceTitle,
+      'Total notes: $total',
+      'Submitted: $submitted',
+      'Not submitted: ${total - submitted}',
+      'Finished: $finished',
+      'In progress: $inProgress',
+      'Incomplete: $incomplete',
+      'People: ${people.length}',
+      '',
+      if (people.isNotEmpty) ...[
+        'People included',
+        for (final person in people) '- $person',
+      ],
     ].join('\n');
   }
 
@@ -2162,6 +2322,24 @@ class GoogleDriveService {
     return _livingSupportTabTitle(
       '${_livingSupportDateTabPrefix(entry.type)} $person ${_dateKey(entry.date)}',
     );
+  }
+
+  String _livingSupportStatusTabName(String label, String invoiceTitle) {
+    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
+    final invoiceLabel = invoiceMatch == null
+        ? invoiceTitle
+        : 'I${invoiceMatch.group(1)}';
+
+    return _livingSupportTabTitle('$label $invoiceLabel');
+  }
+
+  String _livingSupportSummaryMarkerId(String invoiceTitle, String suffix) {
+    final key = '$invoiceTitle-$suffix'
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+
+    return 'summary-$key';
   }
 
   String _livingSupportDateTabPrefix(EntryType type) {

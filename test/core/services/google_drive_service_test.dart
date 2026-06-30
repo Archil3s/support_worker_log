@@ -730,7 +730,7 @@ void main() {
               notes: const ['Texted client'],
             ),
             personName: 'Pierre',
-            status: EntrySupportNoteStatus.finished,
+            status: EntrySupportNoteStatus.submitted,
             noteText: 'What happened\nText note.',
           ),
         ],
@@ -754,10 +754,16 @@ void main() {
           'Pierre Inv 10',
           'Texts Pierre I10',
           'Texts Pierre 2026-06-03',
+          'Submitted I10',
+          'Totals I10',
         ]),
       );
       expect(docsApi.insertedText.join('\n'), contains('Phone note.'));
       expect(docsApi.insertedText.join('\n'), contains('Text note.'));
+      expect(docsApi.insertedText.join('\n'), contains('Submitted notes'));
+      expect(docsApi.insertedText.join('\n'), contains('Total notes: 2'));
+      expect(docsApi.insertedText.join('\n'), contains('Submitted: 1'));
+      expect(docsApi.insertedText.join('\n'), contains('Not submitted: 1'));
     },
   );
 

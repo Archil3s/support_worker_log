@@ -121,6 +121,7 @@ class _NotesScreenState extends State<NotesScreen> {
   String? selectedPayPeriodKey;
   bool syncingCurrentPeriodLivingDocs = false;
   bool loadingLivingDocs = false;
+  bool loadingUnsubmittedNotes = false;
   List<LivingSupportDocumentSummary> livingDocs = const [];
 
   @override
@@ -290,6 +291,102 @@ class _NotesScreenState extends State<NotesScreen> {
     await _launchDriveLink(Uri.parse(link));
   }
 
+  Future<void> _openUnsubmittedNotesSheet() async {
+    if (loadingUnsubmittedNotes) return;
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    setState(() => loadingUnsubmittedNotes = true);
+
+    try {
+      final appState = context.read<AppState>();
+      final googleAccountEmail = _currentGoogleAccountEmail(appState);
+      final driveService = GoogleDriveService();
+      final sourceEntries = [...appState.entries]
+        ..sort((a, b) => b.date.compareTo(a.date));
+      final items = <_UnsubmittedNoteItem>[];
+
+      for (final entry in sourceEntries) {
+        final localMeta = await LocalSupportNoteService.loadMeta(entry.id);
+        final savedLocal = appState.supportNoteMetaFor(entry.id);
+        final meta = _preferredEntrySupportNoteMeta(localMeta, savedLocal);
+        final savedDrive = _driveMetaForAccount(
+          await driveService.loadSupportNoteMeta(entry.id),
+          googleAccountEmail,
+        );
+        final syncedDrive = _driveMetaForAccount(
+          appState.driveSupportNoteMetaFor(entry.id),
+          googleAccountEmail,
+        );
+        final driveMeta = _preferredDriveSupportNoteMeta(
+          savedDrive,
+          syncedDrive,
+        );
+        final status = _preferredStatus(meta?.status, driveMeta?.status);
+
+        if (meta != null) {
+          appState.upsertSupportNoteMeta(meta);
+        }
+        if (driveMeta != null) {
+          appState.upsertDriveSupportNoteMeta(driveMeta);
+        }
+        if (status == EntrySupportNoteStatus.submitted) {
+          continue;
+        }
+
+        final fallbackName = _bestPersonNameFallback(
+          entry,
+          meta,
+          driveMeta,
+          appState.clients,
+        );
+
+        items.add(
+          _UnsubmittedNoteItem(
+            entry: entry,
+            status: status,
+            displayName: _personNameForNote(entry, fallback: fallbackName),
+            noteText: _unsubmittedNoteText(
+              entry: entry,
+              meta: meta,
+              driveMeta: driveMeta,
+            ),
+            hasLocalFile: meta?.fileName.trim().isNotEmpty == true,
+            hasDriveFile: driveMeta?.openLink?.trim().isNotEmpty == true,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => loadingUnsubmittedNotes = false);
+
+      final selected = await showModalBottomSheet<WorkEntry>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _UnsubmittedNotesSheet(items: items),
+      );
+
+      if (selected == null || !mounted) return;
+
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => EntryNoteSheet(entry: selected),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Not submitted notes load failed: ${_friendlyErrorText(error)}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => loadingUnsubmittedNotes = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -337,8 +434,10 @@ class _NotesScreenState extends State<NotesScreen> {
             _syncCurrentPayPeriodLivingDocuments,
         onLoadLivingDocuments: _loadLivingDocuments,
         onOpenLivingDocument: _openLivingDocument,
+        onLoadUnsubmittedNotes: _openUnsubmittedNotesSheet,
         syncingCurrentPeriodLivingDocs: syncingCurrentPeriodLivingDocs,
         loadingLivingDocs: loadingLivingDocs,
+        loadingUnsubmittedNotes: loadingUnsubmittedNotes,
         livingDocs: livingDocs,
       ),
     );
@@ -364,8 +463,10 @@ class _NotesListTab extends StatelessWidget {
     required this.onSyncCurrentPayPeriodLivingDocuments,
     required this.onLoadLivingDocuments,
     required this.onOpenLivingDocument,
+    required this.onLoadUnsubmittedNotes,
     required this.syncingCurrentPeriodLivingDocs,
     required this.loadingLivingDocs,
+    required this.loadingUnsubmittedNotes,
     required this.livingDocs,
   });
 
@@ -386,8 +487,10 @@ class _NotesListTab extends StatelessWidget {
   final VoidCallback onSyncCurrentPayPeriodLivingDocuments;
   final VoidCallback onLoadLivingDocuments;
   final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
+  final VoidCallback onLoadUnsubmittedNotes;
   final bool syncingCurrentPeriodLivingDocs;
   final bool loadingLivingDocs;
+  final bool loadingUnsubmittedNotes;
   final List<LivingSupportDocumentSummary> livingDocs;
 
   @override
@@ -508,6 +611,23 @@ class _NotesListTab extends StatelessWidget {
                           onPressed: onClearSearch,
                           icon: const Icon(Icons.clear),
                         ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: loadingUnsubmittedNotes
+                    ? null
+                    : onLoadUnsubmittedNotes,
+                icon: loadingUnsubmittedNotes
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.pending_actions_outlined),
+                label: Text(
+                  loadingUnsubmittedNotes
+                      ? 'Loading Not Submitted Sheet'
+                      : 'Load Not Submitted Sheet',
                 ),
               ),
               const SizedBox(height: 12),
@@ -690,6 +810,178 @@ class _LivingDocumentTile extends StatelessWidget {
               icon: const Icon(Icons.open_in_new),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UnsubmittedNoteItem {
+  const _UnsubmittedNoteItem({
+    required this.entry,
+    required this.status,
+    required this.displayName,
+    required this.noteText,
+    required this.hasLocalFile,
+    required this.hasDriveFile,
+  });
+
+  final WorkEntry entry;
+  final EntrySupportNoteStatus status;
+  final String displayName;
+  final String noteText;
+  final bool hasLocalFile;
+  final bool hasDriveFile;
+}
+
+class _UnsubmittedNotesSheet extends StatelessWidget {
+  const _UnsubmittedNotesSheet({required this.items});
+
+  final List<_UnsubmittedNoteItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height * 0.86;
+    final counts = {
+      for (final status in EntrySupportNoteStatus.values)
+        if (status != EntrySupportNoteStatus.submitted)
+          status: items.where((item) => item.status == status).length,
+    };
+
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF445579),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Not Submitted Notes',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                _CountPill(label: '${items.length} total'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final entry in counts.entries)
+                  if (entry.value > 0)
+                    _CountPill(label: '${entry.value} ${entry.key.label}'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: items.isEmpty
+                  ? const EmptyState(message: 'All notes are marked Submitted.')
+                  : ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: _statusColor(
+                              item.status,
+                            ).withValues(alpha: 0.18),
+                            child: Icon(
+                              Icons.note_alt_outlined,
+                              color: _statusColor(item.status),
+                            ),
+                          ),
+                          title: Text(
+                            _noteTitleForEntry(
+                              entry: item.entry,
+                              status: item.status,
+                              fallbackName: item.displayName,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${item.displayName} | ${item.entry.type.label}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (item.noteText.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.noteText.trim(),
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(height: 1.25),
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    _StatusPill(status: item.status),
+                                    if (item.hasLocalFile)
+                                      const _CountPill(label: 'Local'),
+                                    if (item.hasDriveFile)
+                                      const _CountPill(label: 'Drive'),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).pop(item.entry),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CountPill extends StatelessWidget {
+  const _CountPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -2906,6 +3198,32 @@ EntrySupportNoteStatus _preferredStatus(
   return _supportNoteStatusRank(incoming) > _supportNoteStatusRank(current)
       ? incoming
       : current;
+}
+
+String _unsubmittedNoteText({
+  required WorkEntry entry,
+  required EntrySupportNoteMeta? meta,
+  required EntryDriveSupportNoteMeta? driveMeta,
+}) {
+  final driveText = driveMeta?.noteText.trim();
+  final localText = meta?.noteText.trim();
+  final entryText = entry.supportNoteBreakdown.trim();
+  final driveRank = driveMeta == null
+      ? -1
+      : _supportNoteStatusRank(driveMeta.status);
+  final localRank = meta == null ? -1 : _supportNoteStatusRank(meta.status);
+
+  if (driveText != null && driveText.isNotEmpty && driveRank >= localRank) {
+    return driveText;
+  }
+  if (localText != null && localText.isNotEmpty) {
+    return localText;
+  }
+  if (driveText != null && driveText.isNotEmpty) {
+    return driveText;
+  }
+
+  return entryText;
 }
 
 String? _currentGoogleAccountEmail(AppState appState) {
