@@ -597,6 +597,7 @@ void main() {
               startTime: const TimeOfDay(hour: 9, minute: 30),
               minutes: 30,
               notes: const ['Called client'],
+              importantText: true,
             ),
             personName: 'AB',
             status: EntrySupportNoteStatus.finished,
@@ -632,6 +633,7 @@ void main() {
         docsApi.insertedText.single,
         contains('Updated to living doc: Yes'),
       );
+      expect(docsApi.insertedText.single, contains('Important: Yes'));
       expect(
         docsApi.insertedText.single,
         contains('Called client about appointment.'),

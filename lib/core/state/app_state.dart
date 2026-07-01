@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/active_visit.dart';
 import '../models/app_mode.dart';
 import '../models/app_settings.dart';
+import '../models/entry_type.dart';
 import '../models/general_action.dart';
 import '../models/google_export_account_scope.dart';
 import '../models/google_drive_file.dart';
@@ -595,8 +596,10 @@ class AppState extends ChangeNotifier {
   Future<List<LivingSupportDocumentSyncResult>>
   syncLivingSupportDocumentsFromEntries() async {
     return _syncLivingSupportDocumentsFromWorkEntries(
-      entries: _entries,
-      emptyMessage: 'No saved work entries to sync.',
+      entries: _entries
+          .where((entry) => entry.type == EntryType.homeVisit)
+          .toList(),
+      emptyMessage: 'No saved home-visit notes to sync.',
     );
   }
 
@@ -616,11 +619,14 @@ class AppState extends ChangeNotifier {
   syncLivingSupportDocumentsForPayPeriod({
     required PayPeriodRange range,
   }) async {
-    final currentEntries = entriesInRange(_entries, range);
+    final currentEntries = entriesInRange(
+      _entries.where((entry) => entry.type == EntryType.homeVisit),
+      range,
+    );
 
     return _syncLivingSupportDocumentsFromWorkEntries(
       entries: currentEntries,
-      emptyMessage: 'No work notes in the selected pay period to import.',
+      emptyMessage: 'No home-visit notes in the selected pay period to import.',
       invoicePeriodRange: range,
     );
   }
@@ -641,7 +647,9 @@ class AppState extends ChangeNotifier {
 
     final livingEntries = <LivingSupportDocumentEntry>[];
 
-    for (final entry in _entries) {
+    for (final entry in _entries.where(
+      (entry) => entry.type == EntryType.homeVisit,
+    )) {
       final loadedLocal =
           _supportNoteMetas[entry.id] ??
           await LocalSupportNoteService.loadMeta(entry.id);

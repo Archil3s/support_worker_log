@@ -272,8 +272,8 @@ class _NotesScreenState extends State<NotesScreen> {
         SnackBar(
           content: Text(
             results.isEmpty
-                ? 'Master living doc has no tab for this pay period.'
-                : 'Loaded master living doc.',
+                ? 'Master living doc has no home-visit tab for this pay period.'
+                : 'Loaded home-visit master living doc.',
           ),
         ),
       );
@@ -382,7 +382,7 @@ class _NotesScreenState extends State<NotesScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Submission docs prepared. Ready-to-submit has $readyCount finished notes.',
+            'Submission docs prepared. Ready-to-submit has $readyCount finished home-visit notes.',
           ),
         ),
       );
@@ -423,8 +423,9 @@ class _NotesScreenState extends State<NotesScreen> {
       final appState = context.read<AppState>();
       final googleAccountEmail = _currentGoogleAccountEmail(appState);
       final driveService = GoogleDriveService();
-      final sourceEntries = [...appState.entries]
-        ..sort((a, b) => b.date.compareTo(a.date));
+      final sourceEntries =
+          appState.entries.where(_isHomeVisitNoteEntry).toList()
+            ..sort((a, b) => b.date.compareTo(a.date));
       final items = <_UnsubmittedNoteItem>[];
 
       for (final entry in sourceEntries) {
@@ -513,17 +514,17 @@ class _NotesScreenState extends State<NotesScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final allEntries = appState.entries;
+    final noteEntries = allEntries.where(_isHomeVisitNoteEntry).toList();
     final payPeriodRanges = _livingDocsPayPeriodRanges(
-      allEntries,
+      noteEntries,
       appState.settings.payPeriodAnchorDate,
     );
     final selectedPeriodKey =
         selectedPayPeriodKey ?? _payPeriodKey(payPeriodRanges.first);
     final clients = {
-      ...appState.clients,
-      ...allEntries.map((entry) => entry.client),
+      ...noteEntries.map((entry) => entry.client),
     }.where((client) => client.trim().isNotEmpty).toList()..sort();
-    final entries = _filtered(allEntries);
+    final entries = _filtered(noteEntries);
     return NotesStorageGate(
       child: _NotesListTab(
         entries: entries,
@@ -636,7 +637,10 @@ class _NotesListTab extends StatelessWidget {
       payPeriodRanges,
     );
     final submissionSummary = _submissionSummaryFor(
-      entries: entriesInRange(appState.entries, selectedRange),
+      entries: entriesInRange(
+        appState.entries,
+        selectedRange,
+      ).where(_isHomeVisitNoteEntry),
       appState: appState,
     );
 
@@ -796,8 +800,8 @@ class _NotesListTab extends StatelessWidget {
                     : const Icon(Icons.pending_actions_outlined),
                 label: Text(
                   loadingUnsubmittedNotes
-                      ? 'Loading Not Submitted Sheet'
-                      : 'Load Not Submitted Sheet',
+                      ? 'Loading Home Visits'
+                      : 'Load Home Visits Not Submitted',
                 ),
               ),
               const SizedBox(height: 12),
@@ -842,7 +846,9 @@ class _NotesListTab extends StatelessWidget {
         if (entries.isEmpty)
           const SectionCard(
             title: 'Notes',
-            child: EmptyState(message: 'No entries available for notes yet.'),
+            child: EmptyState(
+              message: 'No home visits available for notes yet.',
+            ),
           )
         else
           for (final entry in entries) ...[
@@ -852,6 +858,10 @@ class _NotesListTab extends StatelessWidget {
       ],
     );
   }
+}
+
+bool _isHomeVisitNoteEntry(WorkEntry entry) {
+  return entry.type == EntryType.homeVisit;
 }
 
 List<PayPeriodRange> _livingDocsPayPeriodRanges(
@@ -1159,7 +1169,7 @@ class _UnsubmittedNotesSheet extends StatelessWidget {
               children: [
                 const Expanded(
                   child: Text(
-                    'Not Submitted Notes',
+                    'Not Submitted Home Visits',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                   ),
                 ),
@@ -1179,7 +1189,9 @@ class _UnsubmittedNotesSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Expanded(
               child: items.isEmpty
-                  ? const EmptyState(message: 'All notes are marked Submitted.')
+                  ? const EmptyState(
+                      message: 'All home-visit notes are marked Submitted.',
+                    )
                   : ListView.separated(
                       itemCount: items.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
@@ -1899,6 +1911,14 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     }
   }
 
+  void _toggleImportant() {
+    final updatedEntry = widget.entry.copyWith(
+      importantText: !widget.entry.importantText,
+    );
+
+    context.read<AppState>().updateEntry(updatedEntry);
+  }
+
   Future<void> _openDriveFile() async {
     final link = driveMeta?.openLink;
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
@@ -2028,6 +2048,16 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                _NoteFileChip(
+                  icon: widget.entry.importantText
+                      ? Icons.sell
+                      : Icons.sell_outlined,
+                  label: widget.entry.importantText
+                      ? 'Important'
+                      : 'Mark important',
+                  ready: widget.entry.importantText,
+                  onPressed: _toggleImportant,
+                ),
                 _NoteFileChip(
                   icon: Icons.folder_outlined,
                   label: hasLocal ? 'Local file' : 'No local file',

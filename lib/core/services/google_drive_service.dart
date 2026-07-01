@@ -2125,7 +2125,7 @@ class GoogleDriveService {
       if (entry.type == EntryType.textNote)
         'Text direction: ${entry.textContactDirection.label}',
       if (entry.textReplyNeeded) 'Reply needed: Yes',
-      if (entry.importantText) 'Important written contact: Yes',
+      if (entry.importantText) 'Important: Yes',
       if (entry.kilometres > 0) 'Kilometres: ${entry.kilometres}',
       '',
       if (notes.isNotEmpty) notes else 'No note text saved in the app.',
