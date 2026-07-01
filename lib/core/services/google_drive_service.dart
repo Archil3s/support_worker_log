@@ -459,6 +459,26 @@ class _LivingSupportEntryRange {
   final int endIndex;
 }
 
+class _LivingSupportSections {
+  const _LivingSupportSections({
+    required this.sections,
+    required this.extraSections,
+  });
+
+  final Map<String, String> sections;
+  final List<_LivingSupportExtraSection> extraSections;
+}
+
+class _LivingSupportExtraSection {
+  const _LivingSupportExtraSection({
+    required this.title,
+    required this.contents,
+  });
+
+  final String title;
+  final String contents;
+}
+
 class GoogleDriveService {
   GoogleDriveService({
     GoogleDriveApiPlatform? api,
@@ -2138,10 +2158,10 @@ class GoogleDriveService {
 
     return [
       _livingSupportStartMarker(entry.id),
+      'Status: ${item.status.label}',
       '${_livingSupportTimeLabel(entry)} - ${entry.type.label}',
       'Person: ${item.personName}',
       'Invoice period: ${_livingSupportInvoiceRangeLabel(entry.date)}',
-      'Note status: ${item.status.label}',
       'Updated to living doc: Yes',
       if (entry.type == EntryType.textNote)
         'Text direction: ${entry.textContactDirection.label}',
@@ -2326,28 +2346,50 @@ class GoogleDriveService {
 
   String _livingSupportTemplateText(String noteText) {
     final cleaned = _removeLegacySvilText(noteText);
-    final sections = _livingSupportSections(cleaned);
+    final parsed = _livingSupportSections(cleaned);
 
     return [
       for (final title in _livingSupportSectionTitles) ...[
         title,
-        sections[title]?.trim().isNotEmpty == true
-            ? sections[title]!.trim()
+        parsed.sections[title]?.trim().isNotEmpty == true
+            ? parsed.sections[title]!.trim()
             : '',
+        '',
+      ],
+      for (final section in parsed.extraSections) ...[
+        section.title,
+        if (section.contents.trim().isNotEmpty) section.contents.trim(),
         '',
       ],
     ].join('\n').trim();
   }
 
-  Map<String, String> _livingSupportSections(String noteText) {
+  _LivingSupportSections _livingSupportSections(String noteText) {
     final sections = <String, String>{};
+    final extraSections = <_LivingSupportExtraSection>[];
     String? current;
+    String? currentRawTitle;
+    var currentIsKnown = true;
     final buffer = StringBuffer();
 
     void flush() {
       final title = current;
       if (title == null) return;
-      sections[title] = buffer.toString().trim();
+      final contents = buffer.toString().trim();
+      if (currentIsKnown) {
+        sections[title] = [sections[title], contents]
+            .where((value) => value != null && value.trim().isNotEmpty)
+            .join('\n\n');
+      } else {
+        extraSections.add(
+          _LivingSupportExtraSection(
+            title: currentRawTitle?.trim().isNotEmpty == true
+                ? currentRawTitle!.trim()
+                : title,
+            contents: contents,
+          ),
+        );
+      }
       buffer.clear();
     }
 
@@ -2357,6 +2399,17 @@ class GoogleDriveService {
       if (title != null) {
         flush();
         current = title;
+        currentRawTitle = line.trim();
+        currentIsKnown = true;
+        continue;
+      }
+
+      final extraTitle = _livingSupportExtraSectionTitle(line);
+      if (extraTitle != null) {
+        flush();
+        current = extraTitle;
+        currentRawTitle = extraTitle;
+        currentIsKnown = false;
         continue;
       }
 
@@ -2367,11 +2420,24 @@ class GoogleDriveService {
     flush();
 
     if (sections.values.every((value) => value.trim().isEmpty) &&
+        extraSections.every((section) => section.contents.trim().isEmpty) &&
         noteText.trim().isNotEmpty) {
       sections['What happened'] = noteText.trim();
     }
 
-    return sections;
+    return _LivingSupportSections(
+      sections: sections,
+      extraSections: extraSections,
+    );
+  }
+
+  String? _livingSupportExtraSectionTitle(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    if (!RegExp(r'[A-Za-z]').hasMatch(trimmed)) return null;
+    if (trimmed.length > 80) return null;
+    if (trimmed.endsWith(':')) return trimmed.substring(0, trimmed.length - 1);
+    return null;
   }
 
   String _removeLegacySvilText(String noteText) {

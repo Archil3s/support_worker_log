@@ -602,6 +602,7 @@ void main() {
             status: EntrySupportNoteStatus.finished,
             noteText:
                 'Main topic(s)\nCalled client about appointment.\n\n'
+                'Transport support:\nBooked taxi.\n\n'
                 'Safety concerns for sexual harm survivors and mental health\n'
                 'No safety concerns noted.',
           ),
@@ -621,7 +622,11 @@ void main() {
         'Phone Calls - Inv 10',
         'Phone 2026-06-02',
       ]);
-      expect(docsApi.insertedText.single, contains('Note status: Finished'));
+      final inserted = docsApi.insertedText.single.trimLeft();
+      expect(
+        inserted,
+        startsWith('[[SWL_ENTRY:entry-1:START]]\nStatus: Finished'),
+      );
       expect(
         docsApi.insertedText.single,
         contains('Updated to living doc: Yes'),
@@ -630,6 +635,8 @@ void main() {
         docsApi.insertedText.single,
         contains('Called client about appointment.'),
       );
+      expect(docsApi.insertedText.single, contains('Transport support'));
+      expect(docsApi.insertedText.single, contains('Booked taxi.'));
       expect(
         docsApi.insertedText.single,
         isNot(contains('sexual harm survivors')),
@@ -923,7 +930,7 @@ void main() {
         containsPair('deleteContentRange', isA<Map>()),
       );
       expect(updateRequests.last, containsPair('insertText', isA<Map>()));
-      expect(docsApi.insertedText.last, contains('Note status: Submitted'));
+      expect(docsApi.insertedText.last, contains('Status: Submitted'));
       expect(docsApi.insertedText.last, contains('Updated text message.'));
     },
   );
