@@ -365,15 +365,18 @@ class _LivingSupportTabCache {
       (candidate) => candidate.id == tabId,
       orElse: () => throw StateError('Google Docs tab was not found.'),
     );
-    final insertedText = '${text.trim()}\n';
+    final insertedText = text.trim();
+    final deleteEndIndex = tab.text.endsWith('\n')
+        ? tab.endIndex - 1
+        : tab.endIndex;
     final requests = <Map<String, dynamic>>[
-      if (tab.text.trim().isNotEmpty)
+      if (tab.text.trim().isNotEmpty && deleteEndIndex > 1)
         {
           'deleteContentRange': {
             'range': {
               'tabId': tab.id,
               'startIndex': 1,
-              'endIndex': tab.endIndex,
+              'endIndex': deleteEndIndex,
             },
           },
         },
@@ -392,7 +395,7 @@ class _LivingSupportTabCache {
       targetRevisionId: _revisionId,
     );
     _revisionId = null;
-    _replaceCachedTabText(tab, insertedText);
+    _replaceCachedTabText(tab, '$insertedText\n');
   }
 
   _LivingSupportTab? _findTab({

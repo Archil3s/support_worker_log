@@ -923,12 +923,22 @@ void main() {
       );
 
       final updateRequests = docsApi.batchRequests.last;
+      final deleteRange =
+          updateRequests.first['deleteContentRange'] as Map<dynamic, dynamic>;
+      final range = deleteRange['range'] as Map<dynamic, dynamic>;
 
       expect(results.single.importedCount, 0);
       expect(results.single.updatedCount, 1);
       expect(
         updateRequests.first,
         containsPair('deleteContentRange', isA<Map>()),
+      );
+      expect(
+        range['endIndex'],
+        lessThanOrEqualTo(
+          '[[SWL_ENTRY:entry-1:START]]\nOld text\n[[SWL_ENTRY:entry-1:END]]\n'
+              .length,
+        ),
       );
       expect(updateRequests.last, containsPair('insertText', isA<Map>()));
       expect(docsApi.insertedText.last, contains('Status: Submitted'));
@@ -1551,6 +1561,11 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
           final start = (range['startIndex'] as int? ?? 1) - 1;
           final end = (range['endIndex'] as int? ?? 1) - 1;
           if (tab != null && start >= 0 && end >= start) {
+            if (tab.text.endsWith('\n') && end >= tab.text.length) {
+              throw StateError(
+                'The range cannot include the newline character at the end of the segment.',
+              );
+            }
             tab.text = tab.text.replaceRange(start, end, '');
           }
         }
