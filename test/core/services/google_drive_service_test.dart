@@ -623,10 +623,11 @@ void main() {
         'Phone 2026-06-02',
       ]);
       final inserted = docsApi.insertedText.single.trimLeft();
-      expect(
-        inserted,
-        startsWith('[[SWL_ENTRY:entry-1:START]]\nStatus: Finished'),
-      );
+      expect(inserted, startsWith('Status: Finished'));
+      expect(inserted, contains('Name of client: AB'));
+      expect(inserted, contains('Date: 02/06/2026'));
+      expect(inserted, contains('Interaction: Phone Call'));
+      expect(inserted, isNot(contains('SWL_ENTRY')));
       expect(
         docsApi.insertedText.single,
         contains('Updated to living doc: Yes'),
@@ -932,6 +933,11 @@ void main() {
       expect(updateRequests.last, containsPair('insertText', isA<Map>()));
       expect(docsApi.insertedText.last, contains('Status: Submitted'));
       expect(docsApi.insertedText.last, contains('Updated text message.'));
+      expect(docsApi.insertedText.last, isNot(contains('SWL_ENTRY')));
+      expect(
+        docsApi.tabs.singleWhere((tab) => tab.id == 'date-tab').text,
+        isNot(contains('SWL_ENTRY')),
+      );
     },
   );
 

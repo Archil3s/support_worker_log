@@ -357,7 +357,6 @@ class _LivingSupportTabCache {
 
   Future<void> replaceBlock({
     required String tabId,
-    required String markerId,
     required String text,
   }) async {
     await load();
@@ -366,34 +365,21 @@ class _LivingSupportTabCache {
       (candidate) => candidate.id == tabId,
       orElse: () => throw StateError('Google Docs tab was not found.'),
     );
-    final existingRange = _service._livingSupportEntryRange(
-      tab: tab,
-      entryId: markerId,
-    );
-    final replacement = [
-      _service._livingSupportStartMarker(markerId),
-      text.trim(),
-      _service._livingSupportEndMarker(markerId),
-      '',
-    ].join('\n');
-    final insertedText = existingRange == null ? '\n$replacement' : replacement;
+    final insertedText = '${text.trim()}\n';
     final requests = <Map<String, dynamic>>[
-      if (existingRange != null)
+      if (tab.text.trim().isNotEmpty)
         {
           'deleteContentRange': {
             'range': {
               'tabId': tab.id,
-              'startIndex': existingRange.startIndex,
-              'endIndex': existingRange.endIndex,
+              'startIndex': 1,
+              'endIndex': tab.endIndex,
             },
           },
         },
       {
         'insertText': {
-          if (existingRange != null)
-            'location': {'tabId': tab.id, 'index': existingRange.startIndex}
-          else
-            'endOfSegmentLocation': {'tabId': tab.id},
+          'location': {'tabId': tab.id, 'index': 1},
           'text': insertedText,
         },
       },
@@ -406,7 +392,7 @@ class _LivingSupportTabCache {
       targetRevisionId: _revisionId,
     );
     _revisionId = null;
-    _replaceCachedTabText(tab, existingRange, insertedText);
+    _replaceCachedTabText(tab, insertedText);
   }
 
   _LivingSupportTab? _findTab({
@@ -423,24 +409,13 @@ class _LivingSupportTabCache {
     return null;
   }
 
-  void _replaceCachedTabText(
-    _LivingSupportTab tab,
-    _LivingSupportEntryRange? existingRange,
-    String insertedText,
-  ) {
-    final startIndex = existingRange == null
-        ? tab.text.length
-        : existingRange.startIndex - 1;
-    final endIndex = existingRange == null
-        ? tab.text.length
-        : existingRange.endIndex - 1;
-    final nextText = tab.text.replaceRange(startIndex, endIndex, insertedText);
+  void _replaceCachedTabText(_LivingSupportTab tab, String insertedText) {
     final updated = _LivingSupportTab(
       id: tab.id,
       title: tab.title,
       parentId: tab.parentId,
-      text: nextText,
-      endIndex: nextText.length + 1,
+      text: insertedText,
+      endIndex: insertedText.length + 1,
     );
     _tabs = [
       for (final item in _tabs)
@@ -1560,7 +1535,6 @@ class GoogleDriveService {
 
     await tabCache.replaceBlock(
       tabId: dashboardTab.id,
-      markerId: 'ready-to-submit-dashboard',
       text: _livingSupportReadyDashboardBlock(entriesByInvoiceTitle),
     );
 
@@ -1581,7 +1555,6 @@ class GoogleDriveService {
 
       await tabCache.replaceBlock(
         tabId: totalsTab.id,
-        markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'ready-totals'),
         text: _livingSupportReadyTotalsBlock(invoiceTitle, invoiceEntries),
       );
 
@@ -1628,10 +1601,6 @@ class GoogleDriveService {
 
           await tabCache.replaceBlock(
             tabId: personTab.id,
-            markerId: _livingSupportSummaryMarkerId(
-              '$invoiceTitle-${typeGroup.key.name}-${personGroup.key}',
-              'ready-person',
-            ),
             text: _livingSupportReadyPersonBlock(
               invoiceTitle: invoiceTitle,
               type: typeGroup.key,
@@ -1944,16 +1913,10 @@ class GoogleDriveService {
       tab: dateTab,
       entryId: item.entry.id,
     );
-    await tabCache.replaceBlock(
-      tabId: dateTab.id,
-      markerId: item.entry.id,
-      text: replacement
-          .replaceAll(_livingSupportStartMarker(item.entry.id), '')
-          .replaceAll(_livingSupportEndMarker(item.entry.id), '')
-          .trim(),
-    );
+    final hadExistingContent = dateTab.text.trim().isNotEmpty;
+    await tabCache.replaceBlock(tabId: dateTab.id, text: replacement);
 
-    return existingRange != null;
+    return existingRange != null || hadExistingContent;
   }
 
   Future<bool> _syncInvoicePeriodLivingEntryCached({
@@ -1975,16 +1938,10 @@ class GoogleDriveService {
       tab: entryTab,
       entryId: item.entry.id,
     );
-    await tabCache.replaceBlock(
-      tabId: entryTab.id,
-      markerId: item.entry.id,
-      text: replacement
-          .replaceAll(_livingSupportStartMarker(item.entry.id), '')
-          .replaceAll(_livingSupportEndMarker(item.entry.id), '')
-          .trim(),
-    );
+    final hadExistingContent = entryTab.text.trim().isNotEmpty;
+    await tabCache.replaceBlock(tabId: entryTab.id, text: replacement);
 
-    return existingRange != null;
+    return existingRange != null || hadExistingContent;
   }
 
   Future<void> _syncInvoicePeriodStatusTabs({
@@ -2004,12 +1961,10 @@ class GoogleDriveService {
 
     await tabCache.replaceBlock(
       tabId: submittedTab.id,
-      markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'submitted'),
       text: _livingSupportSubmittedSummaryBlock(invoiceTitle, entries),
     );
     await tabCache.replaceBlock(
       tabId: totalsTab.id,
-      markerId: _livingSupportSummaryMarkerId(invoiceTitle, 'totals'),
       text: _livingSupportTotalsBlock(invoiceTitle, entries),
     );
   }
@@ -2157,10 +2112,11 @@ class GoogleDriveService {
         .join('\n');
 
     return [
-      _livingSupportStartMarker(entry.id),
       'Status: ${item.status.label}',
+      'Name of client: ${item.personName}',
+      'Date: ${_displayDate(entry.date)}',
+      'Interaction: ${entry.type.label}',
       '${_livingSupportTimeLabel(entry)} - ${entry.type.label}',
-      'Person: ${item.personName}',
       'Invoice period: ${_livingSupportInvoiceRangeLabel(entry.date)}',
       'Updated to living doc: Yes',
       if (entry.type == EntryType.textNote)
@@ -2171,7 +2127,6 @@ class GoogleDriveService {
       '',
       if (notes.isNotEmpty) notes else 'No note text saved in the app.',
       if (nextActions.isNotEmpty) ...['', 'Next actions', nextActions],
-      _livingSupportEndMarker(entry.id),
       '',
     ].join('\n');
   }
@@ -2692,15 +2647,6 @@ class GoogleDriveService {
     );
   }
 
-  String _livingSupportSummaryMarkerId(String invoiceTitle, String suffix) {
-    final key = '$invoiceTitle-$suffix'
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
-
-    return 'summary-$key';
-  }
-
   String _livingSupportDateTabPrefix(EntryType type) {
     switch (type) {
       case EntryType.textNote:
@@ -2910,6 +2856,14 @@ class GoogleDriveService {
     final day = value.day.toString().padLeft(2, '0');
 
     return '$year-$month-$day';
+  }
+
+  String _displayDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final year = value.year.toString().padLeft(4, '0');
+
+    return '$day/$month/$year';
   }
 
   static const _textTemplates = [
