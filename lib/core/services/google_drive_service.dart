@@ -1939,25 +1939,17 @@ class GoogleDriveService {
       title: _livingSupportPersonTabName(item.personName, invoiceTitle),
       parentTabId: invoiceTab.id,
     );
-    final typeTab = await tabCache.ensureTab(
-      title: _livingSupportPersonTypeTabName(
-        item.entry.type,
-        item.personName,
-        invoiceTitle,
-      ),
+    final entryTab = await tabCache.ensureTab(
+      title: _livingSupportPersonEntryTabName(item.entry, item.personName),
       parentTabId: personTab.id,
-    );
-    final dateTab = await tabCache.ensureTab(
-      title: _livingSupportPersonDateTabName(item.entry, item.personName),
-      parentTabId: typeTab.id,
     );
     final replacement = _livingSupportEntryBlock(item);
     final existingRange = _livingSupportEntryRange(
-      tab: dateTab,
+      tab: entryTab,
       entryId: item.entry.id,
     );
     await tabCache.replaceBlock(
-      tabId: dateTab.id,
+      tabId: entryTab.id,
       markerId: item.entry.id,
       text: replacement
           .replaceAll(_livingSupportStartMarker(item.entry.id), '')
@@ -2575,26 +2567,31 @@ class GoogleDriveService {
     return _livingSupportTabTitle('${_folderName(personName)}$invoiceLabel');
   }
 
-  String _livingSupportPersonTypeTabName(
-    EntryType type,
-    String personName,
-    String invoiceTitle,
-  ) {
-    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
-    final invoiceLabel = invoiceMatch == null
+  String _livingSupportPersonEntryTabName(WorkEntry entry, String personName) {
+    final hour = entry.startTime.hour.toString().padLeft(2, '0');
+    final minute = entry.startTime.minute.toString().padLeft(2, '0');
+    final idSuffix = _safeMarkerPart(entry.id);
+    final suffix = [
+      _dateKey(entry.date),
+      '$hour$minute',
+      if (idSuffix.isNotEmpty)
+        idSuffix.length <= 6 ? idSuffix : idSuffix.substring(0, 6),
+    ].join(' ');
+    final prefix = _livingSupportDateTabPrefix(entry.type);
+    final person = _folderName(personName);
+    final reservedLength = prefix.length + suffix.length + 2;
+    final availablePersonLength = 50 - reservedLength;
+    final maxPersonLength = availablePersonLength <= 0
+        ? 0
+        : availablePersonLength > person.length
+        ? person.length
+        : availablePersonLength;
+    final compactPerson = maxPersonLength == 0
         ? ''
-        : ' I${invoiceMatch.group(1)}';
-    final person = _folderName(personName);
+        : person.substring(0, maxPersonLength).trimRight();
 
     return _livingSupportTabTitle(
-      '${_livingSupportDateTabPrefix(type)} $person$invoiceLabel',
-    );
-  }
-
-  String _livingSupportPersonDateTabName(WorkEntry entry, String personName) {
-    final person = _folderName(personName);
-    return _livingSupportTabTitle(
-      '${_livingSupportDateTabPrefix(entry.type)} $person ${_dateKey(entry.date)}',
+      [prefix, if (compactPerson.isNotEmpty) compactPerson, suffix].join(' '),
     );
   }
 

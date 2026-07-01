@@ -749,11 +749,9 @@ void main() {
         result.subTabTitles,
         containsAll([
           'Joseph W Inv 10',
-          'Phone Joseph W I10',
-          'Phone Joseph W 2026-06-02',
+          'Phone Joseph W 2026-06-02 0930 phone-',
           'Pierre Inv 10',
-          'Texts Pierre I10',
-          'Texts Pierre 2026-06-03',
+          'Texts Pierre 2026-06-03 1015 text-e',
           'Submitted I10',
           'Totals I10',
         ]),
@@ -1516,10 +1514,14 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
           if (tabs.any((tab) => tab.title == title)) {
             throw StateError('Tab title must be unique.');
           }
+          final parentId = properties['parentTabId'] as String?;
+          if (_tabDepth(parentId) >= 3) {
+            throw StateError('Google Docs tabs cannot be nested beyond 3.');
+          }
           final tab = _FakeGoogleDocTab(
             id: 'tab-${_nextTab++}',
             title: title,
-            parentId: properties['parentTabId'] as String?,
+            parentId: parentId,
           );
           tabs.add(tab);
           addedTabs.add(tab);
@@ -1571,6 +1573,12 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
       if (tab.id == id) return tab;
     }
     return null;
+  }
+
+  int _tabDepth(String? id) {
+    final tab = _tabById(id);
+    if (tab == null) return 0;
+    return 1 + _tabDepth(tab.parentId);
   }
 
   Map<String, dynamic> _tabJson(_FakeGoogleDocTab tab) {

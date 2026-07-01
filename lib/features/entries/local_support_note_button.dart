@@ -11,6 +11,7 @@ import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
+import '../../core/utils/pay_period_utils.dart';
 import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
@@ -136,7 +137,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   }
 
   void _startGoogleDocSyncTimer() {
-    googleDocSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    googleDocSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
       if (!mounted || busy || driveMeta == null) return;
       unawaited(_syncFromGoogleDoc(silent: true));
     });
@@ -385,7 +386,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     if (!draftAutosaveReady || busy) return;
 
     draftAutosaveTimer?.cancel();
-    draftAutosaveTimer = Timer(const Duration(milliseconds: 900), () async {
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 350), () async {
       try {
         await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
         await _autoSaveAttachedFiles();
@@ -798,6 +799,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       if (_shouldAutoSyncGoogleDoc(next)) {
         await _autoSaveAttachedFiles(syncDrive: true);
       }
+      await _updateLivingDocForPayPeriod();
       return;
     }
 
@@ -805,16 +807,43 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       final hadDrive = driveMeta != null;
       final shouldCreateDrive = !hadDrive && _shouldAutoSyncGoogleDoc(next);
       await _autoSaveAttachedFiles(syncDrive: true);
+      await _updateLivingDocForPayPeriod();
       if (!mounted) return;
       setState(() {
         message = hadDrive || shouldCreateDrive
-            ? 'Status saved to local file and Google Drive.'
-            : 'Status saved locally.';
+            ? 'Status saved to local file and Google Drive. Master living doc updated.'
+            : 'Status saved locally. Master living doc updated.';
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         message = 'Could not save status: $error';
+      });
+    }
+  }
+
+  Future<void> _updateLivingDocForPayPeriod() async {
+    final appState = context.read<AppState>();
+    if (appState.isPayeMode) return;
+
+    try {
+      final range = fortnightForDate(
+        widget.entry.date,
+        anchorDate: appState.settings.payPeriodAnchorDate,
+      );
+      await appState.syncLivingSupportDocumentsForPayPeriod(range: range);
+
+      if (!mounted) return;
+
+      noteFocusNode.requestFocus();
+      setState(() {
+        message = 'Updated master living doc.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Living doc update failed: $error';
       });
     }
   }

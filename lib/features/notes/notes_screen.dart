@@ -121,6 +121,7 @@ class _NotesScreenState extends State<NotesScreen> {
   String? selectedPayPeriodKey;
   bool syncingCurrentPeriodLivingDocs = false;
   bool syncingReadyToSubmitDocs = false;
+  bool preparingSubmissionDocs = false;
   bool loadingLivingDocs = false;
   bool loadingUnsubmittedNotes = false;
   List<LivingSupportDocumentSummary> livingDocs = const [];
@@ -248,9 +249,22 @@ class _NotesScreenState extends State<NotesScreen> {
     setState(() => loadingLivingDocs = true);
 
     try {
-      final results = await appState.loadLivingSupportDocumentsForPayPeriod(
+      var results = await appState.loadLivingSupportDocumentsForPayPeriod(
         range: selectedRange,
       );
+      if (results.isEmpty) {
+        final syncResults = await appState
+            .syncLivingSupportDocumentsForPayPeriod(range: selectedRange);
+        results = [
+          for (final result in syncResults)
+            LivingSupportDocumentSummary(
+              personName: result.personName,
+              file: result.file,
+              invoiceTabTitle: result.invoiceTabTitle,
+              subTabTitles: result.subTabTitles,
+            ),
+        ];
+      }
       if (!mounted) return;
 
       setState(() => livingDocs = results);
@@ -321,6 +335,65 @@ class _NotesScreenState extends State<NotesScreen> {
       );
     } finally {
       if (mounted) setState(() => syncingReadyToSubmitDocs = false);
+    }
+  }
+
+  Future<void> _prepareSubmissionDocs() async {
+    if (preparingSubmissionDocs ||
+        syncingCurrentPeriodLivingDocs ||
+        syncingReadyToSubmitDocs) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final appState = context.read<AppState>();
+    final selectedRange = _payPeriodRangeForKey(
+      selectedPayPeriodKey,
+      _livingDocsPayPeriodRanges(
+        appState.entries,
+        appState.settings.payPeriodAnchorDate,
+      ),
+    );
+    setState(() => preparingSubmissionDocs = true);
+
+    try {
+      final masterResults = await appState
+          .syncLivingSupportDocumentsForPayPeriod(range: selectedRange);
+      final readyResults = await appState
+          .syncReadyToSubmitLivingSupportDocument();
+      final readyCount = readyResults.fold<int>(
+        0,
+        (total, result) => total + result.importedCount,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        livingDocs = [
+          for (final result in [...masterResults, ...readyResults])
+            LivingSupportDocumentSummary(
+              personName: result.personName,
+              file: result.file,
+              invoiceTabTitle: result.invoiceTabTitle,
+              subTabTitles: result.subTabTitles,
+            ),
+        ];
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Submission docs prepared. Ready-to-submit has $readyCount finished notes.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Submission prep failed: ${_friendlyErrorText(error)}'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => preparingSubmissionDocs = false);
     }
   }
 
@@ -482,11 +555,13 @@ class _NotesScreenState extends State<NotesScreen> {
         onSyncCurrentPayPeriodLivingDocuments:
             _syncCurrentPayPeriodLivingDocuments,
         onSyncReadyToSubmitDocument: _syncReadyToSubmitDocument,
+        onPrepareSubmissionDocs: _prepareSubmissionDocs,
         onLoadLivingDocuments: _loadLivingDocuments,
         onOpenLivingDocument: _openLivingDocument,
         onLoadUnsubmittedNotes: _openUnsubmittedNotesSheet,
         syncingCurrentPeriodLivingDocs: syncingCurrentPeriodLivingDocs,
         syncingReadyToSubmitDocs: syncingReadyToSubmitDocs,
+        preparingSubmissionDocs: preparingSubmissionDocs,
         loadingLivingDocs: loadingLivingDocs,
         loadingUnsubmittedNotes: loadingUnsubmittedNotes,
         livingDocs: livingDocs,
@@ -513,11 +588,13 @@ class _NotesListTab extends StatelessWidget {
     required this.onChooseFolder,
     required this.onSyncCurrentPayPeriodLivingDocuments,
     required this.onSyncReadyToSubmitDocument,
+    required this.onPrepareSubmissionDocs,
     required this.onLoadLivingDocuments,
     required this.onOpenLivingDocument,
     required this.onLoadUnsubmittedNotes,
     required this.syncingCurrentPeriodLivingDocs,
     required this.syncingReadyToSubmitDocs,
+    required this.preparingSubmissionDocs,
     required this.loadingLivingDocs,
     required this.loadingUnsubmittedNotes,
     required this.livingDocs,
@@ -539,18 +616,29 @@ class _NotesListTab extends StatelessWidget {
   final VoidCallback onChooseFolder;
   final VoidCallback onSyncCurrentPayPeriodLivingDocuments;
   final VoidCallback onSyncReadyToSubmitDocument;
+  final VoidCallback onPrepareSubmissionDocs;
   final VoidCallback onLoadLivingDocuments;
   final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
   final VoidCallback onLoadUnsubmittedNotes;
   final bool syncingCurrentPeriodLivingDocs;
   final bool syncingReadyToSubmitDocs;
+  final bool preparingSubmissionDocs;
   final bool loadingLivingDocs;
   final bool loadingUnsubmittedNotes;
   final List<LivingSupportDocumentSummary> livingDocs;
 
   @override
   Widget build(BuildContext context) {
-    final payeMode = context.watch<AppState>().isPayeMode;
+    final appState = context.watch<AppState>();
+    final payeMode = appState.isPayeMode;
+    final selectedRange = _payPeriodRangeForKey(
+      selectedPayPeriodKey,
+      payPeriodRanges,
+    );
+    final submissionSummary = _submissionSummaryFor(
+      entries: entriesInRange(appState.entries, selectedRange),
+      appState: appState,
+    );
 
     return ListView(
       padding: webPagePadding(context),
@@ -593,6 +681,16 @@ class _NotesListTab extends StatelessWidget {
                   onChanged: syncingCurrentPeriodLivingDocs
                       ? null
                       : onPayPeriodChanged,
+                ),
+                const SizedBox(height: 10),
+                _SubmissionPrepPanel(
+                  summary: submissionSummary,
+                  preparing: preparingSubmissionDocs,
+                  disabled:
+                      syncingCurrentPeriodLivingDocs ||
+                      syncingReadyToSubmitDocs ||
+                      loadingLivingDocs,
+                  onPrepare: onPrepareSubmissionDocs,
                 ),
                 const SizedBox(height: 10),
                 FilledButton.icon(
@@ -884,6 +982,125 @@ class _LivingDocumentTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SubmissionSummary {
+  const _SubmissionSummary({
+    required this.total,
+    required this.incomplete,
+    required this.inProgress,
+    required this.finished,
+    required this.submitted,
+    required this.withDrive,
+  });
+
+  final int total;
+  final int incomplete;
+  final int inProgress;
+  final int finished;
+  final int submitted;
+  final int withDrive;
+
+  int get open => incomplete + inProgress;
+}
+
+class _SubmissionPrepPanel extends StatelessWidget {
+  const _SubmissionPrepPanel({
+    required this.summary,
+    required this.preparing,
+    required this.disabled,
+    required this.onPrepare,
+  });
+
+  final _SubmissionSummary summary;
+  final bool preparing;
+  final bool disabled;
+  final VoidCallback onPrepare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _SubmissionChip(
+              label: 'Total',
+              value: summary.total,
+              color: const Color(0xFF8EA7FF),
+            ),
+            _SubmissionChip(
+              label: 'Ready',
+              value: summary.finished,
+              color: _statusColor(EntrySupportNoteStatus.finished),
+            ),
+            _SubmissionChip(
+              label: 'Submitted',
+              value: summary.submitted,
+              color: _statusColor(EntrySupportNoteStatus.submitted),
+            ),
+            _SubmissionChip(
+              label: 'Open',
+              value: summary.open,
+              color: _statusColor(EntrySupportNoteStatus.inProgress),
+            ),
+            _SubmissionChip(
+              label: 'On Drive',
+              value: summary.withDrive,
+              color: const Color(0xFF67E8F9),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: disabled || preparing || summary.total == 0
+              ? null
+              : onPrepare,
+          icon: preparing
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.rule_folder_outlined),
+          label: Text(
+            preparing ? 'Preparing Submission Docs' : 'Prepare Submission Docs',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SubmissionChip extends StatelessWidget {
+  const _SubmissionChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.24),
+        foregroundColor: color,
+        child: Text(
+          value.toString(),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+        ),
+      ),
+      label: Text(label),
+      side: BorderSide(color: color.withValues(alpha: 0.38)),
+      backgroundColor: const Color(0xFF20283B),
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
     );
   }
 }
@@ -1968,7 +2185,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   }
 
   void _startGoogleDocSyncTimer() {
-    googleDocSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    googleDocSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
       if (!mounted || busy || autoSaving || driveMeta == null) return;
       unawaited(_syncFromGoogleDoc(silent: true));
     });
@@ -1978,7 +2195,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     if (suppressAutoSave || (meta == null && driveMeta == null)) return;
 
     autoSaveDebounce?.cancel();
-    autoSaveDebounce = Timer(const Duration(milliseconds: 900), () {
+    autoSaveDebounce = Timer(const Duration(milliseconds: 350), () {
       unawaited(_autoSaveAttachedFiles());
     });
   }
@@ -2580,15 +2797,13 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       await _saveDraftOnly('Draft status saved.', showMessage: false);
       if (_shouldAutoSyncGoogleDoc(next)) {
         await _autoSaveAttachedFiles(syncDrive: true);
-        await _updateLivingDocForPayPeriod();
       }
+      await _updateLivingDocForPayPeriod();
       return;
     }
 
     await _autoSaveAttachedFiles(syncDrive: true);
-    if (_shouldAutoSyncGoogleDoc(next)) {
-      await _updateLivingDocForPayPeriod();
-    }
+    await _updateLivingDocForPayPeriod();
   }
 
   Future<void> _autoSaveAttachedFiles({bool syncDrive = false}) async {
@@ -3270,6 +3485,49 @@ EntrySupportNoteStatus _preferredStatus(
   return _supportNoteStatusRank(incoming) > _supportNoteStatusRank(current)
       ? incoming
       : current;
+}
+
+_SubmissionSummary _submissionSummaryFor({
+  required Iterable<WorkEntry> entries,
+  required AppState appState,
+}) {
+  var total = 0;
+  var incomplete = 0;
+  var inProgress = 0;
+  var finished = 0;
+  var submitted = 0;
+  var withDrive = 0;
+
+  for (final entry in entries) {
+    final localMeta = appState.supportNoteMetaFor(entry.id);
+    final driveMeta = appState.driveSupportNoteMetaFor(entry.id);
+    final status = _preferredStatus(localMeta?.status, driveMeta?.status);
+    total += 1;
+
+    if (driveMeta?.openLink?.trim().isNotEmpty == true) {
+      withDrive += 1;
+    }
+
+    switch (status) {
+      case EntrySupportNoteStatus.incomplete:
+        incomplete += 1;
+      case EntrySupportNoteStatus.inProgress:
+        inProgress += 1;
+      case EntrySupportNoteStatus.finished:
+        finished += 1;
+      case EntrySupportNoteStatus.submitted:
+        submitted += 1;
+    }
+  }
+
+  return _SubmissionSummary(
+    total: total,
+    incomplete: incomplete,
+    inProgress: inProgress,
+    finished: finished,
+    submitted: submitted,
+    withDrive: withDrive,
+  );
 }
 
 String _unsubmittedNoteText({

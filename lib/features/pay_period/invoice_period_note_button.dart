@@ -233,7 +233,7 @@ class _InvoicePeriodNoteSheetState extends State<InvoicePeriodNoteSheet> {
     if (!draftAutosaveReady || busy) return;
 
     draftAutosaveTimer?.cancel();
-    draftAutosaveTimer = Timer(const Duration(milliseconds: 900), () async {
+    draftAutosaveTimer = Timer(const Duration(milliseconds: 350), () async {
       try {
         if (initialsController.text.trim().isNotEmpty) {
           final updated = await InvoicePeriodNoteService.saveNote(
