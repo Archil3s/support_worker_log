@@ -134,6 +134,41 @@ void main() {
     );
   });
 
+  test('support note template does not count as entered content', () {
+    expect(
+      LocalSupportNoteService.hasEnteredSupportNoteContent(
+        supportNoteBreakdownTemplate,
+      ),
+      isFalse,
+    );
+  });
+
+  test('support note content detector ignores default support checks', () {
+    final noteText = [
+      'Main topic(s)',
+      '',
+      'Referrals',
+      'No referrals discussed or made this visit.',
+      '',
+      'Safety concerns for sexual harm survivors and mental health',
+      'No safety concerns noted.',
+    ].join('\n');
+
+    expect(
+      LocalSupportNoteService.hasEnteredSupportNoteContent(noteText),
+      isFalse,
+    );
+  });
+
+  test('support note content detector accepts typed section content', () {
+    expect(
+      LocalSupportNoteService.hasEnteredSupportNoteContent(
+        'Main topic(s)\nSorted transport to appointment.',
+      ),
+      isTrue,
+    );
+  });
+
   test('empty Work draft still saves in app', () async {
     final entry = WorkEntry(
       id: 'work-note-empty',

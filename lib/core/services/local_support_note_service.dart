@@ -348,6 +348,12 @@ class LocalSupportNoteService {
     return _SupportNoteSections.fromNoteText(source).canonicalText;
   }
 
+  static bool hasEnteredSupportNoteContent(String noteText) {
+    if (noteText.trim().isEmpty) return false;
+
+    return _SupportNoteSections.fromNoteText(noteText).hasEnteredContent;
+  }
+
   static String defaultPayeNoteTextForEntry(WorkEntry entry) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
     if (savedBreakdown.isNotEmpty) return savedBreakdown;
@@ -1261,6 +1267,24 @@ class _SupportNoteSections {
   bool get hasSupportChecks =>
       referrals.trim().isNotEmpty || safetyConcerns.trim().isNotEmpty;
 
+  static const _emptyReferralText =
+      'No referrals discussed or made this visit.';
+  static const _emptySafetyConcernsText = 'No safety concerns noted.';
+
+  bool get hasEnteredContent =>
+      _hasEnteredSectionContent(mainTopic) ||
+      _hasEnteredSectionContent(outcomes) ||
+      _hasEnteredSectionContent(nextActions) ||
+      _hasEnteredSectionContent(overallImpression) ||
+      _hasEnteredSectionContent(
+        referrals,
+        ignoredValues: const {_emptyReferralText},
+      ) ||
+      _hasEnteredSectionContent(
+        safetyConcerns,
+        ignoredValues: const {_emptySafetyConcernsText},
+      );
+
   String get canonicalText {
     return [
       _canonicalSection('Main topic(s)', mainTopic),
@@ -1303,6 +1327,20 @@ class _SupportNoteSections {
         safetyConcerns,
       ],
     ].join('\n');
+  }
+
+  static bool _hasEnteredSectionContent(
+    String value, {
+    Set<String> ignoredValues = const {},
+  }) {
+    final normalized = _normalizedContent(value);
+    if (normalized.isEmpty) return false;
+
+    return !ignoredValues.map(_normalizedContent).contains(normalized);
+  }
+
+  static String _normalizedContent(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
   }
 
   factory _SupportNoteSections.fromNoteText(String value) {

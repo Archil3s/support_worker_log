@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/chart_utils.dart';
 import '../../core/utils/formatters.dart';
@@ -639,7 +640,11 @@ class _WorkflowHealth extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalEntries = entries.length;
     final notesReady = entries
-        .where((entry) => entry.supportNoteBreakdown.trim().isNotEmpty)
+        .where(
+          (entry) => LocalSupportNoteService.hasEnteredSupportNoteContent(
+            entry.supportNoteBreakdown,
+          ),
+        )
         .length;
     final calendarEntered = entries
         .where((entry) => entry.googleCalendarEntered)

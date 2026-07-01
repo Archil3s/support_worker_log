@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/entry_type.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
@@ -246,7 +247,11 @@ class AdminReviewSnapshot {
           .where((entry) => !entry.googleCalendarEntered)
           .toList(),
       missingNotes: sorted
-          .where((entry) => entry.supportNoteBreakdown.trim().isEmpty)
+          .where(
+            (entry) => !LocalSupportNoteService.hasEnteredSupportNoteContent(
+              entry.supportNoteBreakdown,
+            ),
+          )
           .toList(),
       openActions: sorted
           .where(

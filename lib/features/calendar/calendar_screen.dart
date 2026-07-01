@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/entry_type.dart';
 import '../../core/models/google_calendar_event.dart';
 import '../../core/models/work_entry.dart';
+import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/totals.dart';
@@ -107,7 +108,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       selectedGoogleEvents,
     );
     final incompleteNotes = entries
-        .where((entry) => entry.supportNoteBreakdown.trim().isEmpty)
+        .where((entry) => !_hasSupportNoteContent(entry))
         .length;
     final openActions = entries.fold<int>(
       0,
@@ -347,7 +348,7 @@ class _DayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasMissingNote = entries.any(
-      (entry) => entry.supportNoteBreakdown.trim().isEmpty,
+      (entry) => !_hasSupportNoteContent(entry),
     );
     final hasOpenAction = entries.any(
       (entry) => entry.nextActions.any((item) => !item.isCompleted),
@@ -480,7 +481,7 @@ class _SelectedDaySummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
     final missingNotes = entries
-        .where((entry) => entry.supportNoteBreakdown.trim().isEmpty)
+        .where((entry) => !_hasSupportNoteContent(entry))
         .length;
     final openActions = entries.fold<int>(
       0,
@@ -593,7 +594,7 @@ class _CalendarEntryCardState extends State<_CalendarEntryCard> {
   Widget build(BuildContext context) {
     final settings = context.watch<AppState>().settings;
     final entry = widget.entry;
-    final missingNote = entry.supportNoteBreakdown.trim().isEmpty;
+    final missingNote = !_hasSupportNoteContent(entry);
     final openActions = entry.nextActions
         .where((action) => !action.isCompleted)
         .length;
@@ -863,6 +864,12 @@ bool _rangesOverlap({
   required DateTime endB,
 }) {
   return startA.isBefore(endB) && startB.isBefore(endA);
+}
+
+bool _hasSupportNoteContent(WorkEntry entry) {
+  return LocalSupportNoteService.hasEnteredSupportNoteContent(
+    entry.supportNoteBreakdown,
+  );
 }
 
 DateTime _entryDateTime(WorkEntry entry) {

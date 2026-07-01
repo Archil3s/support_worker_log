@@ -857,9 +857,14 @@ class AppState extends ChangeNotifier {
         ? sourceMeta.initials
         : LocalSupportNoteService.defaultInitialsForEntry(entry);
     final status = localMeta?.status ?? sourceMeta.status;
-    final noteText = localMeta?.noteText.trim().isNotEmpty == true
+    final noteText =
+        LocalSupportNoteService.hasEnteredSupportNoteContent(
+          localMeta?.noteText ?? '',
+        )
         ? localMeta!.noteText
-        : entry.supportNoteBreakdown.trim().isNotEmpty
+        : LocalSupportNoteService.hasEnteredSupportNoteContent(
+            entry.supportNoteBreakdown,
+          )
         ? entry.supportNoteBreakdown
         : sourceMeta.noteText;
     final updatedEntry = entry.copyWith(supportNoteBreakdown: noteText);
@@ -2488,9 +2493,11 @@ class AppState extends ChangeNotifier {
 
     for (final candidate in candidates) {
       final cleaned = candidate?.trim();
-      if (cleaned != null && cleaned.isNotEmpty) {
-        return LocalSupportNoteService.canonicalSupportNoteText(cleaned);
+      if (cleaned == null) continue;
+      if (!LocalSupportNoteService.hasEnteredSupportNoteContent(cleaned)) {
+        continue;
       }
+      return LocalSupportNoteService.canonicalSupportNoteText(cleaned);
     }
 
     return '';
