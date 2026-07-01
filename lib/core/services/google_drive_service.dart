@@ -1820,13 +1820,14 @@ class GoogleDriveService {
     );
     if (existing != null) return existing;
 
+    final templateBytes = await _supportNoteTemplateBytes();
     return _api.uploadFile(
       accessToken: accessToken,
       name: documentName,
       mimeType: _googleDocsMimeType,
-      bytes: utf8.encode('Living support notes for ${_folderName(personName)}'),
+      bytes: templateBytes,
       parentId: livingFolder.id,
-      contentMimeType: 'text/plain',
+      contentMimeType: _docxMimeType,
     );
   }
 
@@ -1849,14 +1850,20 @@ class GoogleDriveService {
     );
     if (existing != null) return existing;
 
+    final templateBytes = await _supportNoteTemplateBytes();
     return _api.uploadFile(
       accessToken: accessToken,
       name: documentName,
       mimeType: _googleDocsMimeType,
-      bytes: utf8.encode('Master living support notes'),
+      bytes: templateBytes,
       parentId: livingFolder.id,
-      contentMimeType: 'text/plain',
+      contentMimeType: _docxMimeType,
     );
+  }
+
+  Future<List<int>> _supportNoteTemplateBytes() async {
+    final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   }
 
   Future<GoogleDriveFile> _findOrCreateReadyToSubmitLivingDocument({

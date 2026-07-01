@@ -744,6 +744,8 @@ void main() {
         'client-notes/Living Support Notes',
       );
       expect(driveApi.uploads.single.name, 'Master Living Support Notes');
+      expect(driveApi.uploads.single.mimeType, _googleDocsMimeType);
+      expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
       expect(result.invoiceTabTitle, 'Invoice 10 2026-05-31 to 2026-06-13');
       expect(
         result.subTabTitles,
