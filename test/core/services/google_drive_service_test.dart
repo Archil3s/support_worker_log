@@ -1490,15 +1490,20 @@ void main() {
       (item) => item.name == '2026-06-07_Jane_Smith',
     );
     final documentText = _docxText(upload.bytes);
+    final documentXml = _docxXml(upload.bytes);
 
     expect(upload.parentId, 'paye-notes/Jane Smith/2026');
     expect(upload.mimeType, _googleDocsMimeType);
     expect(upload.contentMimeType, _docxMimeType);
+    expect(_docxEntryNames(upload.bytes), contains('word/media/image1.png'));
+    expect(documentXml, contains('<w:drawing>'));
+    expect(documentXml, contains('r:embed="rId2"'));
     expect(documentText, startsWith('Attendance'));
     expect(documentText, contains('Client'));
     expect(documentText, contains('Support worker'));
     expect(documentText, contains('Social worker'));
     expect(documentText, isNot(contains('PAYE Support Note')));
+    expect(documentText, isNot(contains('Template for reporting')));
     expect(documentText, isNot(contains('Date:')));
     expect(documentText, isNot(contains('Jane Smith')));
     expect(documentText, contains('Roster question answered'));
@@ -1899,6 +1904,11 @@ List<String> _docxParagraphTexts(List<int> bytes) {
       r'<w:t[^>]*>(.*?)<\/w:t>',
     ).allMatches(paragraph).map((text) => _unxml(text.group(1)!)).join();
   }).toList();
+}
+
+List<String> _docxEntryNames(List<int> bytes) {
+  final archive = ZipDecoder().decodeBytes(bytes);
+  return archive.files.map((file) => file.name).toList();
 }
 
 String _docxXml(List<int> bytes) {

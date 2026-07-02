@@ -667,7 +667,7 @@ class GoogleDriveService {
       parentId: personFolder.id,
       name: entry.date.year.toString(),
     );
-    final bytes = LocalSupportNoteService.buildPayeNoteDocx(entry: entry);
+    final bytes = await LocalSupportNoteService.buildPayeNoteDocx(entry: entry);
 
     return uploadOrUpdateFile(
       accessToken: accessToken,

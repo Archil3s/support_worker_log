@@ -196,7 +196,7 @@ class LocalSupportNoteService {
       initials: cleanedInitials,
       status: status,
     );
-    final docxBytes = buildPayeNoteDocx(
+    final docxBytes = await buildPayeNoteDocx(
       entry: entry.copyWith(supportNoteBreakdown: noteText),
     );
     final contents = '__BASE64__:${base64Encode(docxBytes)}';
@@ -514,19 +514,47 @@ Referrals
     }
   }
 
-  static List<int> buildPayeNoteDocx({required WorkEntry entry}) {
+  static Future<List<int>> buildPayeNoteDocx({required WorkEntry entry}) async {
+    try {
+      final data = await rootBundle.load('assets/templates/TEMPLATE.docx');
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      return _payeDocxFromTemplate(bytes: bytes, entry: entry);
+    } catch (error) {
+      throw StateError(
+        'PAYE support note template could not be loaded: $error',
+      );
+    }
+  }
+
+  static List<int> _payeDocxFromTemplate({
+    required Uint8List bytes,
+    required WorkEntry entry,
+  }) {
+    final source = ZipDecoder().decodeBytes(bytes);
     final archive = Archive();
 
-    void addTextFile(String name, String contents) {
-      final bytes = utf8.encode(contents);
-      archive.addFile(ArchiveFile(name, bytes.length, bytes));
-    }
+    for (final file in source.files) {
+      if (!file.isFile) continue;
 
-    addTextFile('[Content_Types].xml', _personalContentTypesXml);
-    addTextFile('_rels/.rels', _personalRootRelationshipsXml);
-    addTextFile('docProps/app.xml', _personalAppPropertiesXml);
-    addTextFile('docProps/core.xml', _payeCorePropertiesXml(entry));
-    addTextFile('word/document.xml', _payeDocumentXml(entry));
+      if (file.name == 'docProps/core.xml') {
+        final coreBytes = utf8.encode(_payeCorePropertiesXml(entry));
+        archive.addFile(ArchiveFile(file.name, coreBytes.length, coreBytes));
+      } else if (file.name == 'word/document.xml') {
+        final xml = utf8.decode(file.content as List<int>);
+        final documentBytes = utf8.encode(
+          _payeDocumentXmlFromTemplate(xml: xml, entry: entry),
+        );
+        archive.addFile(
+          ArchiveFile(file.name, documentBytes.length, documentBytes),
+        );
+      } else {
+        final content = file.content as List<int>;
+        archive.addFile(ArchiveFile(file.name, content.length, content));
+      }
+    }
 
     return ZipEncoder().encode(archive) ?? <int>[];
   }
@@ -644,6 +672,44 @@ Referrals
 ''';
   }
 
+  static String _payeDocumentXmlFromTemplate({
+    required String xml,
+    required WorkEntry entry,
+  }) {
+    const bodyOpen = '<w:body>';
+    const bodyClose = '</w:body>';
+    final bodyStart = xml.indexOf(bodyOpen);
+    final bodyEnd = xml.lastIndexOf(bodyClose);
+
+    if (bodyStart == -1 || bodyEnd == -1 || bodyEnd <= bodyStart) {
+      return _payeDocumentXml(entry);
+    }
+
+    final prefix = xml.substring(0, bodyStart + bodyOpen.length);
+    final body = xml.substring(bodyStart + bodyOpen.length, bodyEnd);
+    final headerImageParagraph = RegExp(
+      r'<w:p(?:\s|>)[\s\S]*?<w:drawing>[\s\S]*?<\/w:p>',
+    ).firstMatch(body)?.group(0);
+    final sectionProperties = RegExp(
+      r'<w:sectPr[\s\S]*?<\/w:sectPr>',
+    ).allMatches(body).fold<String?>(null, (_, match) => match.group(0));
+    final sections = _PayeSupportSections.fromEntry(entry);
+    final paragraphs = <String>[
+      if (headerImageParagraph != null) ...[
+        headerImageParagraph,
+        _personalSpacer,
+      ],
+      for (final section in sections) ...[
+        _personalParagraph(section.title, style: 'Heading1'),
+        _personalParagraph(_blankIfEmpty(section.body)),
+        _personalSpacer,
+      ],
+      sectionProperties ?? _payeSectionPropertiesXml,
+    ].join();
+
+    return '$prefix$paragraphs$bodyClose</w:document>';
+  }
+
   static String _payeDocumentXml(WorkEntry entry) {
     final sections = _PayeSupportSections.fromEntry(entry);
     final paragraphs = <String>[
@@ -668,6 +734,12 @@ Referrals
 ''';
   }
 
+  static const _payeSectionPropertiesXml = '''
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+''';
   static List<_PersonalLogSection> _personalLogSections(
     PersonalLogEntry entry,
   ) {
