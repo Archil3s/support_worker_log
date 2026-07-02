@@ -437,26 +437,6 @@ class _LivingSupportEntryRange {
   final int endIndex;
 }
 
-class _LivingSupportSections {
-  const _LivingSupportSections({
-    required this.sections,
-    required this.extraSections,
-  });
-
-  final Map<String, String> sections;
-  final List<_LivingSupportExtraSection> extraSections;
-}
-
-class _LivingSupportExtraSection {
-  const _LivingSupportExtraSection({
-    required this.title,
-    required this.contents,
-  });
-
-  final String title;
-  final String contents;
-}
-
 class GoogleDriveService {
   GoogleDriveService({
     GoogleDriveApiPlatform? api,
@@ -2102,36 +2082,17 @@ class GoogleDriveService {
 
   String _livingSupportEntryBlock(LivingSupportDocumentEntry item) {
     final entry = item.entry;
-    final notes = _livingSupportTemplateText(
-      item.noteText.trim().isNotEmpty
-          ? item.noteText.trim()
-          : entry.notes.join('\n').trim(),
+    final noteText = item.noteText.trim().isNotEmpty
+        ? item.noteText.trim()
+        : entry.supportNoteBreakdown.trim().isNotEmpty
+        ? entry.supportNoteBreakdown.trim()
+        : null;
+    final notes = LocalSupportNoteService.payeNotePlainText(
+      entry: entry,
+      noteText: noteText == null ? null : _removeLegacySvilText(noteText),
     );
-    final nextActions = entry.nextActions
-        .map((action) {
-          final status = action.isCompleted ? 'Done' : 'Open';
-          return '- [$status] ${action.text}';
-        })
-        .join('\n');
 
-    return [
-      'Status: ${item.status.label}',
-      'Name of client: ${item.personName}',
-      'Date: ${_displayDate(entry.date)}',
-      'Interaction: ${entry.type.label}',
-      '${_livingSupportTimeLabel(entry)} - ${entry.type.label}',
-      'Invoice period: ${_livingSupportInvoiceRangeLabel(entry.date)}',
-      'Updated to living doc: Yes',
-      if (entry.type == EntryType.textNote)
-        'Text direction: ${entry.textContactDirection.label}',
-      if (entry.textReplyNeeded) 'Reply needed: Yes',
-      if (entry.importantText) 'Important: Yes',
-      if (entry.kilometres > 0) 'Kilometres: ${entry.kilometres}',
-      '',
-      if (notes.isNotEmpty) notes else 'No note text saved in the app.',
-      if (nextActions.isNotEmpty) ...['', 'Next actions', nextActions],
-      '',
-    ].join('\n');
+    return [notes, ''].join('\n');
   }
 
   String _livingSupportSubmittedSummaryBlock(
@@ -2302,102 +2263,6 @@ class GoogleDriveService {
     ].join('\n');
   }
 
-  String _livingSupportTemplateText(String noteText) {
-    final cleaned = _removeLegacySvilText(noteText);
-    final parsed = _livingSupportSections(cleaned);
-
-    return [
-      for (final title in _livingSupportSectionTitles) ...[
-        title,
-        parsed.sections[title]?.trim().isNotEmpty == true
-            ? parsed.sections[title]!.trim()
-            : '',
-        '',
-      ],
-      for (final section in parsed.extraSections) ...[
-        section.title,
-        if (section.contents.trim().isNotEmpty) section.contents.trim(),
-        '',
-      ],
-    ].join('\n').trim();
-  }
-
-  _LivingSupportSections _livingSupportSections(String noteText) {
-    final sections = <String, String>{};
-    final extraSections = <_LivingSupportExtraSection>[];
-    String? current;
-    String? currentRawTitle;
-    var currentIsKnown = true;
-    final buffer = StringBuffer();
-
-    void flush() {
-      final title = current;
-      if (title == null) return;
-      final contents = buffer.toString().trim();
-      if (currentIsKnown) {
-        sections[title] = [sections[title], contents]
-            .where((value) => value != null && value.trim().isNotEmpty)
-            .join('\n\n');
-      } else {
-        extraSections.add(
-          _LivingSupportExtraSection(
-            title: currentRawTitle?.trim().isNotEmpty == true
-                ? currentRawTitle!.trim()
-                : title,
-            contents: contents,
-          ),
-        );
-      }
-      buffer.clear();
-    }
-
-    for (final rawLine in noteText.split(RegExp(r'\r?\n'))) {
-      final line = rawLine.trimRight();
-      final title = _livingSupportSectionTitle(line);
-      if (title != null) {
-        flush();
-        current = title;
-        currentRawTitle = line.trim();
-        currentIsKnown = true;
-        continue;
-      }
-
-      final extraTitle = _livingSupportExtraSectionTitle(line);
-      if (extraTitle != null) {
-        flush();
-        current = extraTitle;
-        currentRawTitle = extraTitle;
-        currentIsKnown = false;
-        continue;
-      }
-
-      current ??= 'What happened';
-      buffer.writeln(line.trimLeft());
-    }
-
-    flush();
-
-    if (sections.values.every((value) => value.trim().isEmpty) &&
-        extraSections.every((section) => section.contents.trim().isEmpty) &&
-        noteText.trim().isNotEmpty) {
-      sections['What happened'] = noteText.trim();
-    }
-
-    return _LivingSupportSections(
-      sections: sections,
-      extraSections: extraSections,
-    );
-  }
-
-  String? _livingSupportExtraSectionTitle(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    if (!RegExp(r'[A-Za-z]').hasMatch(trimmed)) return null;
-    if (trimmed.length > 80) return null;
-    if (trimmed.endsWith(':')) return trimmed.substring(0, trimmed.length - 1);
-    return null;
-  }
-
   String _removeLegacySvilText(String noteText) {
     final lines = noteText.split(RegExp(r'\r?\n'));
     final kept = <String>[];
@@ -2546,17 +2411,6 @@ class GoogleDriveService {
   static const _livingSupportReadyToSubmitDocumentName =
       'Ready to Submit - Living Support Notes';
   static const _livingSupportReadyDashboardTabName = 'Dashboard';
-  static const _livingSupportSectionTitles = [
-    'Attendance',
-    'What happened',
-    'Work/task completed',
-    'Support given',
-    'Issue/problem',
-    'Outcome',
-    'Next step',
-    'Anything to follow up',
-    'Referrals',
-  ];
 
   String _livingSupportTypeTabName(EntryType type) {
     switch (type) {
@@ -2718,11 +2572,6 @@ class GoogleDriveService {
     return 'Invoice $invoiceNumber - ${_dateKey(range.start)} to ${_dateKey(range.end)}';
   }
 
-  String _livingSupportInvoiceRangeLabel(DateTime date) {
-    final range = fortnightForDate(date);
-    return '${_dateKey(range.start)} to ${_dateKey(range.end)}';
-  }
-
   String _livingSupportDateTabName(WorkEntry entry) {
     return _livingSupportTabTitle(
       '${_livingSupportDateTabPrefix(entry.type)} ${_dateKey(entry.date)}',
@@ -2737,12 +2586,6 @@ class GoogleDriveService {
 
   String _legacyLivingSupportDateTabName(DateTime date) {
     return _dateKey(date);
-  }
-
-  String _livingSupportTimeLabel(WorkEntry entry) {
-    final hour = entry.startTime.hour.toString().padLeft(2, '0');
-    final minute = entry.startTime.minute.toString().padLeft(2, '0');
-    return '${_dateKey(entry.date)} $hour:$minute';
   }
 
   int _minutesFromStart(WorkEntry entry) {
@@ -2859,14 +2702,6 @@ class GoogleDriveService {
     final day = value.day.toString().padLeft(2, '0');
 
     return '$year-$month-$day';
-  }
-
-  String _displayDate(DateTime value) {
-    final day = value.day.toString().padLeft(2, '0');
-    final month = value.month.toString().padLeft(2, '0');
-    final year = value.year.toString().padLeft(4, '0');
-
-    return '$day/$month/$year';
   }
 
   static const _textTemplates = [

@@ -624,28 +624,86 @@ void main() {
         'Phone 2026-06-02',
       ]);
       final inserted = docsApi.insertedText.single.trimLeft();
-      expect(inserted, startsWith('Status: Finished'));
-      expect(inserted, contains('Name of client: AB'));
-      expect(inserted, contains('Date: 02/06/2026'));
-      expect(inserted, contains('Interaction: Phone Call'));
+      expect(inserted, startsWith('Attendance'));
+      expect(inserted, isNot(contains('Status: Finished')));
+      expect(inserted, isNot(contains('Name of client: AB')));
+      expect(inserted, isNot(contains('Date: 02/06/2026')));
+      expect(inserted, isNot(contains('Interaction: Phone Call')));
+      expect(inserted, isNot(contains('Updated to living doc: Yes')));
+      expect(inserted, isNot(contains('Important: Yes')));
       expect(inserted, isNot(contains('SWL_ENTRY')));
-      expect(
-        docsApi.insertedText.single,
-        contains('Updated to living doc: Yes'),
-      );
-      expect(docsApi.insertedText.single, contains('Important: Yes'));
       expect(
         docsApi.insertedText.single,
         contains('Called client about appointment.'),
       );
       expect(docsApi.insertedText.single, contains('Transport support'));
       expect(docsApi.insertedText.single, contains('Booked taxi.'));
+
       expect(
         docsApi.insertedText.single,
         isNot(contains('sexual harm survivors')),
       );
     },
   );
+
+  test('syncLivingSupportDocuments keeps filled home-visit sections', () async {
+    final driveApi = _FakeGoogleDriveApi(children: const []);
+    final docsApi = _FakeGoogleDocsApi();
+    final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+    await service.syncLivingSupportDocuments(
+      accessToken: 'token',
+      clientNotesFolderId: 'client-notes',
+      entries: [
+        LivingSupportDocumentEntry(
+          entry: WorkEntry(
+            id: 'entry-2',
+            client: 'JW',
+            type: EntryType.homeVisit,
+            date: DateTime(2026, 7, 1),
+            startTime: const TimeOfDay(hour: 17, minute: 1),
+            minutes: 60,
+            notes: const [],
+          ),
+          personName: 'Joseph W',
+          status: EntrySupportNoteStatus.finished,
+          noteText: [
+            'Attendance',
+            'Joseph and support worker',
+            '',
+            'What happened',
+            'Consent form was given.',
+            '',
+            'Work/task completed',
+            'Engagement started.',
+            '',
+            'Support given',
+            'Explained next steps.',
+            '',
+            'Issue/problem',
+            'No issue raised.',
+            '',
+            'Outcome',
+            'Engagement is good.',
+          ].join('\n'),
+        ),
+      ],
+    );
+
+    expect(
+      docsApi.insertedText.single,
+      allOf([
+        startsWith('Attendance\nJoseph and support worker'),
+        contains('What happened\nConsent form was given.'),
+        contains('Work/task completed\nEngagement started.'),
+        contains('Support given\nExplained next steps.'),
+        contains('Issue/problem\nNo issue raised.'),
+        contains('Outcome\nEngagement is good.'),
+        isNot(contains('Name of client: Joseph W')),
+        isNot(contains('Updated to living doc: Yes')),
+      ]),
+    );
+  });
 
   test(
     'syncLivingSupportDocuments creates unique nested tab titles per type',
@@ -943,7 +1001,8 @@ void main() {
         ),
       );
       expect(updateRequests.last, containsPair('insertText', isA<Map>()));
-      expect(docsApi.insertedText.last, contains('Status: Submitted'));
+      expect(docsApi.insertedText.last.trimLeft(), startsWith('Attendance'));
+      expect(docsApi.insertedText.last, isNot(contains('Status: Submitted')));
       expect(docsApi.insertedText.last, contains('Updated text message.'));
       expect(docsApi.insertedText.last, isNot(contains('SWL_ENTRY')));
       expect(

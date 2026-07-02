@@ -11,14 +11,26 @@ class GoogleAccountConnectionCard extends StatefulWidget {
   const GoogleAccountConnectionCard({
     super.key,
     required this.scope,
+    this.title,
+    this.accessMessage,
     this.disconnectedText =
-        'Notes are locked until Firebase sync and Drive are connected.',
+        'Google Drive permission is needed to save or sync notes.',
     this.connectedServiceText,
+    this.showAccessChecklist = false,
+    this.syncingAppState = false,
+    this.syncMessage,
+    this.onSyncNow,
   });
 
   final GoogleExportAccountScope scope;
+  final String? title;
+  final String? accessMessage;
   final String disconnectedText;
   final String? connectedServiceText;
+  final bool showAccessChecklist;
+  final bool syncingAppState;
+  final String? syncMessage;
+  final VoidCallback? onSyncNow;
 
   @override
   State<GoogleAccountConnectionCard> createState() =>
@@ -29,6 +41,7 @@ class _GoogleAccountConnectionCardState
     extends State<GoogleAccountConnectionCard> {
   bool checkingSession = true;
   bool connecting = false;
+  bool signingOut = false;
   String? message;
   bool messageIsError = false;
 
@@ -86,7 +99,7 @@ class _GoogleAccountConnectionCardState
       if (!mounted) return;
 
       setState(() {
-        message = '${widget.scope.label} Google account connected.';
+        message = '${widget.scope.label} Google Drive connected.';
         messageIsError = false;
       });
     } catch (error) {
@@ -103,47 +116,142 @@ class _GoogleAccountConnectionCardState
     }
   }
 
+  Future<void> _signOut() async {
+    setState(() {
+      signingOut = true;
+      message = null;
+      messageIsError = false;
+    });
+
+    try {
+      await context.read<AppState>().signOut();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = _friendlyError(error);
+        messageIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => signingOut = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final connected = switch (widget.scope) {
-      GoogleExportAccountScope.work => appState.workGoogleServicesConnected,
-      GoogleExportAccountScope.personal =>
-        appState.personalGoogleServicesConnected,
-      GoogleExportAccountScope.paye => appState.payeGoogleServicesConnected,
-    };
-    final signedIn = switch (widget.scope) {
-      GoogleExportAccountScope.work => appState.workGoogleAccountSignedIn,
-      GoogleExportAccountScope.personal =>
-        appState.personalGoogleAccountSignedIn,
-      GoogleExportAccountScope.paye => appState.payeGoogleAccountSignedIn,
-    };
-    final email = switch (widget.scope) {
-      GoogleExportAccountScope.work => appState.workGoogleAccountEmail,
-      GoogleExportAccountScope.personal => appState.personalGoogleAccountEmail,
-      GoogleExportAccountScope.paye => appState.payeGoogleAccountEmail,
-    };
+    final connected = appState.googleDriveConnectedForScope(widget.scope);
+    final signedIn = appState.googleAccountSignedInForScope(widget.scope);
+    final email = appState.googleAccountEmailForScope(widget.scope);
+    final appSyncReady =
+        appState.isSignedIn &&
+        appState.cloudSyncReady &&
+        appState.cloudSyncError == null;
+    final cardTitle =
+        widget.title ??
+        (widget.showAccessChecklist
+            ? 'Access Required'
+            : '${widget.scope.label} Google Account');
     final statusColor = connected
         ? const Color(0xFF31E981)
         : const Color(0xFFFFC857);
     final statusText = connected
-        ? email ?? 'Connected'
+        ? email ?? 'Google Drive connected'
         : checkingSession
-        ? 'Checking saved Google session...'
+        ? 'Checking saved Google login'
         : signedIn
-        ? '${email ?? 'Signed in'} - Drive permission missing'
-        : 'Not connected';
+        ? 'Drive permission needs reconnecting'
+        : 'Google Drive not connected';
+    final detailText = connected
+        ? widget.connectedServiceText ?? _serviceText
+        : signedIn
+        ? 'Your app login is still active. Only Google Drive access needs reconnecting.'
+        : widget.disconnectedText;
 
     return SectionCard(
-      title: '${widget.scope.label} Google Account',
+      title: cardTitle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.showAccessChecklist) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  connected && appSyncReady
+                      ? Icons.lock_open_outlined
+                      : Icons.lock_outline,
+                  color: const Color(0xFFFFC857),
+                  size: 32,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.accessMessage ??
+                        'This tab unlocks when app sync and Google Drive are connected.',
+                    style: const TextStyle(
+                      color: Color(0xFFFFD98C),
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _AccessCheckRow(
+              label: 'App sync',
+              value: appSyncReady
+                  ? 'Connected'
+                  : appState.isSignedIn
+                  ? 'Needs sync'
+                  : 'Sign in needed',
+              ready: appSyncReady,
+            ),
+            const SizedBox(height: 8),
+            _AccessCheckRow(
+              label: 'Google Drive',
+              value: connected
+                  ? 'Connected'
+                  : signedIn
+                  ? 'Needs reconnecting'
+                  : 'Permission needed',
+              ready: connected,
+            ),
+            if (appState.isSignedIn && !appSyncReady) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: widget.syncingAppState ? null : widget.onSyncNow,
+                icon: widget.syncingAppState
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_outlined),
+                label: Text(widget.syncingAppState ? 'Syncing' : 'Sync Now'),
+              ),
+            ],
+            if (widget.syncMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _friendlyError(widget.syncMessage!),
+                style: const TextStyle(
+                  color: Color(0xFFFF6B6B),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: Color(0xFF26385F)),
+            const SizedBox(height: 12),
+          ],
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: statusColor),
             ),
             child: Row(
@@ -151,13 +259,29 @@ class _GoogleAccountConnectionCardState
                 Icon(Icons.account_circle_outlined, color: statusColor),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    statusText,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        statusText,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if ((email ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          email!,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFEAF0FF),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -165,9 +289,7 @@ class _GoogleAccountConnectionCardState
           ),
           const SizedBox(height: 8),
           Text(
-            connected
-                ? widget.connectedServiceText ?? _serviceText
-                : widget.disconnectedText,
+            detailText,
             style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
           ),
           const SizedBox(height: 10),
@@ -175,33 +297,50 @@ class _GoogleAccountConnectionCardState
           const SizedBox(height: 10),
           const GoogleSessionCountdown(),
           const SizedBox(height: 10),
-          if (checkingSession && !connected) ...[
-            const LinearProgressIndicator(),
-            const SizedBox(height: 8),
-            const Text(
-              'Checking the saved Google login. No popup is needed for this step.',
-              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
-            ),
-            const SizedBox(height: 10),
-          ],
           FilledButton.icon(
-            onPressed: checkingSession || connecting ? null : _connect,
+            onPressed: checkingSession || connecting || signingOut
+                ? null
+                : _connect,
             icon: checkingSession || connecting
                 ? const SizedBox.square(
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.login_outlined),
+                : const Icon(Icons.add_to_drive_outlined),
             label: Text(
               checkingSession
                   ? 'Checking Saved Google Login'
                   : connecting
-                  ? 'Connecting ${widget.scope.label} Google'
+                  ? 'Reconnecting Google Drive'
                   : signedIn
-                  ? 'Allow ${widget.scope.label} Drive Access'
-                  : 'Choose ${widget.scope.label} Google Account',
+                  ? 'Reconnect Google Drive'
+                  : 'Choose Google Account',
             ),
           ),
+          if (widget.showAccessChecklist) ...[
+            const SizedBox(height: 6),
+            TextButton.icon(
+              onPressed: checkingSession || connecting || signingOut
+                  ? null
+                  : _signOut,
+              icon: signingOut
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.logout_outlined),
+              label: Text(signingOut ? 'Signing Out' : 'Sign out / reset'),
+            ),
+          ],
+          if (checkingSession && !connected) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            const Text(
+              'Checking saved Google login. No popup is needed for this step.',
+              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+            ),
+          ],
           if (message != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -232,11 +371,53 @@ class _GoogleAccountConnectionCardState
   String get _serviceText {
     switch (widget.scope) {
       case GoogleExportAccountScope.work:
-        return 'Used for Google Calendar, Google Drive notes, invoices, and Docs files.';
+        return 'Used for Google Drive notes, invoices, and Docs files.';
       case GoogleExportAccountScope.personal:
         return 'Used for personal Google Drive notes and progress files.';
       case GoogleExportAccountScope.paye:
         return 'Used for PAYE job files and this separate work account.';
     }
+  }
+}
+
+class _AccessCheckRow extends StatelessWidget {
+  const _AccessCheckRow({
+    required this.label,
+    required this.value,
+    required this.ready,
+  });
+
+  final String label;
+  final String value;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ready ? const Color(0xFF31E981) : const Color(0xFFFFC857);
+
+    return Row(
+      children: [
+        Icon(
+          ready ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+          color: color,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFEAF0FF),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        ),
+      ],
+    );
   }
 }

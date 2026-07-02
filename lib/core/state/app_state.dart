@@ -2493,11 +2493,13 @@ class AppState extends ChangeNotifier {
     EntryDriveSupportNoteMeta? driveMeta,
   }) {
     final candidates = [
-      localMeta?.noteText,
       entry.supportNoteBreakdown,
+      localMeta?.noteText,
       driveMeta?.noteText,
       entry.notes.join('\n'),
     ];
+    String? bestCandidate;
+    var bestScore = -1;
 
     for (final candidate in candidates) {
       final cleaned = candidate?.trim();
@@ -2505,10 +2507,44 @@ class AppState extends ChangeNotifier {
       if (!LocalSupportNoteService.hasEnteredSupportNoteContent(cleaned)) {
         continue;
       }
-      return LocalSupportNoteService.canonicalSupportNoteText(cleaned);
+
+      final score = _livingSupportNoteContentScore(cleaned);
+      if (score > bestScore) {
+        bestCandidate = cleaned;
+        bestScore = score;
+      }
     }
 
-    return '';
+    return bestCandidate ?? '';
+  }
+
+  int _livingSupportNoteContentScore(String noteText) {
+    final headings = {
+      'attendance',
+      'main topic(s)',
+      'main topics',
+      'what happened',
+      'work/task completed',
+      'support given',
+      'issue/problem',
+      'outcome(s)',
+      'outcome',
+      'next action(s)',
+      'next action',
+      'next step',
+      'anything to follow up',
+      'overall impression',
+      'referrals',
+      'safety concerns for sexual harm survivors and mental health',
+    };
+
+    return noteText
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .where((line) => !headings.contains(line.toLowerCase()))
+        .where((line) => line != '-')
+        .fold<int>(0, (score, line) => score + 1 + line.length);
   }
 
   List<String> _payeClientListFrom(StoredAppData data) {

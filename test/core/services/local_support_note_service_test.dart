@@ -169,6 +169,42 @@ void main() {
     );
   });
 
+  test('blank PAYE-style headings do not count as entered content', () {
+    final noteText = [
+      'Attendance',
+      '',
+      'What happened',
+      '',
+      'Work/task completed',
+      '',
+      'Support given',
+      '',
+      'Issue/problem',
+      '',
+      'Outcome',
+      '',
+      'Next step',
+      '',
+      'Anything to follow up',
+      '',
+      'Referrals',
+    ].join('\n');
+
+    expect(
+      LocalSupportNoteService.hasEnteredSupportNoteContent(noteText),
+      isFalse,
+    );
+  });
+
+  test('PAYE-style outcome content counts as entered content', () {
+    expect(
+      LocalSupportNoteService.hasEnteredSupportNoteContent(
+        'Outcome\nConsent form was given.',
+      ),
+      isTrue,
+    );
+  });
+
   test('empty Work draft still saves in app', () async {
     final entry = WorkEntry(
       id: 'work-note-empty',

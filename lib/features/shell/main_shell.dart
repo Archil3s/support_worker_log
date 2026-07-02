@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/models/app_mode.dart';
 import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
-import '../../shared/widgets/google_drive_connection_warning.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/web_spacing.dart';
 import '../admin_review/admin_review_screen.dart';
@@ -414,18 +413,9 @@ class _MainShellState extends State<MainShell> {
                               onSelected: _go,
                               showPay: appMode != AppMode.paye,
                             ),
-                          if (!cleaningMode && !groceryMode)
-                            GoogleDriveConnectionWarning(
-                              scope: _driveScope(appMode),
-                            ),
                           Expanded(
                             child: NotesStorageGate(
                               scope: _driveScope(appMode),
-                              title: 'Tab Locked',
-                              message:
-                                  'This tab is hidden until Firebase sync and Google Drive are both connected.',
-                              disconnectedText:
-                                  'This tab stays locked until Firebase sync and Drive are connected.',
                               child: RepaintBoundary(
                                 child: standaloneMode
                                     ? ModeScreenLoader(

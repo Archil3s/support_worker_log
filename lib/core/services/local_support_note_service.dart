@@ -351,7 +351,35 @@ class LocalSupportNoteService {
   static bool hasEnteredSupportNoteContent(String noteText) {
     if (noteText.trim().isEmpty) return false;
 
+    if (_PayeSupportSections.looksLikePayeSupportNote(noteText)) {
+      return _PayeSupportSections.hasEnteredContent(noteText);
+    }
+
     return _SupportNoteSections.fromNoteText(noteText).hasEnteredContent;
+  }
+
+  static String payeNotePlainText({
+    required WorkEntry entry,
+    String? noteText,
+  }) {
+    final trimmedNoteText = noteText?.trim() ?? '';
+    final sourceEntry = trimmedNoteText.isEmpty
+        ? entry
+        : _PayeSupportSections.hasRecognizedSections(trimmedNoteText)
+        ? entry.copyWith(supportNoteBreakdown: trimmedNoteText)
+        : entry.copyWith(
+            supportNoteBreakdown: '',
+            notes: [...entry.notes, trimmedNoteText],
+          );
+    final sections = _PayeSupportSections.fromEntry(sourceEntry);
+
+    return [
+      for (final section in sections) ...[
+        section.title,
+        _blankIfEmpty(section.body),
+        '',
+      ],
+    ].join('\n').trim();
   }
 
   static String defaultPayeNoteTextForEntry(WorkEntry entry) {
@@ -1183,6 +1211,75 @@ class _PayeSupportSections {
     return '';
   }
 
+  static bool looksLikePayeSupportNote(String source) {
+    final headings = source
+        .split(RegExp(r'\r?\n'))
+        .map((line) => _normalizedHeading(line.trim()))
+        .where((line) => line.isNotEmpty)
+        .toSet();
+
+    return headings.contains('attendance') ||
+        headings.contains('what happened') ||
+        headings.contains('work/task completed') ||
+        headings.contains('support given') ||
+        headings.contains('issue/problem') ||
+        headings.contains('next step') ||
+        headings.contains('anything to follow up');
+  }
+
+  static bool hasRecognizedSections(String source) {
+    final headings = source
+        .split(RegExp(r'\r?\n'))
+        .map((line) => _normalizedHeading(line.trim()))
+        .where((line) => line.isNotEmpty)
+        .toSet();
+
+    return headings.any(
+      (heading) => _recognizedHeadingPrefixes.any(
+        (prefix) => heading.startsWith(prefix),
+      ),
+    );
+  }
+
+  static bool hasEnteredContent(String source) {
+    final values = [
+      _section(source, 'Attendance'),
+      _section(source, 'What happened'),
+      _section(source, 'Work/task completed'),
+      _section(source, 'Support given'),
+      _section(source, 'Issue/problem'),
+      _section(source, 'Outcome'),
+      _section(source, 'Next step'),
+      _section(source, 'Anything to follow up'),
+      _section(source, 'Referrals'),
+    ];
+
+    return values.any(_hasMeaningfulText);
+  }
+
+  static bool _hasMeaningfulText(String value) {
+    final cleaned = value.trim();
+    if (cleaned.isEmpty) return false;
+
+    return cleaned != '-';
+  }
+
+  static const _recognizedHeadingPrefixes = {
+    'attendance',
+    'what happened',
+    'work/task completed',
+    'support given',
+    'issue/problem',
+    'outcome',
+    'next step',
+    'anything to follow up',
+    'referrals',
+    'main topic',
+    'next action',
+    'overall impression',
+    'local referral tracking',
+    'safety concerns',
+  };
   static String _section(String source, String headingPrefix) {
     final lines = source.split(RegExp(r'\r?\n'));
     final buffer = <String>[];
@@ -1191,22 +1288,9 @@ class _PayeSupportSections {
     for (final line in lines) {
       final trimmed = line.trim();
       final lower = _normalizedHeading(trimmed);
-      final isHeading = [
-        'attendance',
-        'what happened',
-        'work/task completed',
-        'support given',
-        'issue/problem',
-        'outcome',
-        'next step',
-        'anything to follow up',
-        'referrals',
-        'main topic',
-        'next action',
-        'overall impression',
-        'local referral tracking',
-        'safety concerns',
-      ].any((heading) => lower.startsWith(heading));
+      final isHeading = _recognizedHeadingPrefixes.any(
+        (heading) => lower.startsWith(heading),
+      );
 
       if (lower.startsWith(headingPrefix.toLowerCase())) {
         reading = true;
