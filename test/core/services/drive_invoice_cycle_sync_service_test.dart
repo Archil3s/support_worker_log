@@ -74,7 +74,20 @@ void main() {
       final abDocumentText = _docxText(abLogUpload.bytes);
       final cdDocumentText = _docxText(cdLogUpload.bytes);
 
-      expect(abDocumentText, contains('Name of client: AB'));
+      expect(abDocumentText, isNot(contains('Name of client: AB')));
+      expect(abDocumentText, contains('Attendance'));
+      expect(abDocumentText, contains('What happened'));
+      expect(abDocumentText, contains('Work/task completed'));
+      expect(abDocumentText, contains('Support given'));
+      expect(abDocumentText, contains('Issue/problem'));
+      expect(abDocumentText, contains('Outcome'));
+      expect(abDocumentText, contains('Next step'));
+      expect(abDocumentText, contains('Anything to follow up'));
+      expect(abDocumentText, contains('Referrals'));
+      expect(abDocumentText, isNot(contains('Main topic(s)')));
+      expect(abDocumentText, isNot(contains('Outcome(s)')));
+      expect(abDocumentText, isNot(contains('Next action(s)')));
+      expect(abDocumentText, isNot(contains('Overall impression')));
       expect(abDocumentText, contains('AB Living Text Notes Log'));
       expect(abDocumentText, contains('31/05/2026 15:00 - AB'));
       expect(abDocumentText, contains('Date: 31/05/2026'));
@@ -83,7 +96,7 @@ void main() {
       expect(abDocumentText, contains('Important: Important'));
       expect(abDocumentText, contains('Reply needed: Yes'));
       expect(abDocumentText, isNot(contains('01/06/2026 08:15 - CD')));
-      expect(cdDocumentText, contains('Name of client: CD'));
+      expect(cdDocumentText, isNot(contains('Name of client: CD')));
       expect(cdDocumentText, contains('CD Living Text Notes Log'));
       expect(cdDocumentText, contains('01/06/2026 08:15 - CD'));
       expect(cdDocumentText, contains('Direction: Text sent'));
@@ -191,6 +204,27 @@ void main() {
     );
 
     expect(_docxText(supportNoteUpload.bytes), contains('Support note body'));
+
+    final breakdownUpload = driveService.uploads.singleWhere(
+      (upload) =>
+          upload.name ==
+          'Invoice_Total_Breakdown_24_2026-06-01_2026-06-14.docx',
+    );
+    final breakdownText = _docxText(breakdownUpload.bytes);
+
+    expect(breakdownText, contains('Attendance'));
+    expect(breakdownText, contains('What happened'));
+    expect(breakdownText, contains('Work/task completed'));
+    expect(breakdownText, contains('Support given'));
+    expect(breakdownText, contains('Issue/problem'));
+    expect(breakdownText, contains('Outcome'));
+    expect(breakdownText, contains('Next step'));
+    expect(breakdownText, contains('Anything to follow up'));
+    expect(breakdownText, contains('Referrals'));
+    expect(breakdownText, isNot(contains('Main topic(s)')));
+    expect(breakdownText, isNot(contains('Outcome(s)')));
+    expect(breakdownText, isNot(contains('Next action(s)')));
+    expect(breakdownText, isNot(contains('Overall impression')));
   });
 }
 

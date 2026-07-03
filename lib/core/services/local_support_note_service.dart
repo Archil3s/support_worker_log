@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/entry_type.dart';
+import '../models/personal_log_entry.dart';
 import '../models/work_entry.dart';
 import '../utils/formatters.dart';
 import 'local_support_notes/local_support_notes_platform.dart';
-import '../models/personal_log_entry.dart';
 
 enum EntrySupportNoteStatus { incomplete, inProgress, finished, submitted }
 
@@ -471,16 +473,26 @@ Referrals
         data.lengthInBytes,
       );
 
-      return _docxFromTemplate(
+      return _payeDocxFromTemplate(
         bytes: bytes,
-        clientInitials: title ?? 'Invoice $invoiceNumber',
-        dateText: '${formatDate(start)} - ${formatDate(end)}',
-        interactionText:
+        entry: WorkEntry(
+          id:
+              'invoice-${invoiceNumber}_${start.toIso8601String()}_'
+              '${end.toIso8601String()}',
+          client: title ?? 'Invoice $invoiceNumber',
+          type: EntryType.homeVisit,
+          date: start,
+          startTime: const TimeOfDay(hour: 0, minute: 0),
+          minutes: (hours * 60).round(),
+          notes: [
             'Invoice period ${formatDate(start)} - ${formatDate(end)}. '
-            '$entryCount entries. ${hours.toStringAsFixed(2)} hours. '
-            '${kilometres.toStringAsFixed(1)} kilometres.',
-        fallbackNoteText: supportNoteBreakdownTemplate,
-        noteText: noteText,
+                '$entryCount entries. ${hours.toStringAsFixed(2)} hours. '
+                '${kilometres.toStringAsFixed(1)} kilometres.',
+          ],
+          supportNoteBreakdown: noteText.trim().isEmpty
+              ? supportNoteBreakdownTemplate
+              : noteText,
+        ),
       );
     } catch (error) {
       throw StateError(
@@ -933,212 +945,6 @@ Referrals
 </Properties>
 ''';
 
-  static List<int> _docxFromTemplate({
-    required Uint8List bytes,
-    required String clientInitials,
-    required String dateText,
-    required String interactionText,
-    required String fallbackNoteText,
-    required String noteText,
-  }) {
-    final source = ZipDecoder().decodeBytes(bytes);
-    final archive = Archive();
-
-    for (final file in source.files) {
-      if (!file.isFile) continue;
-
-      if (file.name == 'word/document.xml') {
-        final xml = utf8.decode(file.content as List<int>);
-        final documentBytes = utf8.encode(
-          _filledTemplateDocumentXml(
-            xml: xml,
-            clientInitials: clientInitials,
-            dateText: dateText,
-            interactionText: interactionText,
-            fallbackNoteText: fallbackNoteText,
-            noteText: noteText,
-          ),
-        );
-        archive.addFile(
-          ArchiveFile(file.name, documentBytes.length, documentBytes),
-        );
-      } else {
-        final content = file.content as List<int>;
-        archive.addFile(ArchiveFile(file.name, content.length, content));
-      }
-    }
-
-    return ZipEncoder().encode(archive) ?? <int>[];
-  }
-
-  static String _filledTemplateDocumentXml({
-    required String xml,
-    required String clientInitials,
-    required String dateText,
-    required String interactionText,
-    required String fallbackNoteText,
-    required String noteText,
-  }) {
-    final sections = _SupportNoteSections.fromNoteText(
-      noteText.trim().isEmpty ? fallbackNoteText : noteText,
-    );
-
-    final paragraphPattern = RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>');
-    final paragraphMatches = paragraphPattern.allMatches(xml).toList();
-    final hasNextActionsSection = paragraphMatches.any((match) {
-      final text = _paragraphText(match.group(0)!).trim().toLowerCase();
-      return text.startsWith('next action');
-    });
-    final buffer = StringBuffer();
-    var cursor = 0;
-    String? pendingBlankFill;
-    var appendSupportChecksAfterFill = false;
-    var filledNextActions = false;
-
-    for (final match in paragraphMatches) {
-      buffer.write(xml.substring(cursor, match.start));
-      var paragraph = match.group(0)!;
-      final text = _paragraphText(paragraph).trim();
-
-      if (text.startsWith('Name of client')) {
-        paragraph = _replaceParagraphText(
-          paragraph,
-          'Name of client: $clientInitials',
-          bold: true,
-        );
-      } else if (text.startsWith('Date:')) {
-        paragraph = _replaceParagraphText(
-          paragraph,
-          'Date: $dateText',
-          bold: true,
-        );
-      } else if (text.startsWith('Date/time/length of interaction')) {
-        paragraph = _replaceParagraphText(paragraph, interactionText);
-      } else if (text.startsWith('Main topic')) {
-        pendingBlankFill = sections.mainTopic;
-      } else if (text.startsWith('Outcome')) {
-        pendingBlankFill = hasNextActionsSection
-            ? sections.outcomes
-            : sections.outcomesWithActions;
-      } else if (text.startsWith('Next action')) {
-        pendingBlankFill = sections.nextActions;
-        appendSupportChecksAfterFill = true;
-      } else if (text.startsWith('Overall impression')) {
-        pendingBlankFill = sections.overallImpression;
-      } else if (pendingBlankFill != null && text.isEmpty) {
-        if (pendingBlankFill.isNotEmpty) {
-          paragraph = _fillBlankParagraph(paragraph, pendingBlankFill);
-        }
-        filledNextActions = appendSupportChecksAfterFill;
-        pendingBlankFill = null;
-      }
-
-      buffer.write(paragraph);
-      if (filledNextActions) {
-        buffer.write(_supportCheckParagraphs(sections));
-        appendSupportChecksAfterFill = false;
-        filledNextActions = false;
-      }
-      cursor = match.end;
-    }
-
-    buffer.write(xml.substring(cursor));
-    return buffer.toString();
-  }
-
-  static String _paragraphText(String paragraphXml) {
-    return RegExp(
-      r'<w:t[^>]*>(.*?)<\/w:t>',
-    ).allMatches(paragraphXml).map((match) => _unxml(match.group(1)!)).join();
-  }
-
-  static String _replaceParagraphText(
-    String paragraphXml,
-    String text, {
-    bool bold = false,
-  }) {
-    final withoutRuns = paragraphXml.replaceAll(
-      RegExp(r'<w:r(?:\s|>)[\s\S]*?<\/w:r>'),
-      '',
-    );
-
-    return withoutRuns.replaceFirst(
-      '</w:p>',
-      '${_runXml(text, bold: bold)}</w:p>',
-    );
-  }
-
-  static String _fillBlankParagraph(String paragraphXml, String text) {
-    if (text.contains('\n')) {
-      return _paragraphsXml(
-        text,
-        paragraphProps: _paragraphProps(paragraphXml),
-      );
-    }
-
-    final withoutEmptyRun = paragraphXml.replaceFirst(
-      RegExp(r'<w:r><w:rPr>[\s\S]*?<\/w:rPr><\/w:r>'),
-      '',
-    );
-
-    return withoutEmptyRun.replaceFirst('</w:p>', '${_runXml(text)}</w:p>');
-  }
-
-  static String _runXml(String text, {bool bold = false}) {
-    final runProps = bold
-        ? '<w:b/><w:bCs/><w:sz w:val="24"/><w:szCs w:val="24"/>'
-        : '<w:sz w:val="24"/><w:szCs w:val="24"/>';
-    final textParts = text
-        .split('\n')
-        .map((line) => '<w:t xml:space="preserve">${_xml(line)}</w:t>')
-        .join('<w:br/>');
-
-    return '<w:r><w:rPr>$runProps</w:rPr>$textParts</w:r>';
-  }
-
-  static String _paragraphXml(String text, {bool bold = false}) {
-    return '<w:p>${_runXml(text, bold: bold)}</w:p>';
-  }
-
-  static String _paragraphsXml(String text, {String paragraphProps = ''}) {
-    return text
-        .split('\n')
-        .map((line) => '<w:p>$paragraphProps${_runXml(line)}</w:p>')
-        .join();
-  }
-
-  static String _paragraphProps(String paragraphXml) {
-    final match = RegExp(
-      r'<w:pPr(?:\s|>)[\s\S]*?<\/w:pPr>',
-    ).firstMatch(paragraphXml);
-    return match?.group(0) ?? '';
-  }
-
-  static String _supportCheckParagraphs(_SupportNoteSections sections) {
-    if (!sections.hasSupportChecks) return '';
-
-    final buffer = StringBuffer();
-
-    if (sections.referrals.isNotEmpty) {
-      buffer
-        ..write(_paragraphXml('Referrals', bold: true))
-        ..write(_paragraphXml(sections.referrals));
-    }
-
-    if (sections.safetyConcerns.isNotEmpty) {
-      buffer
-        ..write(
-          _paragraphXml(
-            'Safety concerns for sexual harm survivors and mental health',
-            bold: true,
-          ),
-        )
-        ..write(_paragraphXml(sections.safetyConcerns));
-    }
-
-    return buffer.toString();
-  }
-
   static String _xml(String value) {
     return value
         .replaceAll('&', '&amp;')
@@ -1146,15 +952,6 @@ Referrals
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&apos;');
-  }
-
-  static String _unxml(String value) {
-    return value
-        .replaceAll('&apos;', "'")
-        .replaceAll('&quot;', '"')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&amp;', '&');
   }
 
   static String _fileDate(DateTime value) {

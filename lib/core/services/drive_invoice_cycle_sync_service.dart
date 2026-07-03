@@ -406,10 +406,13 @@ class DriveInvoiceCycleSyncService {
     }
 
     final buffer = StringBuffer()
-      ..writeln('Main topic(s)')
+      ..writeln('Attendance')
+      ..writeln('-')
+      ..writeln()
+      ..writeln('What happened')
       ..writeln('$title for ${formatDate(start)} - ${formatDate(end)}.')
       ..writeln()
-      ..writeln('Outcome(s)')
+      ..writeln('Work/task completed')
       ..writeln('Total contacts: ${entries.length}')
       ..writeln('People contacted: ${clients.length}')
       ..writeln('Total hours: ${totalHours(entries).toStringAsFixed(2)}')
@@ -426,20 +429,28 @@ class DriveInvoiceCycleSyncService {
 
     buffer
       ..writeln()
+      ..writeln('Support given')
       ..writeln('Who got contacted')
       ..writeln(_clientList(entries))
       ..writeln()
       ..writeln('Visit types per person')
       ..writeln(_visitTypesPerClient(entries))
       ..writeln()
+      ..writeln('Issue/problem')
       ..writeln('Texts per person')
       ..writeln(_textsPerClient(entries))
       ..writeln()
-      ..writeln('Next action(s)')
+      ..writeln('Outcome')
+      ..writeln('Invoice-period contact summary generated from saved visits.')
+      ..writeln()
+      ..writeln('Next step')
       ..writeln('-')
       ..writeln()
-      ..writeln('Overall impression')
-      ..writeln('Invoice-period contact summary generated from saved visits.');
+      ..writeln('Anything to follow up')
+      ..writeln('-')
+      ..writeln()
+      ..writeln('Referrals')
+      ..writeln('No referrals discussed or made this visit.');
 
     return buffer.toString().trim();
   }
@@ -538,12 +549,15 @@ class DriveInvoiceCycleSyncService {
     final firstDate = textEntries.first.date;
     final lastDate = textEntries.last.date;
     final buffer = StringBuffer()
-      ..writeln('Main topic(s)')
+      ..writeln('Attendance')
+      ..writeln('-')
+      ..writeln()
+      ..writeln('What happened')
       ..writeln(
         '$client Living Text Notes Log for ${formatDate(firstDate)} - ${formatDate(lastDate)}.',
       )
       ..writeln()
-      ..writeln('Outcome(s)')
+      ..writeln('Work/task completed')
       ..writeln('Text note summary')
       ..writeln('- Text notes: ${textEntries.length}')
       ..writeln('- Important: $importantCount')
@@ -554,6 +568,7 @@ class DriveInvoiceCycleSyncService {
       ..writeln('- Billable text earnings: ${money(totalTextEarnings)}')
       ..writeln('- Open text actions: $openActions')
       ..writeln()
+      ..writeln('Support given')
       ..writeln('Text note timeline');
 
     for (final entry in textEntries) {
@@ -588,7 +603,19 @@ class DriveInvoiceCycleSyncService {
 
     buffer
       ..writeln()
-      ..writeln('Next action(s)');
+      ..writeln('Issue/problem')
+      ..writeln(
+        replyNeededCount == 0
+            ? '-'
+            : 'Some text notes are marked as needing a reply.',
+      )
+      ..writeln()
+      ..writeln('Outcome')
+      ..writeln(
+        'Single living Google Drive document generated from saved billable text notes.',
+      )
+      ..writeln()
+      ..writeln('Next step');
 
     if (allOpenActions.isEmpty) {
       buffer.writeln('-');
@@ -600,10 +627,11 @@ class DriveInvoiceCycleSyncService {
 
     buffer
       ..writeln()
-      ..writeln('Overall impression')
-      ..writeln(
-        'Single living Google Drive document generated from saved billable text notes.',
-      );
+      ..writeln('Anything to follow up')
+      ..writeln('-')
+      ..writeln()
+      ..writeln('Referrals')
+      ..writeln('No referrals discussed or made this visit.');
 
     return buffer.toString().trim();
   }
