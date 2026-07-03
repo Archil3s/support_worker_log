@@ -1610,6 +1610,27 @@ class GoogleDriveService {
     PayPeriodRange? range,
     DateTime? payPeriodAnchorDate,
   }) async {
+    if (range != null) {
+      final invoiceTabTitle = await _livingSupportInvoiceTabNameForRange(
+        range,
+        payPeriodAnchorDate: payPeriodAnchorDate,
+      );
+      final periodDocument = await _findLivingSupportDocumentByName(
+        accessToken: accessToken,
+        clientNotesFolderId: clientNotesFolderId,
+        name: _livingSupportInvoicePeriodDocumentName(invoiceTabTitle),
+      );
+      if (periodDocument != null) {
+        final periodSummary = await _masterLivingSupportDocumentSummary(
+          accessToken: accessToken,
+          file: periodDocument,
+          range: range,
+          payPeriodAnchorDate: payPeriodAnchorDate,
+        );
+        if (periodSummary != null) return [periodSummary];
+      }
+    }
+
     final masterDocument = await _findMasterLivingSupportDocument(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
@@ -1714,6 +1735,18 @@ class GoogleDriveService {
     required String accessToken,
     required String clientNotesFolderId,
   }) async {
+    return _findLivingSupportDocumentByName(
+      accessToken: accessToken,
+      clientNotesFolderId: clientNotesFolderId,
+      name: _livingSupportMasterDocumentName,
+    );
+  }
+
+  Future<GoogleDriveFile?> _findLivingSupportDocumentByName({
+    required String accessToken,
+    required String clientNotesFolderId,
+    required String name,
+  }) async {
     final livingFolder = await _findChild(
       accessToken: accessToken,
       parentId: clientNotesFolderId,
@@ -1725,7 +1758,7 @@ class GoogleDriveService {
     return _findChild(
       accessToken: accessToken,
       parentId: livingFolder.id,
-      name: _livingSupportMasterDocumentName,
+      name: name,
       mimeType: _googleDocsMimeType,
     );
   }
@@ -1812,7 +1845,7 @@ class GoogleDriveService {
       parentId: clientNotesFolderId,
       name: _livingSupportFolderName,
     );
-    final documentName = _livingSupportMasterDocumentName;
+    final documentName = _livingSupportInvoicePeriodDocumentName(invoiceTitle);
     final existing = await _findChild(
       accessToken: accessToken,
       parentId: livingFolder.id,
@@ -2410,6 +2443,10 @@ class GoogleDriveService {
   static const _livingSupportReadyToSubmitDocumentName =
       'Ready to Submit - Living Support Notes';
   static const _livingSupportReadyDashboardTabName = 'Dashboard';
+
+  String _livingSupportInvoicePeriodDocumentName(String invoiceTitle) {
+    return '$_livingSupportMasterDocumentName - $invoiceTitle';
+  }
 
   String _livingSupportTypeTabName(EntryType type) {
     switch (type) {

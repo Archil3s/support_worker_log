@@ -798,7 +798,11 @@ void main() {
         driveApi.uploads.single.parentId,
         'client-notes/Living Support Notes',
       );
-      expect(driveApi.uploads.single.name, 'Master Living Support Notes');
+      expect(
+        driveApi.uploads.single.name,
+        'Master Living Support Notes - '
+        'Invoice 10 2026-05-31 to 2026-06-13',
+      );
       expect(driveApi.uploads.single.mimeType, _googleDocsMimeType);
       expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
       expect(result.invoiceTabTitle, 'Invoice 10 2026-05-31 to 2026-06-13');
@@ -819,6 +823,71 @@ void main() {
       expect(docsApi.insertedText.join('\n'), contains('Total notes: 2'));
       expect(docsApi.insertedText.join('\n'), contains('Submitted: 1'));
       expect(docsApi.insertedText.join('\n'), contains('Not submitted: 1'));
+    },
+  );
+
+  test(
+    'syncInvoicePeriodLivingDocument starts a new period doc when legacy master exists',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'living-folder',
+              name: 'Living Support Notes',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'living-folder': [
+            const GoogleDriveFile(
+              id: 'legacy-master',
+              name: 'Master Living Support Notes',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final docsApi = _FakeGoogleDocsApi();
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final result = await service.syncInvoicePeriodLivingDocument(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        range: PayPeriodRange(
+          start: DateTime(2026, 5, 31),
+          end: DateTime(2026, 6, 13),
+        ),
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'home-visit-entry',
+              client: 'JW',
+              type: EntryType.homeVisit,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Home visit'],
+            ),
+            personName: 'Joseph W',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'What happened\nHome visit note.',
+          ),
+        ],
+      );
+
+      expect(result.file.name, contains('Invoice 10 2026-05-31 to 2026-06-13'));
+      expect(driveApi.uploads.single.name, result.file.name);
+      expect(
+        driveApi.uploads.single.name,
+        isNot('Master Living Support Notes'),
+      );
+      expect(docsApi.addedTabs.map((tab) => tab.title), [
+        'Invoice 10 2026-05-31 to 2026-06-13',
+        'Joseph W Inv 10',
+        'Home Joseph W 2026-06-02 0930 home-v',
+        'Submitted I10',
+        'Totals I10',
+      ]);
     },
   );
 
