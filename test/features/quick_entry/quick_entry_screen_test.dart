@@ -63,15 +63,15 @@ void main() {
       safetyConcerns: 'No safety concerns noted.',
     );
 
-    expect(note, contains('Main topic(s)'));
-    expect(note, contains('Outcome(s)'));
-    expect(note, contains('Next action(s)'));
-    expect(note, contains('Overall impression'));
+    expect(note, contains('Attendance'));
+    expect(note, contains('What happened'));
+    expect(note, contains('Work/task completed'));
+    expect(note, contains('Support given'));
+    expect(note, contains('Issue/problem'));
+    expect(note, contains('Outcome'));
+    expect(note, contains('Next step'));
+    expect(note, contains('Anything to follow up'));
     expect(note, contains('Referrals'));
-    expect(
-      note,
-      contains('Safety concerns for sexual harm survivors and mental health'),
-    );
   });
 
   test('empty written contact note still keeps the core note format', () {

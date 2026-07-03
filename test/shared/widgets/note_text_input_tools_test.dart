@@ -30,6 +30,6 @@ void main() {
     await tester.tap(find.widgetWithText(ActionChip, 'Outcome'));
     await tester.pumpAndSettle();
 
-    expect(controller.text, 'Main topic(s)\nCalled client.\n\nOutcome(s)\n');
+    expect(controller.text, 'Main topic(s)\nCalled client.\n\nOutcome\n');
   });
 }

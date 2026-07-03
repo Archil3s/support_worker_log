@@ -87,10 +87,6 @@ void main() {
       );
       final documentXml = _docxXml(noteUpload.bytes);
       final documentText = _docxText(noteUpload.bytes);
-      final paragraphs = _docxParagraphTexts(noteUpload.bytes);
-      final mainLine = paragraphs.indexOf('Test note');
-      final secondLine = paragraphs.indexOf('Second paragraph');
-
       expect(meta.fileName, '2026-06-02_Jane_Smith_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
       expect(meta.openLink, 'https://docs.google.com/document/d/new-doc/edit');
@@ -107,41 +103,30 @@ void main() {
       expect(noteUpload.mimeType, _googleDocsMimeType);
       expect(noteUpload.contentMimeType, _docxMimeType);
       expect(noteUpload.parentId, contains('/Home Visits'));
-      expect(documentText, contains('Name of client: Jane Smith'));
-      expect(documentText, contains('Interaction: Home Visit'));
+      expect(documentText, startsWith('Attendance'));
+      expect(documentText, isNot(contains('Name of client: Jane Smith')));
+      expect(documentText, isNot(contains('Interaction: Home Visit')));
       expect(documentText, isNot(contains('Date/time/length')));
       expect(documentText, isNot(contains('9:00')));
       expect(documentText, isNot(contains('60 minutes')));
       expect(documentText, isNot(contains('1.00 hours')));
       expect(documentText, isNot(contains('Kilometres')));
-      expect(documentText, contains('Main topic(s)'));
+      expect(documentText, contains('What happened'));
       expect(documentText, contains('Test note'));
-      expect(mainLine, isNonNegative);
-      expect(secondLine, greaterThan(mainLine));
-      expect(paragraphs.sublist(mainLine + 1, secondLine), contains(''));
-      expect(documentText, contains('Outcome(s)'));
+      expect(documentText, contains('Outcome'));
       expect(documentText, contains('Saved to Drive'));
-      expect(documentText, contains('Next actions'));
+      expect(documentText, contains('Next step'));
       expect(documentText, contains('Follow up tomorrow'));
+      expect(documentText, contains('Support given'));
       expect(documentText, contains('Settled'));
+      expect(documentText, contains('Issue/problem'));
+      expect(documentText, contains('No safety concerns noted.'));
       expect(
         documentText.indexOf('Referrals'),
         greaterThan(documentText.indexOf('Follow up tomorrow')),
       );
-      expect(
-        documentText.indexOf(
-          'Safety concerns for sexual harm survivors and mental health',
-        ),
-        greaterThan(documentText.indexOf('No referrals discussed')),
-      );
       expect(_paragraphHasBoldText(documentXml, 'Referrals'), true);
-      expect(
-        _paragraphHasBoldText(
-          documentXml,
-          'Safety concerns for sexual harm survivors and mental health',
-        ),
-        true,
-      );
+      expect(_paragraphHasBoldText(documentXml, 'Issue/problem'), true);
     },
   );
 
@@ -172,7 +157,9 @@ void main() {
     final documentText = _docxText(noteUpload.bytes);
 
     expect(noteUpload.parentId, contains('client-notes/Brad Roberts'));
-    expect(documentText, contains('Name of client: Brad Roberts'));
+    expect(documentText, contains('What happened'));
+    expect(documentText, contains('Full name shown.'));
+    expect(documentText, isNot(contains('Name of client: Brad Roberts')));
     expect(documentText, isNot(contains('Name of client: BR')));
   });
 
@@ -1160,10 +1147,6 @@ void main() {
 
       final replacement = api.uploads.single;
       final replacementText = _docxText(replacement.bytes);
-      final paragraphs = _docxParagraphTexts(replacement.bytes);
-      final mainLine = paragraphs.indexOf('Test note');
-      final secondLine = paragraphs.indexOf('Second paragraph');
-
       expect(api.uploadedNames, contains('2026-06-02_AB_in-progress'));
       expect(api.updates, isEmpty);
       expect(api.deletedFileIds, contains('legacy-google-doc'));
@@ -1171,14 +1154,15 @@ void main() {
       expect(replacement.mimeType, _googleDocsMimeType);
       expect(replacement.contentMimeType, _docxMimeType);
       expect(replacementText, contains('Test note'));
-      expect(mainLine, isNonNegative);
-      expect(secondLine, greaterThan(mainLine));
-      expect(paragraphs.sublist(mainLine + 1, secondLine), contains(''));
       expect(meta.fileName, '2026-06-02_AB_in-progress');
       expect(meta.mimeType, _googleDocsMimeType);
-      expect(meta.noteText, contains('Test note\n\nSecond paragraph'));
-      expect(meta.noteText, contains('Second paragraph\n\nOutcome(s)'));
-      expect(meta.noteText, contains('Next action(s)\n\nOverall impression'));
+      expect(
+        meta.noteText,
+        contains('What happened\nTest note\nSecond paragraph'),
+      );
+      expect(meta.noteText, contains('Outcome\nSaved to Drive'));
+      expect(meta.noteText, contains('Next step\n-'));
+      expect(meta.noteText, contains('Support given\n-'));
       expect(meta.contentFormat, EntryDriveSupportNoteMeta.stableContentFormat);
     },
   );
@@ -1893,17 +1877,6 @@ String _docxText(List<int> bytes) {
   return RegExp(
     r'<w:t[^>]*>(.*?)<\/w:t>',
   ).allMatches(xml).map((match) => _unxml(match.group(1)!)).join(' ');
-}
-
-List<String> _docxParagraphTexts(List<int> bytes) {
-  final xml = _docxXml(bytes);
-
-  return RegExp(r'<w:p(?:\s|>)[\s\S]*?<\/w:p>').allMatches(xml).map((match) {
-    final paragraph = match.group(0)!;
-    return RegExp(
-      r'<w:t[^>]*>(.*?)<\/w:t>',
-    ).allMatches(paragraph).map((text) => _unxml(text.group(1)!)).join();
-  }).toList();
 }
 
 List<String> _docxEntryNames(List<int> bytes) {

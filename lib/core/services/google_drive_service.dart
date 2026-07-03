@@ -1231,12 +1231,11 @@ class GoogleDriveService {
       targetFolder,
       if (targetFolder.id != typeFolder.id) typeFolder,
     ];
-    final canonicalNoteText = LocalSupportNoteService.canonicalSupportNoteText(
-      noteText,
-      fallbackNoteText: LocalSupportNoteService.defaultNoteTextForEntry(
-        entry: displayEntry,
-        status: status,
-      ),
+    final canonicalNoteText = LocalSupportNoteService.payeNotePlainText(
+      entry: displayEntry,
+      noteText: noteText.trim().isEmpty
+          ? LocalSupportNoteService.defaultPayeNoteTextForEntry(displayEntry)
+          : noteText,
     );
     final bytes = await LocalSupportNoteService.buildNoteDocx(
       entry: displayEntry,

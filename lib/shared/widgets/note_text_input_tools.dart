@@ -388,26 +388,24 @@ class _FullScreenNoteEditorState extends State<_FullScreenNoteEditor> {
                     runSpacing: 8,
                     children: [
                       _SectionButton(
-                        label: 'Main topic',
-                        onPressed: () => _insertSection('Main topic(s)'),
+                        label: 'What happened',
+                        onPressed: () => _insertSection('What happened'),
                       ),
                       _SectionButton(
                         label: 'Outcome',
-                        onPressed: () => _insertSection('Outcome(s)'),
+                        onPressed: () => _insertSection('Outcome'),
                       ),
                       _SectionButton(
-                        label: 'Next action',
-                        onPressed: () => _insertSection('Next action(s)'),
+                        label: 'Next step',
+                        onPressed: () => _insertSection('Next step'),
                       ),
                       _SectionButton(
                         label: 'Referral',
                         onPressed: () => _insertSection('Referrals'),
                       ),
                       _SectionButton(
-                        label: 'Safety',
-                        onPressed: () => _insertSection(
-                          'Safety concerns for sexual harm survivors and mental health',
-                        ),
+                        label: 'Issue/problem',
+                        onPressed: () => _insertSection('Issue/problem'),
                       ),
                     ],
                   ),

@@ -343,9 +343,10 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
     bool showMessage = true,
   }) async {
     final appState = context.read<AppState>();
-    final noteText = appState.isPayeMode
-        ? noteController.text
-        : LocalSupportNoteService.canonicalSupportNoteText(noteController.text);
+    final noteText = LocalSupportNoteService.payeNotePlainText(
+      entry: widget.entry,
+      noteText: noteController.text,
+    );
     final updated = await LocalSupportNoteService.saveDraftMeta(
       entry: widget.entry,
       initials: initialsController.text,
@@ -495,8 +496,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       entry: widget.entry,
       initials: initialsController.text,
       status: status,
-      noteText: LocalSupportNoteService.canonicalSupportNoteText(
-        noteController.text,
+      noteText: LocalSupportNoteService.payeNotePlainText(
+        entry: widget.entry,
+        noteText: noteController.text,
       ),
       payPeriodAnchorDate: appState.settings.payPeriodAnchorDate,
       existingMeta: _driveMetaForAccount(driveMeta, googleAccountEmail),
@@ -660,8 +662,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
         if (existing != null &&
             driveService.isGoogleDocsSupportNote(existing)) {
-          final noteText = LocalSupportNoteService.canonicalSupportNoteText(
-            noteController.text,
+          final noteText = LocalSupportNoteService.payeNotePlainText(
+            entry: widget.entry,
+            noteText: noteController.text,
           );
           updated = existing.copyWith(
             initials: initialsController.text.trim().toUpperCase(),
@@ -670,8 +673,9 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
             googleAccountEmail: appState.workGoogleAccountEmail,
           );
         } else {
-          final noteText = LocalSupportNoteService.canonicalSupportNoteText(
-            noteController.text,
+          final noteText = LocalSupportNoteService.payeNotePlainText(
+            entry: widget.entry,
+            noteText: noteController.text,
           );
           updated = await driveService.saveSupportNote(
             accessToken: token,
@@ -1500,12 +1504,7 @@ String _defaultNoteText({
   required WorkEntry entry,
   required EntrySupportNoteStatus status,
 }) {
-  return appState.isPayeMode
-      ? LocalSupportNoteService.defaultPayeNoteTextForEntry(entry)
-      : LocalSupportNoteService.defaultNoteTextForEntry(
-          entry: entry,
-          status: status,
-        );
+  return LocalSupportNoteService.defaultPayeNoteTextForEntry(entry);
 }
 
 Color _statusColor(EntrySupportNoteStatus status) {

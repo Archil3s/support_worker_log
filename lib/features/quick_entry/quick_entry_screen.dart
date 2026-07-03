@@ -99,9 +99,6 @@ List<NextActionItem> _nextActionsFromBreakdown(String value) {
   return actions;
 }
 
-const _mainTopicMaxWords = 200;
-const _outcomeMaxWords = 100;
-const _impressionMaxWords = 150;
 const _supportTagPrefix = 'Tag: ';
 const _attendancePrefix = 'Attendance: ';
 const _attendanceOptions = [
@@ -190,25 +187,16 @@ String _buildSupportNoteBreakdown({
   required String referrals,
   required String safetyConcerns,
 }) {
-  return [
-    'Main topic(s)',
-    _cleanSupportNoteSection(mainTopic),
-    '',
-    'Outcome(s)',
-    _cleanSupportNoteSection(outcomes),
-    '',
-    'Next action(s)',
-    _cleanSupportNoteSection(nextActions),
-    '',
-    'Overall impression',
-    _cleanSupportNoteSection(impression),
-    '',
-    'Referrals',
-    _cleanSupportNoteSection(referrals),
-    '',
-    'Safety concerns for sexual harm survivors and mental health',
-    _cleanSupportNoteSection(safetyConcerns),
-  ].join('\n').trim();
+  return _buildPayeSupportNoteBreakdown(
+    whatHappened: mainTopic,
+    workTaskCompleted: '',
+    supportGiven: impression,
+    issueProblem: safetyConcerns,
+    outcome: outcomes,
+    nextStep: nextActions,
+    followUp: '',
+    referrals: referrals,
+  );
 }
 
 @visibleForTesting
@@ -241,6 +229,8 @@ String _buildPayeSupportNoteBreakdown({
   required String referrals,
 }) {
   return [
+    'Attendance',
+    '',
     'What happened',
     _cleanSupportNoteSection(whatHappened),
     '',
@@ -267,24 +257,6 @@ String _buildPayeSupportNoteBreakdown({
   ].join('\n').trim();
 }
 
-class _SupportNoteDraftFields {
-  const _SupportNoteDraftFields({
-    required this.mainTopic,
-    required this.outcomes,
-    required this.nextActions,
-    required this.impression,
-    required this.referrals,
-    required this.safetyConcerns,
-  });
-
-  final String mainTopic;
-  final String outcomes;
-  final String nextActions;
-  final String impression;
-  final String referrals;
-  final String safetyConcerns;
-}
-
 class _PayeSupportNoteDraftFields {
   const _PayeSupportNoteDraftFields({
     required this.whatHappened,
@@ -305,65 +277,6 @@ class _PayeSupportNoteDraftFields {
   final String nextStep;
   final String followUp;
   final String referrals;
-}
-
-_SupportNoteDraftFields _parseSupportNoteDraft(String value) {
-  final sections = <String, List<String>>{
-    'mainTopic': [],
-    'outcomes': [],
-    'nextActions': [],
-    'impression': [],
-    'referrals': [],
-    'safetyConcerns': [],
-  };
-  String? current;
-
-  for (final rawLine in value.split(RegExp(r'\r?\n'))) {
-    final line = rawLine.trim();
-    final normalized = line.toLowerCase();
-
-    if (normalized.startsWith('main topic')) {
-      current = 'mainTopic';
-      continue;
-    }
-    if (normalized.startsWith('outcome')) {
-      current = 'outcomes';
-      continue;
-    }
-    if (normalized.startsWith('next action')) {
-      current = 'nextActions';
-      continue;
-    }
-    if (normalized.startsWith('overall impression')) {
-      current = 'impression';
-      continue;
-    }
-    if (normalized.startsWith('local referral') ||
-        normalized.startsWith('referrals')) {
-      current = 'referrals';
-      continue;
-    }
-    if (normalized.startsWith('safety concerns')) {
-      current = 'safetyConcerns';
-      continue;
-    }
-
-    if (current == null || line.isEmpty) continue;
-    sections[current]!.add(line);
-  }
-
-  String section(String key) {
-    return _cleanSupportNoteSection(sections[key]!.join('\n'));
-  }
-
-  return _SupportNoteDraftFields(
-    mainTopic: section('mainTopic'),
-    outcomes: section('outcomes'),
-    nextActions: section('nextActions'),
-    impression: section('impression'),
-    referrals: section('referrals'),
-    safetyConcerns: section('safetyConcerns'),
-  );
 }
 
 _PayeSupportNoteDraftFields _parsePayeSupportNoteDraft(String value) {
@@ -1592,23 +1505,19 @@ class _SupportNoteBreakdownSheetState
   final outcomesController = TextEditingController();
   final nextActionsController = TextEditingController();
   final followUpController = TextEditingController();
-  final impressionController = TextEditingController();
   final referralNotesController = TextEditingController();
-  final safetyConcernsController = TextEditingController();
   final referrals = <_ReferralSelection>[];
 
   bool noReferrals = true;
   bool noNextAction = false;
-  bool noSafetyConcerns = true;
   int stepIndex = 0;
   Timer? draftAutosaveTimer;
 
   @override
   void initState() {
     super.initState();
-    final payeMode = context.read<AppState>().isPayeMode;
     final draft = widget.initialDraft?.trim();
-    if (payeMode && draft != null && draft.isNotEmpty) {
+    if (draft != null && draft.isNotEmpty) {
       final fields = _parsePayeSupportNoteDraft(draft);
       mainTopicController.text = fields.whatHappened;
       workTaskCompletedController.text = fields.workTaskCompleted;
@@ -1619,23 +1528,6 @@ class _SupportNoteBreakdownSheetState
       followUpController.text = fields.followUp;
       noReferrals = fields.referrals.toLowerCase().startsWith('no referrals');
       referralNotesController.text = noReferrals ? '' : fields.referrals;
-    } else if (draft != null && draft.isNotEmpty) {
-      final fields = _parseSupportNoteDraft(draft);
-      mainTopicController.text = fields.mainTopic;
-      outcomesController.text = fields.outcomes;
-      nextActionsController.text = fields.nextActions;
-      impressionController.text = fields.impression;
-      noNextAction = fields.nextActions.isEmpty;
-      noReferrals = fields.referrals.toLowerCase().startsWith('no referrals');
-      referralNotesController.text = noReferrals ? '' : fields.referrals;
-      noSafetyConcerns = fields.safetyConcerns.toLowerCase().startsWith(
-        'no safety concerns',
-      );
-      safetyConcernsController.text = noSafetyConcerns
-          ? ''
-          : fields.safetyConcerns;
-    } else if (payeMode) {
-      mainTopicController.text = _initialMainTopicText(widget.notes);
     } else {
       mainTopicController.text = _initialMainTopicText(widget.notes);
     }
@@ -1649,9 +1541,7 @@ class _SupportNoteBreakdownSheetState
     outcomesController.addListener(_scheduleDraftAutosave);
     nextActionsController.addListener(_scheduleDraftAutosave);
     followUpController.addListener(_scheduleDraftAutosave);
-    impressionController.addListener(_scheduleDraftAutosave);
     referralNotesController.addListener(_scheduleDraftAutosave);
-    safetyConcernsController.addListener(_scheduleDraftAutosave);
   }
 
   @override
@@ -1664,13 +1554,11 @@ class _SupportNoteBreakdownSheetState
     outcomesController.dispose();
     nextActionsController.dispose();
     followUpController.dispose();
-    impressionController.dispose();
     referralNotesController.dispose();
-    safetyConcernsController.dispose();
     super.dispose();
   }
 
-  int get _lastStepIndex => context.read<AppState>().isPayeMode ? 8 : 6;
+  int get _lastStepIndex => 8;
 
   int get _stepCount => _lastStepIndex + 1;
 
@@ -1693,34 +1581,19 @@ class _SupportNoteBreakdownSheetState
   }
 
   String _currentBreakdown() {
-    if (context.read<AppState>().isPayeMode) {
-      return _buildPayeSupportNoteBreakdown(
-        whatHappened: _cleanSupportNoteSection(mainTopicController.text),
-        workTaskCompleted: _cleanSupportNoteSection(
-          workTaskCompletedController.text,
-        ),
-        supportGiven: _cleanSupportNoteSection(supportGivenController.text),
-        issueProblem: _cleanSupportNoteSection(issueProblemController.text),
-        outcome: _cleanSupportNoteSection(outcomesController.text),
-        nextStep: noNextAction
-            ? ''
-            : _cleanSupportNoteSection(nextActionsController.text),
-        followUp: _cleanSupportNoteSection(followUpController.text),
-        referrals: _referralSummary(),
-      );
-    }
-
-    return _buildSupportNoteBreakdown(
-      mainTopic: _cleanSupportNoteSection(mainTopicController.text),
-      outcomes: _cleanSupportNoteSection(outcomesController.text),
-      nextActions: noNextAction
+    return _buildPayeSupportNoteBreakdown(
+      whatHappened: _cleanSupportNoteSection(mainTopicController.text),
+      workTaskCompleted: _cleanSupportNoteSection(
+        workTaskCompletedController.text,
+      ),
+      supportGiven: _cleanSupportNoteSection(supportGivenController.text),
+      issueProblem: _cleanSupportNoteSection(issueProblemController.text),
+      outcome: _cleanSupportNoteSection(outcomesController.text),
+      nextStep: noNextAction
           ? ''
           : _cleanSupportNoteSection(nextActionsController.text),
-      impression: _cleanSupportNoteSection(impressionController.text),
+      followUp: _cleanSupportNoteSection(followUpController.text),
       referrals: _referralSummary(),
-      safetyConcerns: noSafetyConcerns
-          ? 'No safety concerns noted.'
-          : _cleanSupportNoteSection(safetyConcernsController.text),
     );
   }
 
@@ -1785,127 +1658,7 @@ class _SupportNoteBreakdownSheetState
   }
 
   Widget _stepBody() {
-    if (context.read<AppState>().isPayeMode) return _payeStepBody();
-
-    switch (stepIndex) {
-      case 0:
-        return _visitFactsStep();
-      case 1:
-        return _PromptStep(
-          title: 'Main Topic(s)',
-          subtitle: 'Capture what support was provided.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.notes.isNotEmpty) ...[
-                _Panel(
-                  title: 'Logged notes',
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final note in widget.notes)
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 18),
-                          label: Text(note),
-                          onPressed: () =>
-                              _appendLine(mainTopicController, note),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              _SupportNoteField(
-                controller: mainTopicController,
-                label: 'Main topic(s)',
-                hint: 'What support was provided?',
-                helper: 'Include the core support themes only.',
-                maxWords: _mainTopicMaxWords,
-                wordCount: _wordCount(mainTopicController.text),
-                autofocus: true,
-                expanded: true,
-                onChanged: (_) => setState(() {}),
-              ),
-            ],
-          ),
-        );
-      case 2:
-        return _PromptStep(
-          title: 'Outcome(s)',
-          subtitle: 'Record the concrete result of the interaction.',
-          child: _SupportNoteField(
-            controller: outcomesController,
-            label: 'Outcome(s)',
-            hint: 'What changed, improved, or was completed?',
-            helper: 'Keep the result specific and factual.',
-            maxWords: _outcomeMaxWords,
-            wordCount: _wordCount(outcomesController.text),
-            autofocus: true,
-            expanded: true,
-            onChanged: (_) => setState(() {}),
-          ),
-        );
-      case 3:
-        return _PromptStep(
-          title: 'Next Action(s)',
-          subtitle: 'Add follow-up items or mark none needed.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('No next action needed'),
-                subtitle: const Text(
-                  'Leave follow-up blank when there is nothing to track.',
-                ),
-                value: noNextAction,
-                onChanged: (value) {
-                  setState(() {
-                    noNextAction = value;
-                    if (value) nextActionsController.clear();
-                  });
-                  _scheduleDraftAutosave();
-                },
-              ),
-              const SizedBox(height: 8),
-              if (noNextAction)
-                const _NoActionPanel(message: 'No next action needed.')
-              else
-                _SupportNoteField(
-                  controller: nextActionsController,
-                  label: 'Next action(s)',
-                  hint: 'One follow-up per line.',
-                  helper: 'These become trackable open actions in Notes.',
-                  wordCount: _wordCount(nextActionsController.text),
-                  autofocus: true,
-                  expanded: true,
-                  onChanged: (_) => setState(() {}),
-                ),
-            ],
-          ),
-        );
-      case 4:
-        return _PromptStep(
-          title: 'Overall Impression',
-          subtitle: 'Add a concise professional impression.',
-          child: _SupportNoteField(
-            controller: impressionController,
-            label: 'Overall impression',
-            hint: 'Brief professional impression of the interaction.',
-            helper: 'Keep this factual and concise.',
-            maxWords: _impressionMaxWords,
-            wordCount: _wordCount(impressionController.text),
-            autofocus: true,
-            expanded: true,
-            onChanged: (_) => setState(() {}),
-          ),
-        );
-      case 5:
-        return _referralStep();
-      default:
-        return _safetyStep();
-    }
+    return _payeStepBody();
   }
 
   Widget _payeStepBody() {
@@ -2155,51 +1908,6 @@ class _SupportNoteBreakdownSheetState
     );
   }
 
-  Widget _safetyStep() {
-    return _PromptStep(
-      title: 'Safety Concerns',
-      subtitle: 'Add safety notes if needed.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'No safety concerns noted',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            subtitle: const Text(
-              'Use this for sexual harm survivor and mental health safety checks.',
-              style: TextStyle(color: Color(0xFF8396C7)),
-            ),
-            value: noSafetyConcerns,
-            onChanged: (value) {
-              setState(() {
-                noSafetyConcerns = value;
-                if (value) safetyConcernsController.clear();
-              });
-              _scheduleDraftAutosave();
-            },
-          ),
-          if (noSafetyConcerns)
-            const _NoActionPanel(message: 'No safety concerns noted.')
-          else
-            _SupportNoteField(
-              controller: safetyConcernsController,
-              label: 'Safety concerns',
-              hint:
-                  'Immediate safety, sexual harm, self-harm, risk escalation, or mental health concerns.',
-              helper: 'Keep wording factual. Include actions taken.',
-              wordCount: _wordCount(safetyConcernsController.text),
-              autofocus: true,
-              expanded: true,
-              onChanged: (_) => setState(() {}),
-            ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -2419,7 +2127,6 @@ class _SupportNoteField extends StatefulWidget {
     required this.hint,
     required this.wordCount,
     this.helper,
-    this.maxWords,
     this.onChanged,
     this.autofocus = false,
     this.expanded = false,
@@ -2429,7 +2136,6 @@ class _SupportNoteField extends StatefulWidget {
   final String label;
   final String hint;
   final String? helper;
-  final int? maxWords;
   final int wordCount;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
@@ -2456,11 +2162,7 @@ class _SupportNoteFieldState extends State<_SupportNoteField> {
 
   @override
   Widget build(BuildContext context) {
-    final limit = widget.maxWords;
-    final isOverLimit = limit != null && widget.wordCount > limit;
-    final countText = limit == null
-        ? '${widget.wordCount} words'
-        : '${widget.wordCount}/$limit';
+    final countText = '${widget.wordCount} words';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2494,9 +2196,9 @@ class _SupportNoteFieldState extends State<_SupportNoteField> {
             hintText: widget.hint,
             helperText: widget.helper,
             counterText: countText,
-            counterStyle: TextStyle(
-              color: isOverLimit ? Colors.redAccent : const Color(0xFF8396C7),
-              fontWeight: isOverLimit ? FontWeight.w900 : FontWeight.w500,
+            counterStyle: const TextStyle(
+              color: Color(0xFF8396C7),
+              fontWeight: FontWeight.w500,
             ),
             alignLabelWithHint: true,
             prefixIcon: const Icon(Icons.notes_outlined),

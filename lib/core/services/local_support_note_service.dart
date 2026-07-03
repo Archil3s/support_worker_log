@@ -5,7 +5,6 @@ import 'package:archive/archive.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/entry_type.dart';
 import '../models/work_entry.dart';
 import '../utils/formatters.dart';
 import 'local_support_notes/local_support_notes_platform.dart';
@@ -331,9 +330,9 @@ class LocalSupportNoteService {
     required EntrySupportNoteStatus status,
   }) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
-    return canonicalSupportNoteText(
-      savedBreakdown.isNotEmpty ? savedBreakdown : supportNoteBreakdownTemplate,
-    );
+    return savedBreakdown.isNotEmpty
+        ? payeNotePlainText(entry: entry, noteText: savedBreakdown)
+        : defaultPayeNoteTextForEntry(entry);
   }
 
   static String canonicalSupportNoteText(
@@ -384,7 +383,9 @@ class LocalSupportNoteService {
 
   static String defaultPayeNoteTextForEntry(WorkEntry entry) {
     final savedBreakdown = entry.supportNoteBreakdown.trim();
-    if (savedBreakdown.isNotEmpty) return savedBreakdown;
+    if (savedBreakdown.isNotEmpty) {
+      return payeNotePlainText(entry: entry, noteText: savedBreakdown);
+    }
 
     return '''
 Attendance
@@ -442,15 +443,9 @@ Referrals
         data.offsetInBytes,
         data.lengthInBytes,
       );
-      return _docxFromTemplate(
+      return _payeDocxFromTemplate(
         bytes: bytes,
-        clientInitials: clientDisplayName?.trim().isNotEmpty == true
-            ? clientDisplayName!.trim()
-            : personNameForEntry(entry, fallback: initials),
-        dateText: formatDate(entry.date),
-        interactionText: 'Interaction: ${entry.type.label}',
-        fallbackNoteText: defaultNoteTextForEntry(entry: entry, status: status),
-        noteText: noteText,
+        entry: entry.copyWith(supportNoteBreakdown: noteText),
       );
     } catch (error) {
       throw StateError(

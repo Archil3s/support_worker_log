@@ -563,9 +563,10 @@ class AppState extends ChangeNotifier {
       accessToken: accessToken,
       meta: googleDocMeta,
     );
-    final noteText = payeMode
-        ? exportedNoteText
-        : LocalSupportNoteService.canonicalSupportNoteText(exportedNoteText);
+    final noteText = LocalSupportNoteService.payeNotePlainText(
+      entry: entry,
+      noteText: exportedNoteText,
+    );
     final syncedStatus = _supportNoteStatusFromText(
       exportedNoteText,
       fallback: googleDocMeta.status,

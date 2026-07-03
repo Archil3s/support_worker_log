@@ -6,23 +6,23 @@ import 'app_settings.dart';
 import 'entry_type.dart';
 
 const supportNoteBreakdownTemplate = '''
-Main topic(s)
-    1. 
+Attendance
 
-Outcome(s)
-    1. 
+What happened
 
-Next action(s)
-    1.
+Work/task completed
 
-Overall impression
-    1. 
+Support given
+
+Issue/problem
+
+Outcome
+
+Next step
+
+Anything to follow up
 
 Referrals
-    No referrals discussed or made this visit.
-
-Safety concerns for sexual harm survivors and mental health
-    No safety concerns noted.
 ''';
 
 enum TextContactDirection { received, sent, exchange }
