@@ -6,7 +6,7 @@ import 'package:support_worker_log/features/shell/main_shell.dart';
 
 void main() {
   testWidgets(
-    'desktop work flow starts on quick entry and follows task order',
+    'desktop Work shell shows status shortcuts instead of duplicate workflow',
     (tester) async {
       final appState = AppState(warmGoogleAccounts: false);
       addTearDown(appState.dispose);
@@ -27,36 +27,31 @@ void main() {
 
       expect(find.text('Quick Entry'), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('desktop-workflow-strip')),
+        find.byKey(const ValueKey('desktop-work-status-bar')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('desktop-workflow-strip')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('work-status-active')), findsOneWidget);
+      expect(find.byKey(const ValueKey('work-status-today')), findsOneWidget);
+      expect(find.byKey(const ValueKey('work-status-notes')), findsOneWidget);
+      expect(find.byKey(const ValueKey('work-status-actions')), findsOneWidget);
 
-      final workflowSteps = <String>[
-        'quick',
-        'notes',
-        'actions',
-        'calendar',
-        'entries',
-        'pay',
-      ];
-
-      for (final step in workflowSteps) {
-        expect(find.byKey(ValueKey('workflow-step-$step')), findsOneWidget);
-      }
-
-      expect(find.byKey(const ValueKey('workflow-previous')), findsNothing);
-      expect(find.byKey(const ValueKey('workflow-next')), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('workflow-step-notes')));
+      await tester.tap(find.byKey(const ValueKey('work-status-notes')));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Notes'), findsWidgets);
-      expect(find.byKey(const ValueKey('workflow-previous')), findsOneWidget);
-      expect(find.byKey(const ValueKey('workflow-next')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('work-status-actions')));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Actions'), findsWidgets);
     },
   );
 
-  testWidgets('desktop work flow previous and next move between sections', (
+  testWidgets('mobile navigation uses Quick, Notes, Actions, Calendar order', (
     tester,
   ) async {
     final appState = AppState(warmGoogleAccounts: false);
@@ -66,7 +61,7 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.physicalSize = const Size(430, 800);
     tester.view.devicePixelRatio = 1;
 
     await tester.pumpWidget(
@@ -77,15 +72,10 @@ void main() {
     );
 
     expect(find.text('Quick Entry'), findsOneWidget);
+    expect(find.byKey(const ValueKey('desktop-work-status-bar')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('workflow-next')));
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(find.text('Notes'), findsWidgets);
-
-    await tester.tap(find.byKey(const ValueKey('workflow-previous')));
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(find.text('Quick Entry'), findsOneWidget);
+    final actionsPosition = tester.getCenter(find.text('Actions'));
+    final calendarPosition = tester.getCenter(find.text('Calendar'));
+    expect(actionsPosition.dx, lessThan(calendarPosition.dx));
   });
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/app_mode.dart';
 import '../../core/models/google_export_account_scope.dart';
+import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/web_spacing.dart';
@@ -53,9 +54,9 @@ class _MainShellState extends State<MainShell> {
         return 0;
       case _Section.notes:
         return 1;
-      case _Section.calendar:
-        return 2;
       case _Section.actions:
+        return 2;
+      case _Section.calendar:
         return 3;
       case _Section.admin:
       case _Section.charts:
@@ -162,10 +163,10 @@ class _MainShellState extends State<MainShell> {
         _go(_Section.notes);
         break;
       case 2:
-        _go(_Section.calendar);
+        _go(_Section.actions);
         break;
       case 3:
-        _go(_Section.actions);
+        _go(_Section.calendar);
         break;
       case 4:
         _go(_Section.more);
@@ -280,7 +281,7 @@ class _MainShellState extends State<MainShell> {
             : groceryMode && wide
             ? 1240.0
             : maxContentWidth;
-        final showFlowStrip = wide && !standaloneMode;
+        final showWorkStatus = wide && appMode == AppMode.work;
 
         return Scaffold(
           appBar: AppBar(
@@ -406,13 +407,8 @@ class _MainShellState extends State<MainShell> {
                       constraints: BoxConstraints(maxWidth: contentWidth),
                       child: Column(
                         children: [
-                          if (showFlowStrip)
-                            _WorkflowStrip(
-                              key: const ValueKey('desktop-workflow-strip'),
-                              selected: section,
-                              onSelected: _go,
-                              showPay: appMode != AppMode.paye,
-                            ),
+                          if (showWorkStatus)
+                            _WorkStatusBar(selected: section, onSelected: _go),
                           Expanded(
                             child: NotesStorageGate(
                               scope: _driveScope(appMode),
@@ -446,243 +442,176 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-class _WorkflowStrip extends StatelessWidget {
-  const _WorkflowStrip({
-    super.key,
-    required this.selected,
-    required this.onSelected,
-    required this.showPay,
-  });
+class _WorkStatusBar extends StatelessWidget {
+  const _WorkStatusBar({required this.selected, required this.onSelected});
 
   final _Section selected;
   final ValueChanged<_Section> onSelected;
-  final bool showPay;
-
-  List<_Section> get sections {
-    return [
-      _Section.quick,
-      _Section.notes,
-      _Section.actions,
-      _Section.calendar,
-      _Section.entries,
-      if (showPay) _Section.pay,
-    ];
-  }
 
   @override
   Widget build(BuildContext context) {
     final tight = useTightWebSpacing(context);
-    final items = sections;
-    final selectedIndex = items.indexOf(selected);
-    final previous = selectedIndex > 0 ? items[selectedIndex - 1] : null;
-    final next = selectedIndex >= 0 && selectedIndex < items.length - 1
-        ? items[selectedIndex + 1]
-        : null;
-    final stepWidgets = <Widget>[];
-
-    for (var index = 0; index < items.length; index += 1) {
-      final item = items[index];
-      stepWidgets.add(
-        Expanded(
-          child: _WorkflowStep(
-            section: item,
-            selected: selected == item,
-            completed: selectedIndex > index,
-            onTap: () => onSelected(item),
-          ),
-        ),
+    final appState = context.watch<AppState>();
+    final entries = appState.entries;
+    final activeVisit = appState.activeVisit;
+    final today = DateTime.now();
+    final todayEntries = entries.where((entry) {
+      return entry.date.year == today.year &&
+          entry.date.month == today.month &&
+          entry.date.day == today.day;
+    }).length;
+    final missingNotes = entries.where((entry) {
+      return !LocalSupportNoteService.hasEnteredSupportNoteContent(
+        entry.supportNoteBreakdown,
       );
-
-      if (index < items.length - 1) {
-        stepWidgets.add(
-          _WorkflowConnector(active: selectedIndex > index, compact: tight),
-        );
-      }
-    }
+    }).length;
+    final entryActions = entries.fold<int>(0, (total, entry) {
+      return total +
+          entry.nextActions.where((action) => !action.isCompleted).length;
+    });
+    final generalActions = appState.generalActions
+        .where((action) => !action.isCompleted)
+        .length;
+    final openActions = entryActions + generalActions;
 
     return Container(
-      height: tight ? 50 : 58,
+      key: const ValueKey('desktop-work-status-bar'),
       margin: EdgeInsets.fromLTRB(8, tight ? 4 : 8, 8, tight ? 6 : 8),
-      padding: EdgeInsets.all(tight ? 4 : 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF151B29),
-        borderRadius: BorderRadius.circular(tight ? 14 : 18),
-        border: Border.all(color: const Color(0xFF34405F)),
-      ),
       child: Row(
         children: [
-          if (previous != null) ...[
-            _WorkflowJumpButton(
-              key: const ValueKey('workflow-previous'),
-              section: previous,
-              forward: false,
-              onTap: () => onSelected(previous),
+          Expanded(
+            child: _WorkStatusTile(
+              key: const ValueKey('work-status-active'),
+              label: activeVisit == null ? 'Ready to start' : 'Active visit',
+              value: activeVisit?.client ?? 'Quick entry',
+              icon: activeVisit == null
+                  ? Icons.play_arrow_rounded
+                  : Icons.timer_outlined,
+              color: activeVisit == null
+                  ? const Color(0xFF4F8DF7)
+                  : const Color(0xFF31E981),
+              selected: selected == _Section.quick,
+              onTap: () => onSelected(_Section.quick),
             ),
-            SizedBox(width: tight ? 4 : 6),
-          ],
-          Expanded(child: Row(children: stepWidgets)),
-          if (next != null) ...[
-            SizedBox(width: tight ? 4 : 6),
-            _WorkflowJumpButton(
-              key: const ValueKey('workflow-next'),
-              section: next,
-              forward: true,
-              onTap: () => onSelected(next),
+          ),
+          SizedBox(width: tight ? 6 : 8),
+          Expanded(
+            child: _WorkStatusTile(
+              key: const ValueKey('work-status-today'),
+              label: 'Today',
+              value: '$todayEntries entries',
+              icon: Icons.calendar_today_outlined,
+              color: const Color(0xFF7DB4FF),
+              selected: selected == _Section.calendar,
+              onTap: () => onSelected(_Section.calendar),
             ),
-          ],
+          ),
+          SizedBox(width: tight ? 6 : 8),
+          Expanded(
+            child: _WorkStatusTile(
+              key: const ValueKey('work-status-notes'),
+              label: 'Notes to finish',
+              value: '$missingNotes remaining',
+              icon: Icons.note_alt_outlined,
+              color: missingNotes == 0
+                  ? const Color(0xFF31E981)
+                  : const Color(0xFFFFC857),
+              selected: selected == _Section.notes,
+              onTap: () => onSelected(_Section.notes),
+            ),
+          ),
+          SizedBox(width: tight ? 6 : 8),
+          Expanded(
+            child: _WorkStatusTile(
+              key: const ValueKey('work-status-actions'),
+              label: 'Open actions',
+              value: '$openActions remaining',
+              icon: Icons.checklist_rtl_outlined,
+              color: openActions == 0
+                  ? const Color(0xFF31E981)
+                  : const Color(0xFFFFC857),
+              selected: selected == _Section.actions,
+              onTap: () => onSelected(_Section.actions),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _WorkflowJumpButton extends StatelessWidget {
-  const _WorkflowJumpButton({
+class _WorkStatusTile extends StatelessWidget {
+  const _WorkStatusTile({
     super.key,
-    required this.section,
-    required this.forward,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    required this.selected,
     required this.onTap,
   });
 
-  final _Section section;
-  final bool forward;
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final tight = useTightWebSpacing(context);
-    final label = _workflowLabel(section);
 
-    return Tooltip(
-      message: '${forward ? 'Next' : 'Back'}: ${_workflowTooltip(section)}',
+    return Material(
+      color: selected ? const Color(0xFF13294D) : const Color(0xFF151B29),
+      borderRadius: BorderRadius.circular(tight ? 14 : 18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(tight ? 10 : 12),
+        borderRadius: BorderRadius.circular(tight ? 14 : 18),
         onTap: onTap,
         child: Container(
-          width: tight ? 96 : 124,
-          height: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 10),
+          height: tight ? 62 : 70,
+          padding: EdgeInsets.symmetric(horizontal: tight ? 10 : 14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0E1422),
-            borderRadius: BorderRadius.circular(tight ? 10 : 12),
-            border: Border.all(color: const Color(0xFF34405F)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (!forward) ...[
-                Icon(
-                  Icons.chevron_left_rounded,
-                  color: const Color(0xFFB8C7F3),
-                  size: tight ? 18 : 20,
-                ),
-                SizedBox(width: tight ? 2 : 4),
-              ],
-              Flexible(
-                child: Text(
-                  forward ? 'Next $label' : label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0xFFE7EEFF),
-                    fontSize: tight ? 11 : 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              if (forward) ...[
-                SizedBox(width: tight ? 2 : 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: const Color(0xFFB8C7F3),
-                  size: tight ? 18 : 20,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkflowConnector extends StatelessWidget {
-  const _WorkflowConnector({required this.active, required this.compact});
-
-  final bool active;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
-      width: compact ? 10 : 14,
-      height: 2,
-      decoration: BoxDecoration(
-        color: active ? const Color(0xFF4F8DF7) : const Color(0xFF34405F),
-        borderRadius: BorderRadius.circular(1),
-      ),
-    );
-  }
-}
-
-class _WorkflowStep extends StatelessWidget {
-  const _WorkflowStep({
-    required this.section,
-    required this.selected,
-    required this.completed,
-    required this.onTap,
-  });
-
-  final _Section section;
-  final bool selected;
-  final bool completed;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tight = useTightWebSpacing(context);
-
-    return Tooltip(
-      message: _workflowTooltip(section),
-      child: InkWell(
-        key: ValueKey('workflow-step-${section.name}'),
-        borderRadius: BorderRadius.circular(tight ? 10 : 13),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          height: double.infinity,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          padding: EdgeInsets.symmetric(horizontal: tight ? 8 : 10),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFF13294D) : Colors.transparent,
-            borderRadius: BorderRadius.circular(tight ? 10 : 13),
+            borderRadius: BorderRadius.circular(tight ? 14 : 18),
             border: Border.all(
-              color: selected ? const Color(0xFF4F8DF7) : Colors.transparent,
+              color: selected
+                  ? const Color(0xFF4F8DF7)
+                  : const Color(0xFF34405F),
             ),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                _workflowIcon(section, selected),
-                color: selected || completed
-                    ? const Color(0xFF4F8DF7)
-                    : const Color(0xFF8396C7),
-                size: tight ? 18 : 20,
-              ),
-              SizedBox(width: tight ? 6 : 8),
-              Flexible(
-                child: Text(
-                  _workflowLabel(section),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selected ? Colors.white : const Color(0xFFB8C7F3),
-                    fontSize: tight ? 12 : 13,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
-                  ),
+              Icon(icon, color: color, size: tight ? 20 : 24),
+              SizedBox(width: tight ? 8 : 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8396C7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFFE7EEFF),
+                        fontSize: tight ? 12 : 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -718,93 +647,6 @@ class _KeyboardAwareBottomNav extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-IconData _workflowIcon(_Section section, bool selected) {
-  switch (section) {
-    case _Section.quick:
-      return selected ? Icons.bolt_rounded : Icons.bolt_outlined;
-    case _Section.notes:
-      return selected ? Icons.note_alt_rounded : Icons.note_alt_outlined;
-    case _Section.actions:
-      return selected
-          ? Icons.checklist_rtl_rounded
-          : Icons.checklist_rtl_outlined;
-    case _Section.calendar:
-      return selected
-          ? Icons.calendar_month_rounded
-          : Icons.calendar_month_outlined;
-    case _Section.entries:
-      return selected ? Icons.list_alt_rounded : Icons.list_alt_outlined;
-    case _Section.pay:
-      return selected
-          ? Icons.receipt_long_rounded
-          : Icons.receipt_long_outlined;
-    case _Section.admin:
-    case _Section.charts:
-    case _Section.more:
-    case _Section.home:
-    case _Section.tax:
-    case _Section.drive:
-    case _Section.settings:
-      return selected ? Icons.more_horiz_rounded : Icons.more_horiz_outlined;
-  }
-}
-
-String _workflowLabel(_Section section) {
-  switch (section) {
-    case _Section.quick:
-      return 'Start';
-    case _Section.notes:
-      return 'Notes';
-    case _Section.actions:
-      return 'Actions';
-    case _Section.calendar:
-      return 'Calendar';
-    case _Section.entries:
-      return 'Entries';
-    case _Section.pay:
-      return 'Pay';
-    case _Section.admin:
-    case _Section.charts:
-    case _Section.more:
-    case _Section.home:
-    case _Section.tax:
-    case _Section.drive:
-    case _Section.settings:
-      return 'More';
-  }
-}
-
-String _workflowTooltip(_Section section) {
-  switch (section) {
-    case _Section.quick:
-      return 'Quick Entry';
-    case _Section.notes:
-      return 'Notes';
-    case _Section.actions:
-      return 'Actions';
-    case _Section.calendar:
-      return 'Calendar';
-    case _Section.entries:
-      return 'Entries';
-    case _Section.pay:
-      return 'Pay Period';
-    case _Section.admin:
-      return 'Admin Review';
-    case _Section.charts:
-      return 'Charts';
-    case _Section.more:
-      return 'More';
-    case _Section.home:
-      return 'Dashboard';
-    case _Section.tax:
-      return 'Tax';
-    case _Section.drive:
-      return 'Google Drive';
-    case _Section.settings:
-      return 'Settings';
   }
 }
 
@@ -953,17 +795,17 @@ class _FastBottomNav extends StatelessWidget {
           _FastNavItem(
             index: 2,
             selectedIndex: selectedIndex,
-            icon: Icons.calendar_month_outlined,
-            selectedIcon: Icons.calendar_month_rounded,
-            label: 'Calendar',
+            icon: Icons.checklist_rtl_outlined,
+            selectedIcon: Icons.checklist_rtl_rounded,
+            label: 'Actions',
             onTap: onTap,
           ),
           _FastNavItem(
             index: 3,
             selectedIndex: selectedIndex,
-            icon: Icons.checklist_rtl_outlined,
-            selectedIcon: Icons.checklist_rtl_rounded,
-            label: 'Actions',
+            icon: Icons.calendar_month_outlined,
+            selectedIcon: Icons.calendar_month_rounded,
+            label: 'Calendar',
             onTap: onTap,
           ),
           _FastNavItem(

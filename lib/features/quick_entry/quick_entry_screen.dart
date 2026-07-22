@@ -2607,43 +2607,13 @@ class _StartVisitView extends StatelessWidget {
         _HeroPanel(
           title: 'Start visit',
           subtitle:
-              'Tap client, tap support type, choose the visit date, then press Start Now.',
+              'Choose who, what, and when. Add extra details only if needed.',
           icon: Icons.play_arrow_rounded,
         ),
-        const SizedBox(height: 12),
-        GoogleAccountConnectionCard(scope: scope),
-        const SizedBox(height: 12),
-        _Panel(
-          title: 'Visit Date',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _InfoRow(label: 'Selected date', value: formatDate(visitDate)),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: onUseToday,
-                    icon: const Icon(Icons.today_outlined),
-                    label: const Text('Today'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onUsePreviousDay,
-                    icon: const Icon(Icons.chevron_left),
-                    label: const Text('Previous Day'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onPickDate,
-                    icon: const Icon(Icons.calendar_month_outlined),
-                    label: const Text('Pick Date'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        if (!appState.googleDriveConnectedForScope(scope)) ...[
+          const SizedBox(height: 12),
+          GoogleAccountConnectionCard(scope: scope),
+        ],
         const SizedBox(height: 12),
         if (showClientSelector || showOptionalClientTag) ...[
           _Panel(
@@ -2683,23 +2653,64 @@ class _StartVisitView extends StatelessWidget {
         ],
         _Panel(
           title: '2. Support Type',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final itemWidth = (constraints.maxWidth - 8) / 2;
+
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final type in availableTypes)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _TypeTile(
+                        type: type,
+                        selected: selectedType == type,
+                        onTap: () => onTypeSelected(type),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        _Panel(
+          title: '3. Visit Date',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final type in availableTypes) ...[
-                _TypeTile(
-                  type: type,
-                  selected: selectedType == type,
-                  onTap: () => onTypeSelected(type),
-                ),
-                if (type != availableTypes.last) const SizedBox(height: 8),
-              ],
+              _InfoRow(label: 'Selected date', value: formatDate(visitDate)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: onUseToday,
+                    icon: const Icon(Icons.today_outlined),
+                    label: const Text('Today'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onUsePreviousDay,
+                    icon: const Icon(Icons.chevron_left),
+                    label: const Text('Previous Day'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onPickDate,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: const Text('Pick Date'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
         if (showKilometres && selectedType == EntryType.homeVisit) ...[
           const SizedBox(height: 12),
           _Panel(
-            title: '3. Starting Odometer',
+            title: '4. Starting Odometer',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -2722,27 +2733,6 @@ class _StartVisitView extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onStart,
-            icon: const Icon(Icons.directions_walk_outlined),
-            label: const Text('Start Timer Without Odometer'),
-          ),
-        ],
-        if (selectedType == EntryType.homeVisit) ...[
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: onStart,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Start Timer'),
-          ),
-        ] else ...[
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: onStart,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Start Now'),
-          ),
         ],
         const SizedBox(height: 12),
         NotesStorageGate(
@@ -2754,9 +2744,25 @@ class _StartVisitView extends StatelessWidget {
             selectedNotes: selectedNotes,
             showAttendance: showAttendance,
             showAgencies: selectedType == EntryType.professionalContact,
+            collapsible: true,
             onChanged: onNoteToggle,
           ),
         ),
+        if (selectedType == EntryType.homeVisit) ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Start Visit'),
+          ),
+        ] else ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Start Now'),
+          ),
+        ],
       ],
     );
   }
@@ -2802,134 +2808,141 @@ class _ActiveVisitView extends StatelessWidget {
     final minutes = _previewMinutes(activeVisit.startedAt);
     final gross = (minutes / 60) * settings.hourlyRate;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+    return Column(
       children: [
-        _HeroPanel(
-          title: 'Active visit running',
-          subtitle: _cleanHeaderText(
-            '${activeVisit.client}\n${activeVisit.type.label}\nStarted $startedAtText',
-          ),
-          icon: Icons.timer_outlined,
-          green: true,
-        ),
-        const SizedBox(height: 12),
-        _Panel(
-          title: 'Current Progress',
-          child: Column(
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              _InfoRow(label: 'Client', value: activeVisit.client),
-              _InfoRow(label: 'Type', value: activeVisit.type.label),
-              _InfoRow(label: 'Started', value: startedAtText),
-              _InfoRow(label: 'Elapsed so far', value: elapsedText),
-              _InfoRow(label: 'Estimated earned', value: money(gross)),
-              if (showKilometres && activeVisit.type == EntryType.homeVisit)
-                _InfoRow(
-                  label: 'Starting odo',
-                  value: activeVisit.odometerStart?.toStringAsFixed(1) ?? '-',
+              _HeroPanel(
+                title: elapsedText,
+                subtitle: _cleanHeaderText(
+                  '${activeVisit.client}\n${activeVisit.type.label}\nStarted $startedAtText · ${money(gross)} estimated',
                 ),
+                icon: Icons.timer_outlined,
+                green: true,
+              ),
+              const SizedBox(height: 12),
+              if (showKilometres &&
+                  activeVisit.type == EntryType.homeVisit &&
+                  activeVisit.odometerStart == null)
+                _Panel(
+                  title: 'Starting Odometer',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: startOdometerController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [_OdometerInputFormatter()],
+                        decoration: const InputDecoration(
+                          labelText: 'Starting odometer',
+                          helperText:
+                              'Optional. Add it when you get to the car if needed.',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: onSaveStartOdometer,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save Starting Odometer'),
+                      ),
+                    ],
+                  ),
+                ),
+              if (showKilometres &&
+                  activeVisit.type == EntryType.homeVisit &&
+                  activeVisit.odometerStart == null)
+                const SizedBox(height: 12),
+              if (showKilometres && activeVisit.type == EntryType.homeVisit)
+                _Panel(
+                  title: 'Finish Odometer',
+                  child: TextField(
+                    controller: finishOdometerController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: const [_OdometerInputFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Finishing odometer',
+                      helperText: 'Fill this in when the client visit is done',
+                    ),
+                  ),
+                ),
+              if (showKilometres && activeVisit.type == EntryType.homeVisit)
+                const SizedBox(height: 12),
+              NotesStorageGate(
+                scope: scope,
+                scrollable: false,
+                padding: EdgeInsets.zero,
+                child: _VisitContextTabs(
+                  noteOptions: noteOptions,
+                  selectedNotes: selectedNotes,
+                  showAttendance: appState.isPayeMode,
+                  showAgencies:
+                      activeVisit.type == EntryType.professionalContact,
+                  onChanged: onNoteToggle,
+                  footer: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: noteController,
+                        minLines: 2,
+                        maxLines: 4,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        scrollPadding: EdgeInsets.only(
+                          bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Optional extra note',
+                          hintText:
+                              'Brief detail if the topics do not cover it',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: onSaveDraft,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save Draft Notes'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        if (showKilometres &&
-            activeVisit.type == EntryType.homeVisit &&
-            activeVisit.odometerStart == null)
-          _Panel(
-            title: 'Starting Odometer',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0E1422),
+            border: Border(top: BorderSide(color: Color(0xFF34405F))),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
               children: [
-                TextField(
-                  controller: startOdometerController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: const [_OdometerInputFormatter()],
-                  decoration: const InputDecoration(
-                    labelText: 'Starting odometer',
-                    helperText:
-                        'Optional. Add it when you get to the car if needed.',
-                  ),
+                TextButton.icon(
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Cancel'),
                 ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: onSaveStartOdometer,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Save Starting Odometer'),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    key: const ValueKey('finish-active-visit'),
+                    onPressed: onFinish,
+                    icon: const Icon(Icons.stop_rounded),
+                    label: const Text('Finish Visit & Save'),
+                  ),
                 ),
               ],
             ),
           ),
-        if (showKilometres &&
-            activeVisit.type == EntryType.homeVisit &&
-            activeVisit.odometerStart == null)
-          const SizedBox(height: 12),
-        if (showKilometres && activeVisit.type == EntryType.homeVisit)
-          _Panel(
-            title: 'Finish Odometer',
-            child: TextField(
-              controller: finishOdometerController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: const [_OdometerInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Finishing odometer',
-                helperText: 'Fill this in when the client visit is done',
-              ),
-            ),
-          ),
-        if (showKilometres && activeVisit.type == EntryType.homeVisit)
-          const SizedBox(height: 12),
-        NotesStorageGate(
-          scope: scope,
-          scrollable: false,
-          padding: EdgeInsets.zero,
-          child: _VisitContextTabs(
-            noteOptions: noteOptions,
-            selectedNotes: selectedNotes,
-            showAttendance: appState.isPayeMode,
-            showAgencies: activeVisit.type == EntryType.professionalContact,
-            onChanged: onNoteToggle,
-            footer: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: noteController,
-                  minLines: 2,
-                  maxLines: 4,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  scrollPadding: EdgeInsets.only(
-                    bottom: MediaQuery.viewInsetsOf(context).bottom + 260,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Optional extra note',
-                    hintText: 'Brief detail if the topics do not cover it',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: onSaveDraft,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Save Draft Notes'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: onFinish,
-          icon: const Icon(Icons.stop_rounded),
-          label: const Text('Finish Now & Save Entry'),
-        ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: onCancel,
-          icon: const Icon(Icons.delete_outline),
-          label: const Text('Cancel Active Visit'),
         ),
       ],
     );
@@ -3065,7 +3078,8 @@ class _TypeTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(14),
+          height: 76,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -3080,19 +3094,30 @@ class _TypeTile extends StatelessWidget {
               Icon(
                 type.icon,
                 color: selected ? const Color(0xFF4F8DF7) : Colors.white,
+                size: 22,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   type.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_circle, color: Color(0xFF31E981)),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Color(0xFF31E981),
+                    size: 18,
+                  ),
+                ),
             ],
           ),
         ),
@@ -3144,6 +3169,7 @@ class _VisitContextTabs extends StatelessWidget {
     required this.showAgencies,
     required this.showAttendance,
     required this.onChanged,
+    this.collapsible = false,
     this.footer,
   });
 
@@ -3152,70 +3178,86 @@ class _VisitContextTabs extends StatelessWidget {
   final bool showAgencies;
   final bool showAttendance;
   final void Function(String note, bool selected) onChanged;
+  final bool collapsible;
   final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
     final tabCount = showAgencies ? 2 : 1;
-
-    return _Panel(
-      title: 'Visit Context',
-      child: DefaultTabController(
-        length: tabCount,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showAttendance) ...[
-              _AttendanceChips(
-                selectedNotes: selectedNotes,
-                onChanged: onChanged,
-              ),
-              const SizedBox(height: 12),
-            ],
-            _SupportTagChips(
+    final content = DefaultTabController(
+      length: tabCount,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showAttendance) ...[
+            _AttendanceChips(
               selectedNotes: selectedNotes,
               onChanged: onChanged,
             ),
             const SizedBox(height: 12),
-            TabBar(
-              tabs: [
+          ],
+          _SupportTagChips(selectedNotes: selectedNotes, onChanged: onChanged),
+          const SizedBox(height: 12),
+          TabBar(
+            tabs: [
+              const Tab(
+                icon: Icon(Icons.topic_outlined),
+                text: 'Topics Covered',
+              ),
+              if (showAgencies)
                 const Tab(
-                  icon: Icon(Icons.topic_outlined),
-                  text: 'Topics Covered',
+                  icon: Icon(Icons.business_outlined),
+                  text: 'Agencies',
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: showAgencies ? 250 : 190,
+            child: TabBarView(
+              children: [
+                SingleChildScrollView(
+                  child: _NoteChips(
+                    notes: noteOptions,
+                    selectedNotes: selectedNotes,
+                    onChanged: onChanged,
+                  ),
                 ),
                 if (showAgencies)
-                  const Tab(
-                    icon: Icon(Icons.business_outlined),
-                    text: 'Agencies',
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: showAgencies ? 250 : 190,
-              child: TabBarView(
-                children: [
                   SingleChildScrollView(
-                    child: _NoteChips(
-                      notes: noteOptions,
+                    child: _AgencyChips(
                       selectedNotes: selectedNotes,
                       onChanged: onChanged,
                     ),
                   ),
-                  if (showAgencies)
-                    SingleChildScrollView(
-                      child: _AgencyChips(
-                        selectedNotes: selectedNotes,
-                        onChanged: onChanged,
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
-            if (footer != null) ...[const SizedBox(height: 12), footer!],
-          ],
-        ),
+          ),
+          if (footer != null) ...[const SizedBox(height: 12), footer!],
+        ],
       ),
+    );
+
+    return _Panel(
+      title: collapsible ? 'Optional Visit Context' : 'Visit Context',
+      child: collapsible
+          ? ExpansionTile(
+              key: const ValueKey('optional-visit-context'),
+              initiallyExpanded: selectedNotes.isNotEmpty,
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(top: 8),
+              title: Text(
+                selectedNotes.isEmpty
+                    ? 'Add topics, tags, or agencies'
+                    : '${selectedNotes.length} selected',
+                style: const TextStyle(
+                  color: Color(0xFFB8C7F3),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              children: [content],
+            )
+          : content,
     );
   }
 }
