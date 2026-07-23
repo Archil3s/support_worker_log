@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -702,6 +703,23 @@ class GoogleDriveService {
     }
 
     return _api.exportGoogleDocText(accessToken: accessToken, fileId: fileId);
+  }
+
+  Future<Uint8List> exportGoogleDocDocx({
+    required String accessToken,
+    required String fileId,
+  }) {
+    final cleanFileId = fileId.trim();
+    if (cleanFileId.isEmpty) {
+      throw StateError(
+        'Google Docs Word download is missing its Drive file id.',
+      );
+    }
+
+    return _api.exportGoogleDocDocx(
+      accessToken: accessToken,
+      fileId: cleanFileId,
+    );
   }
 
   bool isGoogleDocsSupportNote(EntryDriveSupportNoteMeta? meta) {

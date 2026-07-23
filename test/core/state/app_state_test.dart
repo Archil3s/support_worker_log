@@ -17,6 +17,20 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test(
+    'initial load is marked complete after saved state is restored',
+    () async {
+      final state = AppState(warmGoogleAccounts: false);
+      addTearDown(state.dispose);
+
+      expect(state.initialLoadComplete, isFalse);
+
+      await state.load();
+
+      expect(state.initialLoadComplete, isTrue);
+    },
+  );
+
   test('PAYE people deletion does not remove Work clients', () async {
     final state = AppState(warmGoogleAccounts: false);
     addTearDown(state.dispose);

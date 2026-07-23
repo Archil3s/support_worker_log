@@ -13,10 +13,10 @@ import '../../core/models/google_export_account_scope.dart';
 import '../../core/models/google_drive_file.dart';
 import '../../core/models/work_entry.dart';
 import '../../core/services/google_drive_service.dart';
+import '../../core/services/google_docs_download_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/utils/google_docs_download_utils.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
@@ -418,7 +418,12 @@ class _NotesScreenState extends State<NotesScreen> {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
 
     try {
-      await _launchDriveLink(googleDocsDownloadUri(document.file.id));
+      await _downloadGoogleDocAsWord(
+        context: context,
+        fileId: document.file.id,
+        fileName: document.file.name,
+        scope: GoogleExportAccountScope.work,
+      );
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Google Doc download started as a Word file.'),
@@ -2356,7 +2361,15 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     }
 
     try {
-      await _launchDriveLink(googleDocsDownloadUri(current.fileId));
+      final appState = context.read<AppState>();
+      await _downloadGoogleDocAsWord(
+        context: context,
+        fileId: current.fileId,
+        fileName: current.fileName,
+        scope: appState.isPayeMode
+            ? GoogleExportAccountScope.paye
+            : GoogleExportAccountScope.work,
+      );
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Google Doc download started as a Word file.'),
@@ -3684,7 +3697,14 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     }
 
     try {
-      await _launchDriveLink(googleDocsDownloadUri(current.fileId));
+      await _downloadGoogleDocAsWord(
+        context: context,
+        fileId: current.fileId,
+        fileName: current.fileName,
+        scope: appState.isPayeMode
+            ? GoogleExportAccountScope.paye
+            : GoogleExportAccountScope.work,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -4311,6 +4331,22 @@ Future<void> _launchDriveLink(Uri uri) async {
   if (!launched) {
     await launchUrl(uri);
   }
+}
+
+Future<void> _downloadGoogleDocAsWord({
+  required BuildContext context,
+  required String fileId,
+  required String fileName,
+  required GoogleExportAccountScope scope,
+}) async {
+  final bytes = await context.read<AppState>().exportGoogleDocAsWord(
+    fileId: fileId,
+    scope: scope,
+  );
+  await GoogleDocsDownloadService.saveWordDocument(
+    fileName: fileName,
+    bytes: bytes,
+  );
 }
 
 bool _isDownloadableGoogleDoc(EntryDriveSupportNoteMeta meta) {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -98,6 +99,7 @@ class AppState extends ChangeNotifier {
   bool _drivePersonalSyncQueued = false;
   bool _cloudSyncReady = false;
   bool _appUnlocked = false;
+  bool _initialLoadComplete = false;
   String? _cloudSyncError;
   final bool _warmGoogleAccounts;
   Future<void> _localSaveQueue = Future<void>.value();
@@ -133,6 +135,7 @@ class AppState extends ChangeNotifier {
 
   bool get isSignedIn => _cloudStorageService.isSignedIn;
   bool get appUnlocked => _appUnlocked;
+  bool get initialLoadComplete => _initialLoadComplete;
   bool get cloudSyncReady => _cloudSyncReady;
   String? get cloudSyncError => _cloudSyncError;
   DateTime? get lastLocalSavedAt => _lastLocalSavedAt;
@@ -250,30 +253,37 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    final localData = await _storageService.load();
-    _replaceInMemory(localData);
-    await _migrateLocalSupportNoteMetadata();
-    _applyLaunchAppModeOverride();
-
     try {
-      await _cloudStorageService.signOutAnonymousUserIfNeeded();
-      if (_cloudStorageService.isSignedIn) {
-        await _cloudStorageService.signOutIfSessionExpired();
-        await _appLockService.clearRememberedUnlock();
-        _appUnlocked = false;
-        unawaited(_syncLocalAndCloudSafely());
-      } else {
+      final localData = await _storageService.load();
+      _replaceInMemory(localData);
+      await _migrateLocalSupportNoteMetadata();
+      _applyLaunchAppModeOverride();
+
+      try {
+        await _cloudStorageService.signOutAnonymousUserIfNeeded();
+        if (_cloudStorageService.isSignedIn) {
+          await _cloudStorageService.signOutIfSessionExpired();
+          await _appLockService.clearRememberedUnlock();
+          _appUnlocked = false;
+          unawaited(_syncLocalAndCloudSafely());
+        } else {
+          _cloudSyncReady = false;
+          _appUnlocked = false;
+          _cloudSyncError = null;
+          await _appLockService.clearRememberedUnlock();
+        }
+      } catch (error) {
         _cloudSyncReady = false;
-        _appUnlocked = false;
-        _cloudSyncError = null;
-        await _appLockService.clearRememberedUnlock();
+        _cloudSyncError = error.toString();
       }
     } catch (error) {
       _cloudSyncReady = false;
       _cloudSyncError = error.toString();
+    } finally {
+      _initialLoadComplete = true;
+      notifyListeners();
     }
 
-    notifyListeners();
     if (_warmGoogleAccounts) {
       unawaited(warmGoogleExportAccount(_googleScopeForMode(_appMode)));
     }
@@ -413,6 +423,22 @@ class AppState extends ChangeNotifier {
     return connectGoogleDrive(
       scope: GoogleExportAccountScope.paye,
       forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<Uint8List> exportGoogleDocAsWord({
+    required String fileId,
+    GoogleExportAccountScope scope = GoogleExportAccountScope.work,
+  }) async {
+    final cleanFileId = fileId.trim();
+    if (cleanFileId.isEmpty) {
+      throw StateError('The Google Doc is missing its Drive file id.');
+    }
+
+    final accessToken = await requireGoogleDriveAccessToken(scope: scope);
+    return _googleDriveService.exportGoogleDocDocx(
+      accessToken: accessToken,
+      fileId: cleanFileId,
     );
   }
 

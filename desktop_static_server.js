@@ -5,7 +5,7 @@ const path = require('path');
 
 const PORT = Number(process.env.SUPPORT_WORKER_WEB_PORT || 51243);
 const ROOT = path.resolve(__dirname, 'build', 'web');
-const SERVER_VERSION = '2026-06-02-drive-proxy-v1';
+const SERVER_VERSION = '2026-07-23-drive-docx-download-v2';
 
 const TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -314,6 +314,62 @@ function googleDriveTextRequest({ accessToken, method, path: requestPath }) {
           }
 
           resolve(responseBody);
+        });
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(
+        new Error(
+          error && error.message
+            ? `Could not reach Google Drive: ${error.message}`
+            : 'Could not reach Google Drive.',
+        ),
+      );
+    });
+
+    request.end();
+  });
+}
+
+function googleDriveBinaryRequest({ accessToken, method, path: requestPath }) {
+  return new Promise((resolve, reject) => {
+    if (!accessToken) {
+      reject(new Error('Missing Google access token.'));
+      return;
+    }
+
+    const request = https.request(
+      {
+        hostname: 'www.googleapis.com',
+        path: requestPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      (response) => {
+        const chunks = [];
+
+        response.on('data', (chunk) => {
+          chunks.push(Buffer.from(chunk));
+        });
+
+        response.on('end', () => {
+          const status = response.statusCode || 0;
+          const bytes = Buffer.concat(chunks);
+
+          if (status < 200 || status >= 300) {
+            reject(
+              new Error(
+                bytes.toString('utf8').trim() ||
+                  `Google Drive returned HTTP ${status}.`,
+              ),
+            );
+            return;
+          }
+
+          resolve(bytes);
         });
       },
     );
@@ -707,6 +763,52 @@ async function exportGoogleDocText(req, res) {
   }
 }
 
+async function exportGoogleDocDocx(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+
+    if (!fileId) {
+      send(res, 400, 'Missing Drive file id.');
+      return;
+    }
+
+    const mimeType =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const params = new URLSearchParams({ mimeType });
+    const bytes = await googleDriveBinaryRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'GET',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}/export?${params.toString()}`,
+    });
+
+    send(
+      res,
+      200,
+      JSON.stringify({ bytesBase64: bytes.toString('base64') }),
+      'application/json; charset=utf-8',
+    );
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message
+        ? error.message
+        : 'Google Docs Word download failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -859,6 +961,14 @@ function handleRequest(req, res) {
     '/__google_drive/export_google_doc_text'
   ) {
     exportGoogleDocText(req, res);
+    return;
+  }
+
+  if (
+    (req.url || '').split('?')[0] ===
+    '/__google_drive/export_google_doc_docx'
+  ) {
+    exportGoogleDocDocx(req, res);
     return;
   }
 

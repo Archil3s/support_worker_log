@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/services/app_lock_service.dart';
 import '../../core/services/biometric_unlock_service.dart';
 import '../../core/state/app_state.dart';
+import '../../shared/widgets/app_boot_logo.dart';
 import '../shell/main_shell.dart';
 
 class AuthGate extends StatelessWidget {
@@ -15,6 +16,10 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
+    if (!appState.initialLoadComplete) {
+      return const _SessionRestoreScreen();
+    }
+
     if (appState.isSignedIn) {
       if (!appState.appUnlocked) return const AppLockScreen();
 
@@ -22,6 +27,48 @@ class AuthGate extends StatelessWidget {
     }
 
     return const AuthScreen();
+  }
+}
+
+class _SessionRestoreScreen extends StatelessWidget {
+  const _SessionRestoreScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      key: Key('session-restore-screen'),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppBootLogo(size: 60, borderRadius: 18, fontSize: 25),
+                SizedBox(height: 18),
+                Text(
+                  'Restoring your saved session',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'You will stay signed in. Face ID or your app password is '
+                  'all you need next.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF8396C7), height: 1.4),
+                ),
+                SizedBox(height: 18),
+                SizedBox.square(
+                  dimension: 24,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1022,7 +1069,8 @@ class _LoginSafetyNote extends StatelessWidget {
         SizedBox(width: 7),
         Expanded(
           child: Text(
-            'Google signs into the app and connects Drive. Email keeps Drive separate until you connect it.',
+            'You stay signed in on this device. Next time, Face ID or your '
+            'app password opens the app without another full login.',
             style: TextStyle(
               color: Color(0xFF8396C7),
               fontSize: 12,

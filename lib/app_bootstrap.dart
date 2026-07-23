@@ -29,6 +29,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
     );
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      await FirebaseAuth.instance.authStateChanges().first.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => FirebaseAuth.instance.currentUser,
+      );
     }
   }
 

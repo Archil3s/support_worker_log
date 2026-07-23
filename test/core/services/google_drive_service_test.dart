@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
@@ -1604,6 +1605,19 @@ void main() {
     expect(text, 'Edited Google Doc note');
     expect(api.exportedFileIds, ['google-doc-id']);
   });
+
+  test('exportGoogleDocDocx downloads authenticated Word bytes', () async {
+    final api = _FakeGoogleDriveApi(exportedDocxBytes: const [80, 75, 3, 4]);
+    final service = GoogleDriveService(api: api);
+
+    final bytes = await service.exportGoogleDocDocx(
+      accessToken: 'token',
+      fileId: 'google-doc-id',
+    );
+
+    expect(bytes, [80, 75, 3, 4]);
+    expect(api.exportedDocxFileIds, ['google-doc-id']);
+  });
 }
 
 const _docxMimeType =
@@ -1783,11 +1797,13 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     this.children = const [],
     this.childrenByParent = const {},
     this.exportedText = '',
+    this.exportedDocxBytes = const [],
   });
 
   final List<GoogleDriveFile> children;
   final Map<String, List<GoogleDriveFile>> childrenByParent;
   final String exportedText;
+  final List<int> exportedDocxBytes;
   final uploads = <_Upload>[];
   final updates = <_Update>[];
   final movedFiles = <_Move>[];
@@ -1795,6 +1811,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final updatedFileIds = <String>[];
   final deletedFileIds = <String>[];
   final exportedFileIds = <String>[];
+  final exportedDocxFileIds = <String>[];
 
   @override
   Future<GoogleDriveFile> createFolder({
@@ -1893,6 +1910,15 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   }) async {
     exportedFileIds.add(fileId);
     return exportedText;
+  }
+
+  @override
+  Future<Uint8List> exportGoogleDocDocx({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    exportedDocxFileIds.add(fileId);
+    return Uint8List.fromList(exportedDocxBytes);
   }
 }
 

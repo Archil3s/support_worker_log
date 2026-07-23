@@ -111,7 +111,9 @@ class GoogleDriveApiPlatform {
     final client = HttpClient();
 
     try {
-      final request = await client.getUrl(_driveExportUri(fileId));
+      final request = await client.getUrl(
+        _driveExportUri(fileId, mimeType: 'text/plain'),
+      );
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer $accessToken',
@@ -132,6 +134,50 @@ class GoogleDriveApiPlatform {
     } on SocketException catch (error) {
       throw StateError(
         'Google Docs text export failed: could not reach Google Drive. '
+        '${error.message}',
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<Uint8List> exportGoogleDocDocx({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    const docxMimeType =
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    final client = HttpClient();
+
+    try {
+      final request = await client.getUrl(
+        _driveExportUri(fileId, mimeType: docxMimeType),
+      );
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $accessToken',
+      );
+
+      final response = await request.close();
+      final builder = BytesBuilder();
+      await for (final chunk in response) {
+        builder.add(chunk);
+      }
+      final bytes = builder.takeBytes();
+      final status = response.statusCode;
+
+      if (status < 200 || status >= 300) {
+        final raw = utf8.decode(bytes, allowMalformed: true);
+        throw StateError(
+          _googleApiError(raw) ??
+              'Google Docs Word download failed with HTTP $status.',
+        );
+      }
+
+      return bytes;
+    } on SocketException catch (error) {
+      throw StateError(
+        'Google Docs Word download failed: could not reach Google Drive. '
         '${error.message}',
       );
     } finally {
@@ -203,9 +249,9 @@ class GoogleDriveApiPlatform {
     });
   }
 
-  Uri _driveExportUri(String fileId) {
+  Uri _driveExportUri(String fileId, {required String mimeType}) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
-      'mimeType': 'text/plain',
+      'mimeType': mimeType,
     });
   }
 

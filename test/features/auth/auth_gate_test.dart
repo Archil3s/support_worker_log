@@ -5,6 +5,24 @@ import 'package:support_worker_log/core/state/app_state.dart';
 import 'package:support_worker_log/features/auth/auth_gate.dart';
 
 void main() {
+  testWidgets('auth gate waits for saved session before showing login', (
+    tester,
+  ) async {
+    final appState = AppState(warmGoogleAccounts: false);
+    addTearDown(appState.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: appState,
+        child: const MaterialApp(home: AuthGate()),
+      ),
+    );
+
+    expect(find.byKey(const Key('session-restore-screen')), findsOneWidget);
+    expect(find.text('Restoring your saved session'), findsOneWidget);
+    expect(find.text('Welcome back'), findsNothing);
+  });
+
   testWidgets('login presents simple Google and email choices', (tester) async {
     final appState = AppState(warmGoogleAccounts: false);
     addTearDown(appState.dispose);
@@ -28,6 +46,10 @@ void main() {
     expect(find.text('or use email'), findsOneWidget);
     expect(find.text('Email address'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
+    expect(
+      find.textContaining('Face ID or your app password opens the app'),
+      findsOneWidget,
+    );
     expect(find.text('App account'), findsNothing);
     expect(find.text('Google Drive'), findsNothing);
     expect(tester.takeException(), isNull);

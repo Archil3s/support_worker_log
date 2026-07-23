@@ -242,7 +242,7 @@ class GoogleDriveApiPlatform {
     }
 
     final response = await _request(
-      _driveExportUri(fileId).toString(),
+      _driveExportUri(fileId, mimeType: 'text/plain').toString(),
       method: 'GET',
       requestHeaders: {'Authorization': 'Bearer $accessToken'},
       failureMessage: 'Google Docs text export failed',
@@ -252,6 +252,40 @@ class GoogleDriveApiPlatform {
       response,
       failureMessage: 'Google Docs text export failed',
     ).trim();
+  }
+
+  Future<Uint8List> exportGoogleDocDocx({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    const docxMimeType =
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/export_google_doc_docx',
+        {'accessToken': accessToken, 'fileId': fileId},
+        failureMessage: 'Google Docs Word download failed',
+      );
+      final encoded = decoded['bytesBase64'] as String? ?? '';
+      if (encoded.isEmpty) {
+        throw StateError('Google Docs Word download returned an empty file.');
+      }
+      return Uint8List.fromList(base64Decode(encoded));
+    }
+
+    final response = await _request(
+      _driveExportUri(fileId, mimeType: docxMimeType).toString(),
+      method: 'GET',
+      requestHeaders: {'Authorization': 'Bearer $accessToken'},
+      failureMessage: 'Google Docs Word download failed',
+      responseType: 'arraybuffer',
+    );
+
+    return _decodeBinaryResponse(
+      response,
+      failureMessage: 'Google Docs Word download failed',
+    );
   }
 
   Future<List<GoogleDriveFile>> listChildren({
@@ -340,9 +374,9 @@ class GoogleDriveApiPlatform {
     });
   }
 
-  Uri _driveExportUri(String fileId) {
+  Uri _driveExportUri(String fileId, {required String mimeType}) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId/export', {
-      'mimeType': 'text/plain',
+      'mimeType': mimeType,
     });
   }
 
@@ -388,11 +422,15 @@ class GoogleDriveApiPlatform {
     required Map<String, String> requestHeaders,
     required String failureMessage,
     Object? sendData,
+    String? responseType,
   }) async {
     final completer = Completer<html.HttpRequest>();
     final request = html.HttpRequest()
       ..open(method, url)
       ..timeout = 15000;
+    if (responseType != null) {
+      request.responseType = responseType;
+    }
 
     for (final entry in requestHeaders.entries) {
       request.setRequestHeader(entry.key, entry.value);
@@ -458,6 +496,33 @@ class GoogleDriveApiPlatform {
     }
 
     return raw;
+  }
+
+  Uint8List _decodeBinaryResponse(
+    html.HttpRequest response, {
+    required String failureMessage,
+  }) {
+    final value = response.response;
+    final bytes = switch (value) {
+      ByteBuffer buffer => buffer.asUint8List(),
+      Uint8List typed => typed,
+      List<int> list => Uint8List.fromList(list),
+      _ => Uint8List(0),
+    };
+    final status = response.status ?? 0;
+
+    if (status < 200 || status >= 300) {
+      final raw = utf8.decode(bytes, allowMalformed: true);
+      throw StateError(
+        _googleApiError(raw) ?? '$failureMessage with HTTP $status.',
+      );
+    }
+
+    if (bytes.isEmpty) {
+      throw StateError('$failureMessage returned an empty file.');
+    }
+
+    return bytes;
   }
 
   GoogleDriveFile? _fileFromJson(Map<String, dynamic> json) {
