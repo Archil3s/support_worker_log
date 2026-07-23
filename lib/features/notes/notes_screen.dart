@@ -21,8 +21,6 @@ import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
 import '../../shared/widgets/notes_storage_gate.dart';
 import '../../shared/widgets/section_card.dart';
-import '../../shared/widgets/stat_card.dart';
-import '../../shared/widgets/stat_grid.dart';
 import '../../shared/widgets/support_note_breakdown_text.dart';
 import '../../shared/widgets/web_spacing.dart';
 
@@ -643,33 +641,113 @@ class _NotesListTab extends StatelessWidget {
       ).where(_isHomeVisitNoteEntry),
       appState: appState,
     );
+    final allNoteEntries =
+        appState.entries.where(_isHomeVisitNoteEntry).toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    final statusCounts = <EntrySupportNoteStatus, int>{
+      for (final status in EntrySupportNoteStatus.values) status: 0,
+    };
+
+    for (final entry in entries) {
+      final status = _cachedStatusForEntry(appState, entry);
+      statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+    }
+
+    final visibleEntries = entries.where((entry) {
+      final selectedStatus = statusFilter;
+      if (selectedStatus == null) return true;
+      return _cachedStatusForEntry(appState, entry) == selectedStatus;
+    }).toList();
+    final needsAttentionEntries = visibleEntries.where((entry) {
+      final status = _cachedStatusForEntry(appState, entry);
+      return status == EntrySupportNoteStatus.incomplete ||
+          status == EntrySupportNoteStatus.inProgress;
+    }).toList();
+    final readyEntries = visibleEntries.where((entry) {
+      return _cachedStatusForEntry(appState, entry) ==
+          EntrySupportNoteStatus.finished;
+    }).toList();
+    final submittedEntries = visibleEntries.where((entry) {
+      return _cachedStatusForEntry(appState, entry) ==
+          EntrySupportNoteStatus.submitted;
+    }).toList();
+    final workflowBusy =
+        syncingCurrentPeriodLivingDocs ||
+        syncingReadyToSubmitDocs ||
+        preparingSubmissionDocs ||
+        loadingLivingDocs;
 
     return ListView(
       padding: webPagePadding(context),
       children: [
-        _NotesOverview(entries: entries),
+        _NotesOverview(entries: allNoteEntries),
         const SizedBox(height: 12),
         SectionCard(
-          title: payeMode ? 'PAYE Notes' : 'Local Notes',
+          title: payeMode ? 'PAYE notes workspace' : 'Pay period workspace',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              FilledButton.icon(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13294D),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      payeMode
+                          ? Icons.groups_2_outlined
+                          : Icons.date_range_outlined,
+                      color: const Color(0xFF4F8DF7),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          payeMode
+                              ? 'Manage saved PAYE notes'
+                              : 'Choose the period you are preparing',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          payeMode
+                              ? 'Save in the app first, then create or update the Google Doc.'
+                              : 'Counts and document actions below apply only to the selected fortnight.',
+                          style: const TextStyle(
+                            color: Color(0xFF8396C7),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
                 onPressed: onChooseFolder,
                 icon: const Icon(Icons.folder_open_outlined),
                 label: Text(
-                  payeMode
-                      ? 'Use Default PAYE Notes Folder'
-                      : 'Use Default MR NOTES FOLDER',
+                  payeMode ? 'PAYE notes folder' : 'Local notes folder',
                 ),
               ),
               if (!payeMode) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: selectedPayPeriodKey,
                   decoration: const InputDecoration(
-                    labelText: 'Pay period for notes',
+                    labelText: 'Selected pay period',
                     prefixIcon: Icon(Icons.date_range_outlined),
                   ),
                   items: [
@@ -686,7 +764,7 @@ class _NotesListTab extends StatelessWidget {
                       ? null
                       : onPayPeriodChanged,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 _SubmissionPrepPanel(
                   summary: submissionSummary,
                   preparing: preparingSubmissionDocs,
@@ -696,57 +774,25 @@ class _NotesListTab extends StatelessWidget {
                       loadingLivingDocs,
                   onPrepare: onPrepareSubmissionDocs,
                 ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: syncingCurrentPeriodLivingDocs || loadingLivingDocs
-                      ? null
-                      : onSyncCurrentPayPeriodLivingDocuments,
-                  icon: syncingCurrentPeriodLivingDocs
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.date_range_outlined),
-                  label: Text(
-                    syncingCurrentPeriodLivingDocs
-                        ? 'Syncing Master Living Doc'
-                        : 'Sync Master Living Doc',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: syncingReadyToSubmitDocs || loadingLivingDocs
-                      ? null
-                      : onSyncReadyToSubmitDocument,
-                  icon: syncingReadyToSubmitDocs
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.fact_check_outlined),
-                  label: Text(
-                    syncingReadyToSubmitDocs
-                        ? 'Syncing Ready To Submit Doc'
-                        : 'Sync Ready To Submit Doc',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: loadingLivingDocs ? null : onLoadLivingDocuments,
-                  icon: loadingLivingDocs
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.tab_outlined),
-                  label: Text(
-                    loadingLivingDocs
-                        ? 'Loading Master Living Doc'
-                        : 'Load Master Living Doc',
-                  ),
+                const SizedBox(height: 12),
+                _PayPeriodActionGrid(
+                  workflowBusy: workflowBusy,
+                  syncingMaster: syncingCurrentPeriodLivingDocs,
+                  syncingReady: syncingReadyToSubmitDocs,
+                  loadingMaster: loadingLivingDocs,
+                  loadingUnsubmitted: loadingUnsubmittedNotes,
+                  onSyncMaster: onSyncCurrentPayPeriodLivingDocuments,
+                  onSyncReady: onSyncReadyToSubmitDocument,
+                  onLoadMaster: onLoadLivingDocuments,
+                  onLoadUnsubmitted: onLoadUnsubmittedNotes,
                 ),
                 if (livingDocs.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Loaded documents',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 8),
                   for (final document in livingDocs) ...[
                     _LivingDocumentTile(
                       document: document,
@@ -756,14 +802,6 @@ class _NotesListTab extends StatelessWidget {
                   ],
                 ],
               ],
-              const SizedBox(height: 10),
-              Text(
-                payeMode
-                    ? 'Create, test, save, open, and remove PAYE Google Docs notes from saved PAYE entries.'
-                    : 'Load and update master and ready-to-submit Google Docs with invoice-period tabs for all people and interactions.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
-              ),
             ],
           ),
         ),
@@ -771,6 +809,7 @@ class _NotesListTab extends StatelessWidget {
         SectionCard(
           title: 'Find Notes',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
                 controller: searchController,
@@ -783,36 +822,23 @@ class _NotesListTab extends StatelessWidget {
                       ? null
                       : IconButton(
                           onPressed: onClearSearch,
+                          tooltip: 'Clear search',
                           icon: const Icon(Icons.clear),
                         ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: loadingUnsubmittedNotes
-                    ? null
-                    : onLoadUnsubmittedNotes,
-                icon: loadingUnsubmittedNotes
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.pending_actions_outlined),
-                label: Text(
-                  loadingUnsubmittedNotes
-                      ? 'Loading Home Visits'
-                      : 'Load Home Visits Not Submitted',
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
                 isExpanded: true,
                 initialValue: clientFilter,
-                decoration: const InputDecoration(labelText: 'Client filter'),
+                decoration: const InputDecoration(
+                  labelText: 'Person',
+                  prefixIcon: Icon(Icons.person_search_outlined),
+                ),
                 items: [
                   const DropdownMenuItem<String?>(
                     value: null,
-                    child: Text('All clients'),
+                    child: Text('All people'),
                   ),
                   for (final client in clients)
                     DropdownMenuItem<String?>(
@@ -823,38 +849,298 @@ class _NotesListTab extends StatelessWidget {
                 onChanged: onClientFilterChanged,
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<EntrySupportNoteStatus?>(
-                initialValue: statusFilter,
-                decoration: const InputDecoration(labelText: 'Status filter'),
-                items: [
-                  const DropdownMenuItem<EntrySupportNoteStatus?>(
-                    value: null,
-                    child: Text('All statuses'),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Status',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    selected: statusFilter == null,
+                    label: Text('All ${entries.length}'),
+                    onSelected: (_) => onStatusFilterChanged(null),
                   ),
-                  for (final item in EntrySupportNoteStatus.values)
-                    DropdownMenuItem<EntrySupportNoteStatus?>(
-                      value: item,
-                      child: Text(item.label),
+                  for (final status in EntrySupportNoteStatus.values)
+                    ChoiceChip(
+                      selected: statusFilter == status,
+                      label: Text('${status.label} ${statusCounts[status]}'),
+                      selectedColor: _statusColor(
+                        status,
+                      ).withValues(alpha: 0.24),
+                      side: BorderSide(
+                        color: statusFilter == status
+                            ? _statusColor(status)
+                            : const Color(0xFF34405F),
+                      ),
+                      onSelected: (_) => onStatusFilterChanged(status),
                     ),
                 ],
-                onChanged: onStatusFilterChanged,
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        if (entries.isEmpty)
-          const SectionCard(
-            title: 'Notes',
+        const SizedBox(height: 16),
+        _NotesResultsHeader(
+          visibleCount: visibleEntries.length,
+          totalCount: allNoteEntries.length,
+          filtered:
+              search.trim().isNotEmpty ||
+              clientFilter != null ||
+              statusFilter != null,
+        ),
+        const SizedBox(height: 10),
+        if (visibleEntries.isEmpty)
+          SectionCard(
+            title: allNoteEntries.isEmpty ? 'No notes yet' : 'No matches',
             child: EmptyState(
-              message: 'No home visits available for notes yet.',
+              message: allNoteEntries.isEmpty
+                  ? 'Home-visit notes will appear here after a visit is saved.'
+                  : 'Try clearing the search or selecting a different status.',
             ),
           )
-        else
-          for (final entry in entries) ...[
-            _NoteEntryCard(entry: entry, statusFilter: statusFilter),
-            const SizedBox(height: 12),
+        else ...[
+          if (needsAttentionEntries.isNotEmpty)
+            _NotesStatusGroup(
+              title: 'Needs attention',
+              subtitle: 'Incomplete or currently being written',
+              icon: Icons.edit_note_outlined,
+              color: const Color(0xFFFFC857),
+              entries: needsAttentionEntries,
+            ),
+          if (readyEntries.isNotEmpty) ...[
+            if (needsAttentionEntries.isNotEmpty) const SizedBox(height: 16),
+            _NotesStatusGroup(
+              title: 'Ready to submit',
+              subtitle: 'Finished notes ready for the next document step',
+              icon: Icons.task_alt_outlined,
+              color: _statusColor(EntrySupportNoteStatus.finished),
+              entries: readyEntries,
+            ),
           ],
+          if (submittedEntries.isNotEmpty) ...[
+            if (needsAttentionEntries.isNotEmpty || readyEntries.isNotEmpty)
+              const SizedBox(height: 16),
+            _NotesStatusGroup(
+              title: 'Submitted',
+              subtitle: 'Completed notes already marked as submitted',
+              icon: Icons.cloud_done_outlined,
+              color: _statusColor(EntrySupportNoteStatus.submitted),
+              entries: submittedEntries,
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+EntrySupportNoteStatus _cachedStatusForEntry(
+  AppState appState,
+  WorkEntry entry,
+) {
+  return _preferredStatus(
+    appState.supportNoteMetaFor(entry.id)?.status,
+    appState.driveSupportNoteMetaFor(entry.id)?.status,
+  );
+}
+
+class _PayPeriodActionGrid extends StatelessWidget {
+  const _PayPeriodActionGrid({
+    required this.workflowBusy,
+    required this.syncingMaster,
+    required this.syncingReady,
+    required this.loadingMaster,
+    required this.loadingUnsubmitted,
+    required this.onSyncMaster,
+    required this.onSyncReady,
+    required this.onLoadMaster,
+    required this.onLoadUnsubmitted,
+  });
+
+  final bool workflowBusy;
+  final bool syncingMaster;
+  final bool syncingReady;
+  final bool loadingMaster;
+  final bool loadingUnsubmitted;
+  final VoidCallback onSyncMaster;
+  final VoidCallback onSyncReady;
+  final VoidCallback onLoadMaster;
+  final VoidCallback onLoadUnsubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 560;
+        final width = twoColumns
+            ? (constraints.maxWidth - 10) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            SizedBox(
+              width: width,
+              child: FilledButton.tonalIcon(
+                onPressed: workflowBusy ? null : onSyncMaster,
+                icon: syncingMaster
+                    ? const _SmallProgressIndicator()
+                    : const Icon(Icons.sync_outlined),
+                label: Text(syncingMaster ? 'Syncing master' : 'Sync master'),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: FilledButton.tonalIcon(
+                onPressed: workflowBusy ? null : onSyncReady,
+                icon: syncingReady
+                    ? const _SmallProgressIndicator()
+                    : const Icon(Icons.fact_check_outlined),
+                label: Text(syncingReady ? 'Syncing ready' : 'Sync ready'),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: OutlinedButton.icon(
+                onPressed: workflowBusy ? null : onLoadMaster,
+                icon: loadingMaster
+                    ? const _SmallProgressIndicator()
+                    : const Icon(Icons.tab_outlined),
+                label: Text(loadingMaster ? 'Loading master' : 'Load master'),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: OutlinedButton.icon(
+                onPressed: loadingUnsubmitted ? null : onLoadUnsubmitted,
+                icon: loadingUnsubmitted
+                    ? const _SmallProgressIndicator()
+                    : const Icon(Icons.pending_actions_outlined),
+                label: Text(
+                  loadingUnsubmitted ? 'Loading notes' : 'Not submitted',
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SmallProgressIndicator extends StatelessWidget {
+  const _SmallProgressIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.square(
+      dimension: 18,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    );
+  }
+}
+
+class _NotesResultsHeader extends StatelessWidget {
+  const _NotesResultsHeader({
+    required this.visibleCount,
+    required this.totalCount,
+    required this.filtered,
+  });
+
+  final int visibleCount;
+  final int totalCount;
+  final bool filtered;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Text(
+            'Your notes',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+        ),
+        _CountPill(
+          label: filtered
+              ? '$visibleCount of $totalCount'
+              : '$totalCount total',
+        ),
+      ],
+    );
+  }
+}
+
+class _NotesStatusGroup extends StatelessWidget {
+  const _NotesStatusGroup({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.entries,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final List<WorkEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _CountPill(label: '${entries.length}'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (final entry in entries) ...[
+          _NoteEntryCard(entry: entry, statusFilter: null),
+          const SizedBox(height: 10),
+        ],
       ],
     );
   }
@@ -1296,33 +1582,124 @@ class _NotesOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final todayEntries = entries.where((entry) {
-      return entry.date.year == today.year &&
-          entry.date.month == today.month &&
-          entry.date.day == today.day;
-    }).length;
-    final missingNotes = entries
-        .where((entry) => entry.supportNoteBreakdown.trim().isEmpty)
-        .length;
-    final openActions = entries.fold<int>(
-      0,
-      (count, entry) =>
-          count + entry.nextActions.where((item) => !item.isCompleted).length,
-    );
-    final calendarGaps = entries
-        .where((entry) => !entry.googleCalendarEntered)
-        .length;
+    final appState = context.watch<AppState>();
+    final counts = <EntrySupportNoteStatus, int>{
+      for (final status in EntrySupportNoteStatus.values) status: 0,
+    };
 
-    return SectionCard(
-      title: 'Notes Overview',
-      child: StatGrid(
-        cards: [
-          StatCard(title: 'Today', value: '$todayEntries'),
-          StatCard(title: 'Missing', value: '$missingNotes'),
-          StatCard(title: 'Actions', value: '$openActions'),
-          StatCard(title: 'Calendar', value: '$calendarGaps'),
+    for (final entry in entries) {
+      final status = _cachedStatusForEntry(appState, entry);
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+
+    final needsAttention =
+        (counts[EntrySupportNoteStatus.incomplete] ?? 0) +
+        (counts[EntrySupportNoteStatus.inProgress] ?? 0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF172A4D), Color(0xFF101827)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF2E4C7E)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4F8DF7),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.note_alt_outlined, color: Colors.white),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Notes workspace',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Find, finish, and prepare support notes.',
+                      style: TextStyle(color: Color(0xFFA9B9DD), height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _NotesOverviewMetric(
+                label: 'All notes',
+                value: entries.length,
+                color: const Color(0xFF8EA7FF),
+              ),
+              _NotesOverviewMetric(
+                label: 'Needs attention',
+                value: needsAttention,
+                color: const Color(0xFFFFC857),
+              ),
+              _NotesOverviewMetric(
+                label: 'Ready',
+                value: counts[EntrySupportNoteStatus.finished] ?? 0,
+                color: _statusColor(EntrySupportNoteStatus.finished),
+              ),
+              _NotesOverviewMetric(
+                label: 'Submitted',
+                value: counts[EntrySupportNoteStatus.submitted] ?? 0,
+                color: _statusColor(EntrySupportNoteStatus.submitted),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _NotesOverviewMetric extends StatelessWidget {
+  const _NotesOverviewMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.38)),
+      ),
+      child: Text(
+        '$value $label',
+        style: TextStyle(color: color, fontWeight: FontWeight.w900),
       ),
     );
   }
@@ -2015,125 +2392,313 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
       widget.entry,
       fallback: fallbackName,
     );
+    final notePreview = widget.entry.supportNoteBreakdown.trim().replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+    final hasDetails =
+        notePreview.isNotEmpty ||
+        widget.entry.nextActions.isNotEmpty ||
+        hasLocal ||
+        driveMeta?.fileName.isNotEmpty == true;
 
     return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor: _statusColor(status).withValues(alpha: 0.18),
-                child: Icon(
-                  Icons.note_alt_outlined,
-                  color: _statusColor(status),
-                ),
-              ),
-              title: Text(
-                _noteTitleForEntry(
-                  entry: widget.entry,
-                  status: status,
-                  fallbackName: fallbackName,
-                ),
-              ),
-              subtitle: Text(
-                '$displayName | ${widget.entry.type.label} | ${widget.entry.baseMinutes} min | ${widget.entry.hours.toStringAsFixed(2)}h',
-              ),
-              trailing: _StatusPill(status: status),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _NoteFileChip(
-                  icon: widget.entry.importantText
-                      ? Icons.sell
-                      : Icons.sell_outlined,
-                  label: widget.entry.importantText
-                      ? 'Important'
-                      : 'Mark important',
-                  ready: widget.entry.importantText,
-                  onPressed: _toggleImportant,
-                ),
-                _NoteFileChip(
-                  icon: Icons.folder_outlined,
-                  label: hasLocal ? 'Local file' : 'No local file',
-                  ready: hasLocal,
-                  onPressed: hasLocal ? _openLocalFile : null,
-                ),
-                _NoteFileChip(
-                  icon: Icons.cloud_done_outlined,
-                  label: hasDriveNote ? 'Google Drive' : 'No Drive file',
-                  ready: hasDriveNote,
-                  onPressed: hasDriveNote ? _openDriveFile : null,
-                ),
-              ],
-            ),
-            if (hasLocal || driveMeta?.fileName.isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              SelectableText(
-                [
-                  if (hasLocal) 'Local: ${meta!.fileName}',
-                  if (driveMeta?.fileName.isNotEmpty == true)
-                    'Google Drive: ${driveMeta!.fileName}',
-                ].join('\n'),
-                style: const TextStyle(
-                  color: Color(0xFF8396C7),
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-            ],
-            if (widget.entry.supportNoteBreakdown.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              SupportNoteBreakdownText(
-                text: widget.entry.supportNoteBreakdown.trim(),
-              ),
-            ],
-            if (widget.entry.nextActions.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              const Text(
-                'Tracked next actions',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 6),
-              for (final action in widget.entry.nextActions)
-                Text(
-                  action.completedAt == null
-                      ? '- ${action.text}'
-                      : '- ${action.text} (completed ${_dateTimeText(context, action.completedAt!)})',
-                  style: const TextStyle(height: 1.35),
-                ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                TextButton.icon(
-                  onPressed: _openSheet,
-                  icon: const Icon(Icons.edit_note_outlined),
-                  label: Text(
-                    meta == null && driveMeta == null
-                        ? 'Create Note'
-                        : 'Open Note',
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _statusColor(status).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.note_alt_outlined,
+                    color: _statusColor(status),
+                    size: 22,
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _deleteEntry,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFFFF6B6B),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${formatDate(widget.entry.date)} | ${widget.entry.type.label} | ${widget.entry.baseMinutes} min',
+                        style: const TextStyle(
+                          color: Color(0xFF8396C7),
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                _StatusPill(status: status),
               ],
             ),
+            if (notePreview.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                notePreview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Color(0xFFB8C4E2), height: 1.4),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                const _NoteStorageBadge(
+                  icon: Icons.save_outlined,
+                  label: 'Saved in app',
+                  color: Color(0xFF31E981),
+                ),
+                if (hasLocal)
+                  const _NoteStorageBadge(
+                    icon: Icons.folder_outlined,
+                    label: 'Local file',
+                    color: Color(0xFF8EA7FF),
+                  ),
+                _NoteStorageBadge(
+                  icon: hasDriveNote
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
+                  label: hasDriveNote ? 'Drive linked' : 'Drive not linked',
+                  color: hasDriveNote
+                      ? const Color(0xFF67E8F9)
+                      : const Color(0xFF8396C7),
+                ),
+                if (widget.entry.nextActions.isNotEmpty)
+                  _NoteStorageBadge(
+                    icon: Icons.checklist_outlined,
+                    label: '${widget.entry.nextActions.length} actions',
+                    color: const Color(0xFFFFC857),
+                  ),
+                if (widget.entry.importantText)
+                  const _NoteStorageBadge(
+                    icon: Icons.star,
+                    label: 'Important',
+                    color: Color(0xFFFFC857),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _NoteCardActionBar(
+              createNote: meta == null && driveMeta == null,
+              hasDriveNote: hasDriveNote,
+              hasLocal: hasLocal,
+              important: widget.entry.importantText,
+              onOpenNote: _openSheet,
+              onOpenDrive: _openDriveFile,
+              onOpenLocal: _openLocalFile,
+              onToggleImportant: _toggleImportant,
+              onDelete: _deleteEntry,
+            ),
+            if (hasDetails) ...[
+              const Divider(height: 22),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                title: const Text(
+                  'View note details',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                leading: const Icon(Icons.subject_outlined),
+                children: [
+                  if (hasLocal || driveMeta?.fileName.isNotEmpty == true) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        [
+                          if (hasLocal) 'Local: ${meta!.fileName}',
+                          if (driveMeta?.fileName.isNotEmpty == true)
+                            'Google Drive: ${driveMeta!.fileName}',
+                        ].join('\n'),
+                        style: const TextStyle(
+                          color: Color(0xFF8396C7),
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (widget.entry.supportNoteBreakdown.trim().isNotEmpty)
+                    SupportNoteBreakdownText(
+                      text: widget.entry.supportNoteBreakdown.trim(),
+                    ),
+                  if (widget.entry.nextActions.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Tracked next actions',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    for (final action in widget.entry.nextActions)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          action.completedAt == null
+                              ? '- ${action.text}'
+                              : '- ${action.text} (completed ${_dateTimeText(context, action.completedAt!)})',
+                          style: const TextStyle(height: 1.35),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NoteCardActionBar extends StatelessWidget {
+  const _NoteCardActionBar({
+    required this.createNote,
+    required this.hasDriveNote,
+    required this.hasLocal,
+    required this.important,
+    required this.onOpenNote,
+    required this.onOpenDrive,
+    required this.onOpenLocal,
+    required this.onToggleImportant,
+    required this.onDelete,
+  });
+
+  final bool createNote;
+  final bool hasDriveNote;
+  final bool hasLocal;
+  final bool important;
+  final VoidCallback onOpenNote;
+  final VoidCallback onOpenDrive;
+  final VoidCallback onOpenLocal;
+  final VoidCallback onToggleImportant;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final primary = FilledButton.icon(
+          onPressed: onOpenNote,
+          icon: const Icon(Icons.edit_note_outlined),
+          label: Text(createNote ? 'Create note' : 'Open, edit & sync'),
+        );
+        final secondaryActions = <Widget>[
+          if (hasDriveNote)
+            IconButton.filledTonal(
+              tooltip: 'Open Google Drive note',
+              onPressed: onOpenDrive,
+              icon: const Icon(Icons.open_in_new),
+            ),
+          if (hasLocal)
+            IconButton(
+              tooltip: 'Open local note file',
+              onPressed: onOpenLocal,
+              icon: const Icon(Icons.folder_open_outlined),
+            ),
+          IconButton(
+            tooltip: important ? 'Remove important mark' : 'Mark important',
+            onPressed: onToggleImportant,
+            icon: Icon(important ? Icons.star : Icons.star_border),
+          ),
+          IconButton(
+            tooltip: 'Delete entry',
+            onPressed: onDelete,
+            color: const Color(0xFFFF6B6B),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ];
+
+        if (constraints.maxWidth < 520) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              primary,
+              const SizedBox(height: 6),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 4,
+                children: secondaryActions,
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: primary),
+            const SizedBox(width: 6),
+            ...secondaryActions,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NoteStorageBadge extends StatelessWidget {
+  const _NoteStorageBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.32)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }
