@@ -198,6 +198,13 @@ class _AppLockScreenState extends State<AppLockScreen> {
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w900),
                     ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Your app account and Google Drive stay signed in while '
+                      'the app is locked.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+                    ),
                     const SizedBox(height: 18),
                     _AppPasswordField(
                       controller: lockPasswordController,
@@ -432,17 +439,28 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      createAccount ? 'Create account' : 'Sign in',
+                      createAccount
+                          ? 'Create your app account'
+                          : 'Sign in to your app',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Your existing local data will be merged and saved to Firebase after login. Google sign-in also connects Calendar and Drive.',
+                    Text(
+                      createAccount
+                          ? 'Your existing visits stay on this device and are '
+                                'added to your new cloud account after sign-in.'
+                          : 'Visits save on this device first. Signing in backs '
+                                'up and syncs your app data.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+                      style: const TextStyle(
+                        color: Color(0xFF8396C7),
+                        height: 1.35,
+                      ),
                     ),
+                    const SizedBox(height: 16),
+                    const _LoginAccountGuide(),
                     const SizedBox(height: 18),
                     TextField(
                       controller: emailController,
@@ -513,15 +531,25 @@ class _AuthScreenState extends State<AuthScreen> {
                                   : Icons.login,
                             ),
                       label: Text(
-                        createAccount
-                            ? 'Create Account & Sync'
-                            : 'Sign In & Sync',
+                        createAccount ? 'Create account' : 'Sign in with email',
                       ),
                     ),
+                    const SizedBox(height: 8),
                     OutlinedButton.icon(
                       onPressed: busy ? null : _signInWithGoogle,
                       icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                      label: const Text('Continue with Google Sync'),
+                      label: const Text('Sign in with Google'),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Google sign-in also asks for Drive document access. '
+                      'Email sign-in can connect Drive later.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF8396C7),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
@@ -551,6 +579,92 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LoginAccountGuide extends StatelessWidget {
+  const _LoginAccountGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: const Column(
+        children: [
+          _LoginAccountRow(
+            icon: Icons.cloud_outlined,
+            title: 'App account',
+            subtitle: 'Backs up visits, settings, and app data',
+          ),
+          SizedBox(height: 10),
+          Divider(height: 1),
+          SizedBox(height: 10),
+          _LoginAccountRow(
+            icon: Icons.add_to_drive_outlined,
+            title: 'Google Drive',
+            subtitle: 'Stores notes and documents when connected',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoginAccountRow extends StatelessWidget {
+  const _LoginAccountRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: const Color(0xFF13294D),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: const Color(0xFF4F8DF7), size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Color(0xFF8396C7),
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

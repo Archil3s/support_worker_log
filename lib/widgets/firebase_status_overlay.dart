@@ -70,7 +70,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
     setState(() {
       _syncing = true;
-      _manualMessage = 'Syncing to Firebase...';
+      _manualMessage = 'Syncing app data...';
     });
 
     try {
@@ -85,18 +85,19 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
         if (updatedState.cloudSyncError == null &&
             updatedState.cloudSyncReady) {
-          _manualMessage = 'Live and synced to Firebase Firestore';
+          _manualMessage = 'App data is backed up and up to date.';
         } else if (updatedState.cloudSyncError != null) {
-          _manualMessage = 'Sync warning: ${updatedState.cloudSyncError}';
+          _manualMessage =
+              'App sync needs attention: ${updatedState.cloudSyncError}';
         } else {
-          _manualMessage = 'Signed in, but Firebase sync is not ready yet.';
+          _manualMessage = 'Signed in, but app sync is not ready yet.';
         }
       });
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        _manualMessage = 'Sync failed: $error';
+        _manualMessage = 'App sync failed: $error';
         _lastChecked = DateTime.now();
       });
     } finally {
@@ -113,7 +114,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
     setState(() {
       _syncing = true;
-      _manualMessage = 'Logging out...';
+      _manualMessage = 'Signing out...';
     });
 
     try {
@@ -133,7 +134,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
       setState(() {
         _syncing = false;
-        _manualMessage = 'Logout failed: $error';
+        _manualMessage = 'Sign out failed: $error';
         _lastChecked = DateTime.now();
       });
     }
@@ -165,21 +166,21 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         appState.cloudSyncError == null;
   }
 
-  String _firebaseLabel(AppState appState) {
-    if (_syncing) return 'Syncing...';
-    if (_isLive(appState)) return 'Firebase live';
-    if (appState.cloudSyncError != null) return 'Firebase warning';
-    return 'Firebase pending';
+  String _syncLabel(AppState appState) {
+    if (_syncing) return 'Syncing app data';
+    if (_isLive(appState)) return 'App data synced';
+    if (appState.cloudSyncError != null) return 'Sync needs attention';
+    return 'Connecting app sync';
   }
 
   String _statusMessage(AppState appState) {
-    if (_syncing) return _manualMessage ?? 'Syncing to Firebase...';
+    if (_syncing) return _manualMessage ?? 'Syncing app data...';
     if (_manualMessage != null) return _manualMessage!;
-    if (_isLive(appState)) return 'Live and synced to Firebase Firestore';
+    if (_isLive(appState)) return 'App data is backed up and up to date.';
     if (appState.cloudSyncError != null) {
-      return 'Sync warning: ${appState.cloudSyncError}';
+      return 'App sync needs attention: ${appState.cloudSyncError}';
     }
-    return 'Signed in. Waiting for first Firebase sync...';
+    return 'Signed in. Waiting for the first app-data sync.';
   }
 
   String? _sessionCountdownText(AppState appState) {
@@ -229,9 +230,10 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     );
   }
 
-  Widget _collapsed({required User user, required AppState appState}) {
+  Widget _collapsed({required AppState appState}) {
     final live = _isLive(appState);
     final sessionText = _sessionCountdownText(appState);
+    final hasError = appState.cloudSyncError != null;
 
     return GestureDetector(
       onTap: () {
@@ -240,7 +242,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         });
       },
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 230),
+        constraints: const BoxConstraints(maxWidth: 270),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFF151B29),
@@ -258,8 +260,16 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              live ? Icons.cloud_done : Icons.cloud_sync,
-              color: live ? const Color(0xFF31E981) : const Color(0xFFFFC857),
+              live
+                  ? Icons.cloud_done
+                  : hasError
+                  ? Icons.cloud_off
+                  : Icons.cloud_sync,
+              color: live
+                  ? const Color(0xFF31E981)
+                  : hasError
+                  ? const Color(0xFFFF6B6B)
+                  : const Color(0xFFFFC857),
               size: 17,
             ),
             const SizedBox(width: 7),
@@ -269,7 +279,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _firebaseLabel(appState),
+                    _syncLabel(appState),
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
@@ -278,17 +288,18 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                       decoration: TextDecoration.none,
                     ),
                   ),
-                  if (sessionText != null)
-                    Text(
-                      sessionText,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF8396C7),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        decoration: TextDecoration.none,
-                      ),
+                  Text(
+                    sessionText == null
+                        ? 'Saved locally'
+                        : 'Saved locally · $sessionText',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF8396C7),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      decoration: TextDecoration.none,
                     ),
+                  ),
                 ],
               ),
             ),
@@ -298,77 +309,9 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     );
   }
 
-  Widget _autosaveChip() {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 132),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF102A1C),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF31E981)),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 18,
-            offset: Offset(0, 8),
-            color: Color(0x55000000),
-          ),
-        ],
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.save_outlined, color: Color(0xFF31E981), size: 14),
-          SizedBox(width: 6),
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Autosave on',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                Text(
-                  'Local drafts',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Color(0xFF9BE7B3),
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _autosaveOverlay() {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 70, 12, 12),
-          child: Material(color: Colors.transparent, child: _autosaveChip()),
-        ),
-      ),
-    );
-  }
-
   Widget _sessionCountdownRow(AppState appState) {
     final sessionText = _sessionCountdownText(appState);
     if (sessionText == null) return const SizedBox.shrink();
-
-    final expiresAt = appState.sessionExpiresAt;
 
     return Padding(
       padding: const EdgeInsets.only(top: 14),
@@ -379,9 +322,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              expiresAt == null
-                  ? sessionText
-                  : '$sessionText\nLogout at $expiresAt',
+              '$sessionText\nYour app account signs out when this session ends.',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -415,8 +356,63 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     );
   }
 
+  Widget _statusDetailRow({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF27324B)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF9AAAD2),
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _expandedPanel({required User user, required AppState appState}) {
     final live = _isLive(appState);
+    final driveConnected = appState.googleDriveConnectedForScope(
+      appState.notesGoogleScope,
+    );
+    final driveEmail = appState.googleAccountEmailForScope(
+      appState.notesGoogleScope,
+    );
     final size = MediaQuery.sizeOf(context);
     final panelWidth = size.width < 430 ? size.width - 24 : 390.0;
     final panelMaxHeight = size.height < 720 ? size.height * 0.62 : 520.0;
@@ -465,7 +461,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'App Status',
+                        'Sync & Account',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
@@ -478,7 +474,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Currently logged in',
+                  'App account',
                   style: TextStyle(
                     color: Color(0xFF8396C7),
                     fontWeight: FontWeight.w800,
@@ -496,40 +492,39 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                     decoration: TextDecoration.none,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'UID: ${user.uid}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF8396C7),
-                    fontSize: 12,
-                    decoration: TextDecoration.none,
-                  ),
+                const SizedBox(height: 14),
+                _statusDetailRow(
+                  icon: Icons.save_outlined,
+                  color: const Color(0xFF31E981),
+                  title: 'Saved locally',
+                  subtitle:
+                      'Visit changes save on this device before cloud sync.',
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(statusIcon, color: statusColor, size: 24),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _statusMessage(appState),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                _statusDetailRow(
+                  icon: statusIcon,
+                  color: statusColor,
+                  title: 'App cloud sync',
+                  subtitle: _statusMessage(appState),
+                ),
+                const SizedBox(height: 8),
+                _statusDetailRow(
+                  icon: driveConnected
+                      ? Icons.add_to_drive
+                      : Icons.add_to_drive_outlined,
+                  color: driveConnected
+                      ? const Color(0xFF31E981)
+                      : const Color(0xFFFFC857),
+                  title: 'Google Drive',
+                  subtitle: driveConnected
+                      ? driveEmail ?? 'Connected for notes and documents.'
+                      : 'Not connected. Local saving and app sync still work.',
                 ),
                 _sessionCountdownRow(appState),
                 if (_lastChecked != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Last checked: $_lastChecked',
+                    'Last cloud check: ${TimeOfDay.fromDateTime(_lastChecked!).format(context)}',
                     style: const TextStyle(
                       color: Color(0xFF8396C7),
                       fontSize: 12,
@@ -543,11 +538,11 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                   runSpacing: 10,
                   children: [
                     _actionButton(
-                      label: _syncing ? 'Syncing...' : 'Sync Now',
+                      label: _syncing ? 'Syncing...' : 'Sync app data',
                       onTap: _syncing ? null : _syncNow,
                     ),
                     _actionButton(
-                      label: _syncing ? 'Please wait...' : 'Logout',
+                      label: _syncing ? 'Please wait...' : 'Sign out',
                       onTap: _syncing ? null : _logout,
                       color: const Color(0xFF33405F),
                     ),
@@ -574,10 +569,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
             if (user == null) {
               _lastAutoSyncUid = null;
-              return Stack(
-                fit: StackFit.expand,
-                children: [widget.child, _autosaveOverlay()],
-              );
+              return widget.child;
             }
 
             _scheduleFirstLoginSync(user.uid);
@@ -586,7 +578,6 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
               fit: StackFit.expand,
               children: [
                 widget.child,
-                _autosaveOverlay(),
                 if (_expanded)
                   Positioned.fill(
                     child: GestureDetector(
@@ -615,7 +606,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                                   appState: appState,
                                 ),
                               )
-                            : _collapsed(user: user, appState: appState),
+                            : _collapsed(appState: appState),
                       ),
                     ),
                   ),
