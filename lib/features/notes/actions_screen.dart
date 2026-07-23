@@ -28,21 +28,58 @@ class ActionsScreen extends StatelessWidget {
       ...appState.clients,
       ...appState.entries.map((entry) => entry.client),
     }.where((client) => client.trim().isNotEmpty).toList()..sort();
+    final visitActionCount = entries.fold<int>(
+      0,
+      (count, entry) =>
+          count +
+          entry.nextActions.where((action) => !action.isCompleted).length,
+    );
+    final otherOpenCount = appState.generalActions
+        .where((action) => !action.isCompleted)
+        .length;
+    final completedCount = appState.generalActions
+        .where((action) => action.isCompleted)
+        .length;
 
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TabBar(
-              tabs: [
-                Tab(
-                  icon: Icon(Icons.checklist_rtl_outlined),
-                  text: 'Next Actions',
+          Padding(
+            padding: webPagePadding(context).copyWith(bottom: 0),
+            child: _ActionsHeader(
+              visitActionCount: visitActionCount,
+              otherOpenCount: otherOpenCount,
+              completedCount: completedCount,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151D2D),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF2C3852)),
+              ),
+              child: const TabBar(
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: Color(0xFF253A61),
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
-                Tab(icon: Icon(Icons.task_alt_outlined), text: 'Mixed'),
-              ],
+                tabs: [
+                  Tab(
+                    icon: Icon(Icons.follow_the_signs_outlined),
+                    text: 'Visit actions',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.add_task_outlined),
+                    text: 'Other actions',
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -57,6 +94,136 @@ class ActionsScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionsHeader extends StatelessWidget {
+  const _ActionsHeader({
+    required this.visitActionCount,
+    required this.otherOpenCount,
+    required this.completedCount,
+  });
+
+  final int visitActionCount;
+  final int otherOpenCount;
+  final int completedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF172A4D), Color(0xFF101827)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFF2E4C7E)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              _ActionsHeaderIcon(),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Actions workspace',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Keep visit follow-ups and other tasks in one place.',
+                      style: TextStyle(color: Color(0xFFA9B9DD), height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ActionCountBadge(
+                label: 'Visit',
+                value: visitActionCount,
+                color: const Color(0xFFFFC857),
+              ),
+              _ActionCountBadge(
+                label: 'Other open',
+                value: otherOpenCount,
+                color: const Color(0xFF8EA7FF),
+              ),
+              _ActionCountBadge(
+                label: 'Completed',
+                value: completedCount,
+                color: const Color(0xFF31E981),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionsHeaderIcon extends StatelessWidget {
+  const _ActionsHeaderIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: const Color(0xFF4F8DF7),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: const Icon(Icons.checklist_rtl, color: Colors.white),
+    );
+  }
+}
+
+class _ActionCountBadge extends StatelessWidget {
+  const _ActionCountBadge({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.36)),
+      ),
+      child: Text(
+        '$value $label',
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -81,10 +248,6 @@ class _NextActionsTab extends StatelessWidget {
     return actions;
   }
 
-  List<_EntryAction> get _completedActions {
-    return const [];
-  }
-
   void _deleteAction({
     required BuildContext context,
     required WorkEntry entry,
@@ -96,91 +259,56 @@ class _NextActionsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final openActions = _openActions;
-    final completedActions = _completedActions;
 
     return ListView(
       padding: webPagePadding(context),
       children: [
         SectionCard(
-          title: 'Next Actions',
+          title: 'Visit follow-ups',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '${openActions.length} open | ${completedActions.length} completed',
+                '${openActions.length} open',
                 style: const TextStyle(
                   color: Colors.white,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Actions come from the Next action(s) section when you finish a visit. Ticking or deleting an action removes it from the saved entry.',
+                'These follow-ups come from saved visit notes. Marking one done removes it from the open list and the visit entry.',
                 style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        if (openActions.isEmpty && completedActions.isEmpty)
+        if (openActions.isEmpty)
           const SectionCard(
-            title: 'No Actions',
+            title: 'All caught up',
             child: EmptyState(
               message:
-                  'No next actions yet. Add them in the breakdown when you finish a visit.',
+                  'No visit follow-ups are open. Add one while finishing a visit note.',
             ),
           )
-        else ...[
-          SectionCard(
-            title: 'Open',
-            child: openActions.isEmpty
-                ? const EmptyState(message: 'No open actions.')
-                : Column(
-                    children: [
-                      for (final item in openActions)
-                        _NextActionTile(
-                          entry: item.entry,
-                          action: item.action,
-                          onChanged: (_) => _deleteAction(
-                            context: context,
-                            entry: item.entry,
-                            action: item.action,
-                          ),
-                          onDelete: () => _deleteAction(
-                            context: context,
-                            entry: item.entry,
-                            action: item.action,
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-          if (completedActions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            SectionCard(
-              title: 'Completed Log',
-              child: Column(
-                children: [
-                  for (final item in completedActions)
-                    _NextActionTile(
-                      entry: item.entry,
-                      action: item.action,
-                      onChanged: (_) => _deleteAction(
-                        context: context,
-                        entry: item.entry,
-                        action: item.action,
-                      ),
-                      onDelete: () => _deleteAction(
-                        context: context,
-                        entry: item.entry,
-                        action: item.action,
-                      ),
-                    ),
-                ],
+        else
+          for (final item in openActions)
+            _NextActionTile(
+              entry: item.entry,
+              action: item.action,
+              onChanged: (_) => _deleteAction(
+                context: context,
+                entry: item.entry,
+                action: item.action,
+              ),
+              onDelete: () => _deleteAction(
+                context: context,
+                entry: item.entry,
+                action: item.action,
               ),
             ),
-          ],
-        ],
       ],
     );
   }
@@ -219,14 +347,48 @@ class _NextActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: CheckboxListTile(
-        value: action.isCompleted,
-        onChanged: (value) => onChanged(value ?? false),
-        controlAffinity: ListTileControlAffinity.leading,
-        activeColor: const Color(0xFF31E981),
-        secondary: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+        child: Row(
           children: [
+            Checkbox(
+              value: action.isCompleted,
+              onChanged: (value) => onChanged(value ?? false),
+              activeColor: const Color(0xFF31E981),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    action.text,
+                    style: TextStyle(
+                      decoration: action.isCompleted
+                          ? TextDecoration.lineThrough
+                          : TextDecoration.none,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _ActionMetaPill(
+                        icon: Icons.person_outline,
+                        label: entry.client,
+                      ),
+                      _ActionMetaPill(
+                        icon: Icons.event_outlined,
+                        label: formatDate(entry.date),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             IconButton(
               tooltip: 'Open note',
               onPressed: () => _openNote(context),
@@ -235,20 +397,45 @@ class _NextActionTile extends StatelessWidget {
             IconButton(
               tooltip: 'Delete action',
               onPressed: onDelete,
+              color: const Color(0xFFFF6B6B),
               icon: const Icon(Icons.delete_outline),
             ),
           ],
         ),
-        title: Text(
-          action.text,
-          style: TextStyle(
-            decoration: action.isCompleted
-                ? TextDecoration.lineThrough
-                : TextDecoration.none,
-            fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _ActionMetaPill extends StatelessWidget {
+  const _ActionMetaPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF20283B),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF34405F)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFF8EA7FF)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFB8C4E2),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        subtitle: Text('${entry.client} | ${formatDate(entry.date)}'),
+        ],
       ),
     );
   }
@@ -356,21 +543,26 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
       padding: webPagePadding(context),
       children: [
         SectionCard(
-          title: 'Add Mixed Action',
+          title: 'Add an action',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const Text(
+                'Keep standalone tasks here when they are not tied to a visit note.',
+                style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
+              ),
+              const SizedBox(height: 12),
               SegmentedButton<GeneralActionScope>(
                 segments: const [
                   ButtonSegment<GeneralActionScope>(
                     value: GeneralActionScope.client,
                     icon: Icon(Icons.person_outline),
-                    label: Text('Client'),
+                    label: Text('Person'),
                   ),
                   ButtonSegment<GeneralActionScope>(
                     value: GeneralActionScope.knowledgeGap,
                     icon: Icon(Icons.school_outlined),
-                    label: Text('Knowledge'),
+                    label: Text('Research'),
                   ),
                 ],
                 selected: {scope},
@@ -383,7 +575,10 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: selectedClient,
-                  decoration: const InputDecoration(labelText: 'Client'),
+                  decoration: const InputDecoration(
+                    labelText: 'Person',
+                    prefixIcon: Icon(Icons.person_search_outlined),
+                  ),
                   items: [
                     for (final client in widget.clients)
                       DropdownMenuItem<String>(
@@ -397,15 +592,15 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
               const SizedBox(height: 12),
               TextField(
                 controller: actionController,
-                minLines: 3,
-                maxLines: 7,
+                minLines: 1,
+                maxLines: 4,
                 textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
                   labelText: scope == GeneralActionScope.client
-                      ? 'Client action'
-                      : 'Knowledge gap / thing to look into',
+                      ? 'What needs doing?'
+                      : 'What needs researching?',
                   hintText: scope == GeneralActionScope.client
-                      ? 'What needs doing for this client?'
+                      ? 'Enter a follow-up for this person'
                       : 'What do you need to research or clarify?',
                   alignLabelWithHint: true,
                   prefixIcon: const Icon(Icons.add_task_outlined),
@@ -415,23 +610,23 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
               FilledButton.icon(
                 onPressed: _addAction,
                 icon: const Icon(Icons.add_circle_outline),
-                label: const Text('Add Action'),
+                label: const Text('Add to open actions'),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
         _GeneralActionSection(
-          title: 'Client Actions',
-          emptyMessage: 'No open client actions.',
+          title: 'For people',
+          emptyMessage: 'No open actions for people.',
           actions: clientActions,
           onChanged: _toggleAction,
           onDelete: _deleteAction,
         ),
         const SizedBox(height: 12),
         _GeneralActionSection(
-          title: 'Knowledge Gaps',
-          emptyMessage: 'No open knowledge gaps.',
+          title: 'Research & learning',
+          emptyMessage: 'No open research actions.',
           actions: knowledgeActions,
           onChanged: _toggleAction,
           onDelete: _deleteAction,
@@ -439,8 +634,8 @@ class _GeneralActionsTabState extends State<_GeneralActionsTab> {
         if (completedActions.isNotEmpty) ...[
           const SizedBox(height: 12),
           _GeneralActionSection(
-            title: 'Completed Mixed Actions',
-            emptyMessage: 'No completed mixed actions.',
+            title: 'Completed',
+            emptyMessage: 'No completed actions.',
             actions: completedActions,
             onChanged: _toggleAction,
             onDelete: _deleteAction,
@@ -469,7 +664,7 @@ class _GeneralActionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SectionCard(
-      title: title,
+      title: '$title (${actions.length})',
       child: actions.isEmpty
           ? EmptyState(message: emptyMessage)
           : Column(
@@ -502,33 +697,62 @@ class _GeneralActionTile extends StatelessWidget {
     final completedAt = action.completedAt;
     final subtitle = action.scope == GeneralActionScope.client
         ? action.client ?? 'Client action'
-        : 'Knowledge gap';
+        : 'Research';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: CheckboxListTile(
-        value: action.isCompleted,
-        onChanged: (value) => onChanged(value ?? false),
-        controlAffinity: ListTileControlAffinity.leading,
-        activeColor: const Color(0xFF31E981),
-        secondary: IconButton(
-          tooltip: 'Delete action',
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline),
-        ),
-        title: Text(
-          action.title,
-          style: TextStyle(
-            decoration: action.isCompleted
-                ? TextDecoration.lineThrough
-                : TextDecoration.none,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          completedAt == null
-              ? subtitle
-              : '$subtitle | completed ${_dateTimeText(context, completedAt)}',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
+        child: Row(
+          children: [
+            Checkbox(
+              value: action.isCompleted,
+              onChanged: (value) => onChanged(value ?? false),
+              activeColor: const Color(0xFF31E981),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    action.title,
+                    style: TextStyle(
+                      decoration: action.isCompleted
+                          ? TextDecoration.lineThrough
+                          : TextDecoration.none,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _ActionMetaPill(
+                        icon: action.scope == GeneralActionScope.client
+                            ? Icons.person_outline
+                            : Icons.school_outlined,
+                        label: subtitle,
+                      ),
+                      if (completedAt != null)
+                        _ActionMetaPill(
+                          icon: Icons.task_alt_outlined,
+                          label: 'Done ${_dateTimeText(context, completedAt)}',
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Delete action',
+              onPressed: onDelete,
+              color: const Color(0xFFFF6B6B),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
     );
