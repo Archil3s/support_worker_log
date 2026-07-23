@@ -8,6 +8,7 @@ import 'package:support_worker_log/core/models/app_settings.dart';
 import 'package:support_worker_log/core/models/entry_type.dart';
 import 'package:support_worker_log/core/models/general_action.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
+import 'package:support_worker_log/core/services/app_lock_service.dart';
 import 'package:support_worker_log/core/services/local_support_note_service.dart';
 import 'package:support_worker_log/core/services/storage_service.dart';
 import 'package:support_worker_log/core/state/app_state.dart';
@@ -30,6 +31,17 @@ void main() {
       expect(state.initialLoadComplete, isTrue);
     },
   );
+
+  test('successful app unlock is remembered across rebuilds', () async {
+    final state = AppState(warmGoogleAccounts: false);
+    addTearDown(state.dispose);
+
+    await state.unlockApp();
+
+    expect(state.appUnlocked, isTrue);
+    expect(await AppLockService().hasRememberedUnlock(), isTrue);
+    await Future<void>.delayed(Duration.zero);
+  });
 
   test('PAYE people deletion does not remove Work clients', () async {
     final state = AppState(warmGoogleAccounts: false);

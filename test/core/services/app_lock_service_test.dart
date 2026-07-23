@@ -44,6 +44,15 @@ void main() {
     expect(await service.hasRememberedUnlock(), isFalse);
   });
 
+  test('remembered unlock survives a quick app rebuild', () async {
+    final firstAppInstance = AppLockService();
+    await firstAppInstance.rememberUnlock();
+
+    final rebuiltAppInstance = AppLockService();
+
+    expect(await rebuiltAppInstance.hasRememberedUnlock(), isTrue);
+  });
+
   test('remembered local unlock is valid for one hour', () async {
     final prefs = await SharedPreferences.getInstance();
     final service = AppLockService();

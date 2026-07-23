@@ -262,9 +262,14 @@ class AppState extends ChangeNotifier {
       try {
         await _cloudStorageService.signOutAnonymousUserIfNeeded();
         if (_cloudStorageService.isSignedIn) {
-          await _cloudStorageService.signOutIfSessionExpired();
-          await _appLockService.clearRememberedUnlock();
-          _appUnlocked = false;
+          final sessionExpired = await _cloudStorageService
+              .signOutIfSessionExpired();
+          if (sessionExpired) {
+            await _appLockService.clearRememberedUnlock();
+            _appUnlocked = false;
+          } else {
+            _appUnlocked = await _appLockService.hasRememberedUnlock();
+          }
           unawaited(_syncLocalAndCloudSafely());
         } else {
           _cloudSyncReady = false;
@@ -294,6 +299,7 @@ class AppState extends ChangeNotifier {
       email: email,
       password: password,
     );
+    await _appLockService.rememberUnlock();
 
     _appUnlocked = true;
     _cloudSyncReady = false;
@@ -310,6 +316,7 @@ class AppState extends ChangeNotifier {
       email: email,
       password: password,
     );
+    await _appLockService.rememberUnlock();
 
     _appUnlocked = true;
     _cloudSyncReady = false;
@@ -320,6 +327,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     await _cloudStorageService.signInWithGoogle();
+    await _appLockService.rememberUnlock();
 
     _appUnlocked = true;
     _cloudSyncReady = false;
@@ -1120,7 +1128,7 @@ class AppState extends ChangeNotifier {
   Future<void> unlockApp() async {
     if (_appUnlocked) return;
 
-    await _appLockService.clearRememberedUnlock();
+    await _appLockService.rememberUnlock();
     await _cloudStorageService.renewSessionLockWindow();
     _appUnlocked = true;
     notifyListeners();
