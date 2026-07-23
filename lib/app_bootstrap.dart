@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'shared/widgets/app_boot_logo.dart';
 
 class AppBootstrap extends StatefulWidget {
   const AppBootstrap({super.key});
@@ -85,20 +86,7 @@ class _StartupScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF151B29),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: const Color(0xFF34405F)),
-                    ),
-                    child: const Icon(
-                      Icons.work_history_outlined,
-                      color: Color(0xFF4F8DF7),
-                      size: 36,
-                    ),
-                  ),
+                  const AppBootLogo(),
                   const SizedBox(height: 18),
                   Text(
                     'Support Worker Log',

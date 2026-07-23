@@ -13,8 +13,8 @@ import '../utils/totals.dart';
 class InvoicePdfService {
   const InvoicePdfService._();
 
-  static const int firstInvoiceNumber = 20;
-  static const int _legacyFirstInvoiceNumber = 10;
+  static const int firstInvoiceNumber = 5;
+  static const int _originalInvoiceNumberBase = 10;
   static const String _lastInvoiceNumberKey = 'invoice_pdf_last_number_v1';
   static const String _numberingBaseKey = 'invoice_pdf_numbering_base_v2';
   static const String _periodInvoiceNumberPrefix = 'invoice_pdf_number_';
@@ -51,7 +51,7 @@ class InvoicePdfService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await _migrateLegacyInvoiceNumbers(prefs);
+    await _migrateInvoiceNumberBase(prefs);
     final periodKey = _periodInvoiceNumberKey(period);
 
     final existing = prefs.getInt(periodKey);
@@ -88,7 +88,7 @@ class InvoicePdfService {
     int invoiceNumber,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await _migrateLegacyInvoiceNumbers(prefs);
+    await _migrateInvoiceNumberBase(prefs);
     final periodKey = _periodInvoiceNumberKey(period);
     final lastNumber = prefs.getInt(_lastInvoiceNumberKey);
 
@@ -106,12 +106,12 @@ class InvoicePdfService {
         '${_fileDate(period.start)}_${_fileDate(period.end)}';
   }
 
-  static Future<void> _migrateLegacyInvoiceNumbers(
-    SharedPreferences prefs,
-  ) async {
-    if (prefs.getInt(_numberingBaseKey) == firstInvoiceNumber) return;
+  static Future<void> _migrateInvoiceNumberBase(SharedPreferences prefs) async {
+    final previousBase =
+        prefs.getInt(_numberingBaseKey) ?? _originalInvoiceNumberBase;
+    if (previousBase == firstInvoiceNumber) return;
 
-    const offset = firstInvoiceNumber - _legacyFirstInvoiceNumber;
+    final offset = firstInvoiceNumber - previousBase;
     final invoiceNumberKeys = prefs
         .getKeys()
         .where((key) => key.startsWith(_periodInvoiceNumberPrefix))

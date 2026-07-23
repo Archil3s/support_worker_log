@@ -140,7 +140,7 @@ void main() {
           date: DateTime(2026, 5, 30),
           startTime: const TimeOfDay(hour: 10, minute: 0),
           minutes: 60,
-          notes: const ['Invoice 33 period'],
+          notes: const ['Invoice 18 period'],
           odometerStart: 200,
           odometerEnd: 201,
         ),
@@ -150,13 +150,13 @@ void main() {
 
     expect(
       driveService.uploads.map((upload) => upload.name),
-      contains('Invoice_33_2026-05-30_2026-06-12.pdf'),
+      contains('Invoice_18_2026-05-30_2026-06-12.pdf'),
     );
     expect(
       driveService.uploads
           .where((upload) => upload.name.endsWith('.pdf'))
           .map((upload) => upload.parentId),
-      contains('invoices/Invoice 33 - 2026-05-30 to 2026-06-12'),
+      contains('invoices/Invoice 18 - 2026-05-30 to 2026-06-12'),
     );
   });
   test('createInvoicePeriodTotalFolder uploads full period file set', () async {

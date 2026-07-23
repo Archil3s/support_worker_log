@@ -26,6 +26,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Reconnecting Google Drive'), findsOneWidget);
+    expect(find.byKey(const Key('app-boot-logo')), findsOneWidget);
+    expect(find.text('S'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 500));

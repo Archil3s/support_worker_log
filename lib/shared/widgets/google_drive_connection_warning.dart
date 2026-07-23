@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
 import 'google_account_selector.dart';
+import 'google_drive_connection_animation.dart';
 import 'google_session_countdown.dart';
 
 class GoogleDriveConnectionWarning extends StatefulWidget {
@@ -174,20 +175,14 @@ class _GoogleDriveConnectionWarningState
           const SizedBox(height: 10),
           GoogleSessionCountdown(compact: widget.compact),
           const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: connecting ? null : _connect,
-            icon: connecting
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.add_to_drive_outlined),
-            label: Text(
-              connecting
-                  ? 'Connecting ${widget.scope.label} Drive'
-                  : 'Connect ${widget.scope.label} Google Drive',
+          if (connecting)
+            const GoogleDriveConnectionAnimation(reconnecting: true)
+          else
+            FilledButton.icon(
+              onPressed: _connect,
+              icon: const Icon(Icons.add_to_drive_outlined),
+              label: Text('Connect ${widget.scope.label} Google Drive'),
             ),
-          ),
           if (message != null) ...[
             const SizedBox(height: 8),
             Text(

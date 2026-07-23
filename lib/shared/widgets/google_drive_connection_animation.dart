@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_boot_logo.dart';
+
 class GoogleDriveConnectionAnimation extends StatefulWidget {
   const GoogleDriveConnectionAnimation({super.key, required this.reconnecting});
 
@@ -78,18 +80,13 @@ class _GoogleDriveConnectionAnimationState
                 children: [
                   ScaleTransition(
                     scale: pulse,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C3A6A),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.add_to_drive_outlined,
-                        color: Color(0xFF8EA7FF),
-                        size: 27,
-                      ),
+                    child: const AppBootLogo(
+                      size: 50,
+                      borderRadius: 16,
+                      fontSize: 22,
+                      backgroundColor: Color(0xFF1C3A6A),
+                      foregroundColor: Color(0xFF8EA7FF),
+                      borderColor: Color(0xFF345A9D),
                     ),
                   ),
                   Positioned(
