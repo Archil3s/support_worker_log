@@ -78,27 +78,30 @@ void main() {
     },
   );
 
-  test(
-    'invoice 20 rollout numbers migrate back to invoices 18 and 19',
-    () async {
-      final paidPeriod = PayPeriodRange(
-        start: DateTime(2026, 6, 14),
-        end: DateTime(2026, 6, 27),
-      );
+  test('stored invoices 33 and 34 migrate to invoices 18 and 19', () async {
+    final invoice18Period = PayPeriodRange(
+      start: DateTime(2026, 6, 14),
+      end: DateTime(2026, 6, 27),
+    );
+    final invoice19Period = PayPeriodRange(
+      start: DateTime(2026, 6, 28),
+      end: DateTime(2026, 7, 11),
+    );
 
-      SharedPreferences.setMockInitialValues({
-        'invoice_pdf_numbering_base_v2': 20,
-        'invoice_pdf_last_number_v1': 34,
-        'invoice_pdf_number_20260614_20260627': 33,
-      });
+    SharedPreferences.setMockInitialValues({
+      'invoice_pdf_numbering_base_v2': 20,
+      'invoice_pdf_last_number_v1': 34,
+      'invoice_pdf_number_20260614_20260627': 33,
+      'invoice_pdf_number_20260628_20260711': 34,
+    });
 
-      expect(await InvoicePdfService.invoiceNumberForPeriod(paidPeriod), 18);
+    expect(await InvoicePdfService.invoiceNumberForPeriod(invoice18Period), 18);
+    expect(await InvoicePdfService.invoiceNumberForPeriod(invoice19Period), 19);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('invoice_pdf_last_number_v1'), 19);
-      expect(prefs.getInt('invoice_pdf_numbering_base_v2'), 5);
-    },
-  );
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('invoice_pdf_last_number_v1'), 19);
+    expect(prefs.getInt('invoice_pdf_numbering_base_v2'), 5);
+  });
 
   test('paid and unpaid periods are numbered 18 through 21', () {
     final expectedNumbers = <DateTime, int>{

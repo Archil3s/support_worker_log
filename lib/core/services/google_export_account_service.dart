@@ -26,6 +26,8 @@ class GoogleExportAccountService {
   static const _secondaryAppNamePrefix = 'support_worker_log_google_exports';
   static const _googleSignInTimeout = Duration(seconds: 90);
   static const _knownGoogleAccountsKey = 'known_google_export_accounts_v1';
+  static const _cachedTokenLifetime = Duration(minutes: 50);
+  static const _cachedTokenExpiryBuffer = Duration(minutes: 2);
 
   final FirebaseAuth? _authOverride;
   final Map<GoogleExportAccountScope, FirebaseAuth> _authByScope = {};
@@ -73,6 +75,7 @@ class GoogleExportAccountService {
     await _loadRememberedAccounts();
     final auth = await _secondaryAuth(scope);
     _rememberSignedInUser(scope, auth.currentUser);
+    await _restoreCachedConnection(scope, auth.currentUser);
   }
 
   Future<void> setPreferredEmail({
@@ -89,6 +92,7 @@ class GoogleExportAccountService {
     _knownEmails.add(cleaned);
     if (currentEmail != cleaned.toLowerCase()) {
       _connections.remove(scope);
+      await _clearCachedConnection(scope);
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -102,6 +106,10 @@ class GoogleExportAccountService {
   }) async {
     await _loadRememberedAccounts();
 
+    final auth = await _secondaryAuth(scope);
+    _rememberSignedInUser(scope, auth.currentUser);
+    await _restoreCachedConnection(scope, auth.currentUser);
+
     final current = _connections[scope];
     if (!forceRefresh &&
         current != null &&
@@ -109,7 +117,6 @@ class GoogleExportAccountService {
       return current;
     }
 
-    final auth = await _secondaryAuth(scope);
     final preferredEmail = _preferredEmails[scope];
     final currentEmail = auth.currentUser?.email?.trim().toLowerCase();
     final preferredMismatch =
@@ -159,6 +166,7 @@ class GoogleExportAccountService {
     );
     _connections[scope] = connection;
     _rememberSignedInUser(scope, credential.user);
+    await _cacheConnection(connection);
 
     return connection;
   }
@@ -181,6 +189,10 @@ class GoogleExportAccountService {
 
     _connections.clear();
     _signedInEmails.clear();
+
+    for (final scope in GoogleExportAccountScope.values) {
+      await _clearCachedConnection(scope);
+    }
   }
 
   Future<FirebaseAuth> _secondaryAuth(GoogleExportAccountScope scope) async {
@@ -271,6 +283,72 @@ class GoogleExportAccountService {
     await prefs.setString(_preferredEmailKey(scope), _preferredEmails[scope]!);
   }
 
+  Future<void> _cacheConnection(GoogleExportConnection connection) async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = connection.email?.trim();
+    final expiresAt = DateTime.now().add(_cachedTokenLifetime);
+
+    await prefs.setString(
+      _cachedAccessTokenKey(connection.scope),
+      connection.accessToken,
+    );
+    await prefs.setInt(
+      _cachedAccessTokenExpiryKey(connection.scope),
+      expiresAt.millisecondsSinceEpoch,
+    );
+
+    if (email != null && email.isNotEmpty) {
+      await prefs.setString(
+        _cachedAccessTokenEmailKey(connection.scope),
+        email,
+      );
+    } else {
+      await prefs.remove(_cachedAccessTokenEmailKey(connection.scope));
+    }
+  }
+
+  Future<void> _restoreCachedConnection(
+    GoogleExportAccountScope scope,
+    User? user,
+  ) async {
+    if (_connections[scope]?.accessToken.trim().isNotEmpty == true) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_cachedAccessTokenKey(scope))?.trim();
+    final expiresAtMs = prefs.getInt(_cachedAccessTokenExpiryKey(scope));
+    final cachedEmail = prefs
+        .getString(_cachedAccessTokenEmailKey(scope))
+        ?.trim();
+    final signedInEmail = user?.email?.trim();
+
+    if (token == null ||
+        token.isEmpty ||
+        expiresAtMs == null ||
+        DateTime.fromMillisecondsSinceEpoch(
+          expiresAtMs,
+        ).isBefore(DateTime.now().add(_cachedTokenExpiryBuffer)) ||
+        (cachedEmail != null &&
+            cachedEmail.isNotEmpty &&
+            (signedInEmail == null ||
+                cachedEmail.toLowerCase() != signedInEmail.toLowerCase()))) {
+      await _clearCachedConnection(scope);
+      return;
+    }
+
+    _connections[scope] = GoogleExportConnection(
+      scope: scope,
+      accessToken: token,
+      email: signedInEmail ?? cachedEmail,
+    );
+  }
+
+  Future<void> _clearCachedConnection(GoogleExportAccountScope scope) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cachedAccessTokenKey(scope));
+    await prefs.remove(_cachedAccessTokenExpiryKey(scope));
+    await prefs.remove(_cachedAccessTokenEmailKey(scope));
+  }
+
   Future<void> _loadRememberedAccounts() {
     return _rememberedAccountsLoad ??= _loadRememberedAccountsNow();
   }
@@ -296,6 +374,18 @@ class GoogleExportAccountService {
 
   String _preferredEmailKey(GoogleExportAccountScope scope) {
     return 'preferred_google_export_account_${scope.name}_v1';
+  }
+
+  String _cachedAccessTokenKey(GoogleExportAccountScope scope) {
+    return 'google_export_access_token_${scope.name}_v1';
+  }
+
+  String _cachedAccessTokenExpiryKey(GoogleExportAccountScope scope) {
+    return 'google_export_access_token_expiry_${scope.name}_v1';
+  }
+
+  String _cachedAccessTokenEmailKey(GoogleExportAccountScope scope) {
+    return 'google_export_access_token_email_${scope.name}_v1';
   }
 
   Future<void> _setLocalPersistence(FirebaseAuth auth) async {
