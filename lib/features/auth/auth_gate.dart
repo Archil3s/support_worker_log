@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/app_lock_service.dart';
+import '../../core/services/biometric_unlock_service.dart';
 import '../../core/state/app_state.dart';
 import '../shell/main_shell.dart';
 
@@ -33,9 +34,13 @@ class AppLockScreen extends StatefulWidget {
 
 class _AppLockScreenState extends State<AppLockScreen> {
   final service = AppLockService();
+  final biometricService = BiometricUnlockService();
   final lockPasswordController = TextEditingController();
 
   bool busy = false;
+  bool biometricAvailable = false;
+  bool biometricEnrolled = false;
+  bool biometricBusy = false;
   String? errorText;
   DateTime? lockedUntil;
   Timer? lockoutTimer;
@@ -49,6 +54,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
   void initState() {
     super.initState();
     _loadLockout();
+    unawaited(_prepareBiometricUnlock());
   }
 
   @override
@@ -66,7 +72,53 @@ class _AppLockScreenState extends State<AppLockScreen> {
     _startLockoutTimer();
   }
 
-  Future<void> _submit() async {
+  Future<void> _prepareBiometricUnlock() async {
+    final available = await biometricService.isAvailable();
+    final enrolled = available && await biometricService.isEnrolled();
+    if (!mounted) return;
+
+    setState(() {
+      biometricAvailable = available;
+      biometricEnrolled = enrolled;
+    });
+
+    if (enrolled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_unlockWithBiometrics(showFailure: false));
+        }
+      });
+    }
+  }
+
+  Future<void> _unlockWithBiometrics({bool showFailure = true}) async {
+    if (biometricBusy || busy) return;
+
+    setState(() {
+      biometricBusy = true;
+      errorText = null;
+    });
+
+    final authenticated = await biometricService.authenticate();
+    if (!mounted) return;
+
+    if (!authenticated) {
+      setState(() {
+        biometricBusy = false;
+        if (showFailure) {
+          errorText = 'Face ID or device unlock was not completed.';
+        }
+      });
+      return;
+    }
+
+    await service.clearLockout();
+    if (!mounted) return;
+
+    await context.read<AppState>().unlockApp();
+  }
+
+  Future<bool> _verifyEnteredPassword() async {
     final activeLockout = await service.lockedUntil();
     if (activeLockout != null) {
       setState(() {
@@ -74,13 +126,13 @@ class _AppLockScreenState extends State<AppLockScreen> {
         errorText = null;
       });
       _startLockoutTimer();
-      return;
+      return false;
     }
 
     final password = lockPasswordController.text.trim();
     if (password.isEmpty) {
       setState(() => errorText = 'Enter the app password.');
-      return;
+      return false;
     }
 
     setState(() {
@@ -90,7 +142,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
 
     if (!service.verifyPassword(password)) {
       final until = await service.recordFailedAttempt();
-      if (!mounted) return;
+      if (!mounted) return false;
 
       setState(() {
         busy = false;
@@ -100,12 +152,44 @@ class _AppLockScreenState extends State<AppLockScreen> {
             : 'Too many wrong passwords. Try again in ${_lockoutRemaining()}.';
       });
       _startLockoutTimer();
-      return;
+      return false;
     }
 
     await service.clearLockout();
+    if (!mounted) return false;
+
+    return true;
+  }
+
+  Future<void> _submit() async {
+    if (!await _verifyEnteredPassword()) return;
     if (!mounted) return;
 
+    await context.read<AppState>().unlockApp();
+  }
+
+  Future<void> _enrollBiometrics() async {
+    if (!await _verifyEnteredPassword()) return;
+    if (!mounted) return;
+
+    setState(() {
+      busy = false;
+      biometricBusy = true;
+      errorText = null;
+    });
+
+    final enrolled = await biometricService.enroll();
+    if (!mounted) return;
+
+    if (!enrolled) {
+      setState(() {
+        biometricBusy = false;
+        errorText = 'Face ID or device unlock setup was not completed.';
+      });
+      return;
+    }
+
+    setState(() => biometricEnrolled = true);
     await context.read<AppState>().unlockApp();
   }
 
@@ -172,7 +256,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 390),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Container(
               padding: const EdgeInsets.all(18),
@@ -193,24 +277,55 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Enter app password',
+                      'Unlock app',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Your app account and Google Drive stay signed in while '
-                      'the app is locked.',
+                      'Your account and Google Drive stay signed in. Only this '
+                      'app screen is locked.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
                     ),
+                    if (biometricAvailable && biometricEnrolled) ...[
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: biometricBusy || busy
+                            ? null
+                            : _unlockWithBiometrics,
+                        icon: biometricBusy
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.fingerprint),
+                        label: const Text('Use Face ID / device unlock'),
+                      ),
+                      const SizedBox(height: 16),
+                      const Row(
+                        children: [
+                          Expanded(child: Divider()),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'or use app password',
+                              style: TextStyle(color: Color(0xFF8396C7)),
+                            ),
+                          ),
+                          Expanded(child: Divider()),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     _AppPasswordField(
                       controller: lockPasswordController,
-                      enabled: !busy && !lockedOut,
+                      enabled: !busy && !biometricBusy && !lockedOut,
                       onSubmitted: (_) {
-                        if (!busy && !lockedOut) _submit();
+                        if (!busy && !biometricBusy && !lockedOut) _submit();
                       },
                     ),
                     if (lockoutMessage != null || errorText != null) ...[
@@ -226,7 +341,9 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     ],
                     const SizedBox(height: 16),
                     FilledButton.icon(
-                      onPressed: busy || lockedOut ? null : _submit,
+                      onPressed: busy || biometricBusy || lockedOut
+                          ? null
+                          : _submit,
                       icon: busy
                           ? const SizedBox(
                               width: 18,
@@ -234,11 +351,37 @@ class _AppLockScreenState extends State<AppLockScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.lock_open_outlined),
-                      label: const Text('Unlock'),
+                      label: const Text('Unlock with password'),
                     ),
+                    if (biometricAvailable && !biometricEnrolled) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: busy || biometricBusy || lockedOut
+                            ? null
+                            : _enrollBiometrics,
+                        icon: biometricBusy
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.fingerprint),
+                        label: const Text('Set up Face ID / device unlock'),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Enter the app password above once to set it up.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF8396C7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: busy ? null : _signOut,
+                      onPressed: busy || biometricBusy ? null : _signOut,
                       child: const Text('Use different sign-in'),
                     ),
                   ],

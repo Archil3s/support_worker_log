@@ -18,7 +18,7 @@ import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/stat_card.dart';
 import '../../shared/widgets/stat_grid.dart';
 
-const int firstDisplayedInvoiceNumber = 10;
+const int firstDisplayedInvoiceNumber = InvoicePdfService.firstInvoiceNumber;
 const int futureInvoicePeriodsToDisplay = 26;
 
 enum _InvoiceMoneyView { total, owed }

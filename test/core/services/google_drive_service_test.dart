@@ -96,7 +96,7 @@ void main() {
       );
       expect(
         meta.folderOpenLink,
-        contains('client-notes%2FJane%20Smith%2FInvoice%2010'),
+        contains('client-notes%2FJane%20Smith%2FInvoice%2020'),
       );
       expect(meta.folderOpenLink, contains('Home%20Visits'));
       expect(noteUpload.parentId, contains('client-notes/Jane Smith'));
@@ -178,7 +178,7 @@ void main() {
           'client-folder': [
             const GoogleDriveFile(
               id: 'period-folder',
-              name: 'Invoice 10 - 2026-05-31 to 2026-06-13',
+              name: 'Invoice 20 - 2026-05-31 to 2026-06-13',
               mimeType: 'application/vnd.google-apps.folder',
             ),
           ],
@@ -366,7 +366,7 @@ void main() {
           'client-folder': [
             const GoogleDriveFile(
               id: 'period-folder',
-              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              name: 'Invoice 20 - 2026-06-01 to 2026-06-14',
               mimeType: 'application/vnd.google-apps.folder',
             ),
           ],
@@ -509,7 +509,7 @@ void main() {
         'client-folder': [
           const GoogleDriveFile(
             id: 'period-folder',
-            name: 'Invoice 10 - 2026-05-31 to 2026-06-13',
+            name: 'Invoice 20 - 2026-05-31 to 2026-06-13',
             mimeType: 'application/vnd.google-apps.folder',
           ),
         ],
@@ -606,8 +606,8 @@ void main() {
         'client-notes/AB/Living Support Notes',
       );
       expect(docsApi.addedTabs.map((tab) => tab.title), [
-        'Invoice 10 2026-05-31 to 2026-06-13',
-        'Phone Calls - Inv 10',
+        'Invoice 20 2026-05-31 to 2026-06-13',
+        'Phone Calls - Inv 20',
         'Phone 2026-06-02',
       ]);
       final inserted = docsApi.insertedText.single.trimLeft();
@@ -735,10 +735,10 @@ void main() {
       );
 
       expect(docsApi.addedTabs.map((tab) => tab.title), [
-        'Invoice 10 2026-05-31 to 2026-06-13',
-        'Phone Calls - Inv 10',
+        'Invoice 20 2026-05-31 to 2026-06-13',
+        'Phone Calls - Inv 20',
         'Phone 2026-06-02',
-        'Texts - Inv 10',
+        'Texts - Inv 20',
         'Texts 2026-06-02',
       ]);
       expect(docsApi.addedTabs.every((tab) => tab.title.length <= 50), true);
@@ -801,20 +801,20 @@ void main() {
       expect(
         driveApi.uploads.single.name,
         'Master Living Support Notes - '
-        'Invoice 10 2026-05-31 to 2026-06-13',
+        'Invoice 20 2026-05-31 to 2026-06-13',
       );
       expect(driveApi.uploads.single.mimeType, _googleDocsMimeType);
       expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
-      expect(result.invoiceTabTitle, 'Invoice 10 2026-05-31 to 2026-06-13');
+      expect(result.invoiceTabTitle, 'Invoice 20 2026-05-31 to 2026-06-13');
       expect(
         result.subTabTitles,
         containsAll([
-          'Joseph W Inv 10',
+          'Joseph W Inv 20',
           'Phone Joseph W 2026-06-02 0930 phone-',
-          'Pierre Inv 10',
+          'Pierre Inv 20',
           'Texts Pierre 2026-06-03 1015 text-e',
-          'Submitted I10',
-          'Totals I10',
+          'Submitted I20',
+          'Totals I20',
         ]),
       );
       expect(docsApi.insertedText.join('\n'), contains('Phone note.'));
@@ -875,18 +875,18 @@ void main() {
         ],
       );
 
-      expect(result.file.name, contains('Invoice 10 2026-05-31 to 2026-06-13'));
+      expect(result.file.name, contains('Invoice 20 2026-05-31 to 2026-06-13'));
       expect(driveApi.uploads.single.name, result.file.name);
       expect(
         driveApi.uploads.single.name,
         isNot('Master Living Support Notes'),
       );
       expect(docsApi.addedTabs.map((tab) => tab.title), [
-        'Invoice 10 2026-05-31 to 2026-06-13',
-        'Joseph W Inv 10',
+        'Invoice 20 2026-05-31 to 2026-06-13',
+        'Joseph W Inv 20',
         'Home Joseph W 2026-06-02 0930 home-v',
-        'Submitted I10',
-        'Totals I10',
+        'Submitted I20',
+        'Totals I20',
       ]);
     },
   );
@@ -948,10 +948,10 @@ void main() {
         result.subTabTitles,
         containsAll([
           'Dashboard',
-          'Invoice 10 2026-05-31 to 2026-06-13',
-          'Ready Totals I10',
-          'Phone Calls - Inv 10',
-          'Joseph W Phone I10',
+          'Invoice 20 2026-05-31 to 2026-06-13',
+          'Ready Totals I20',
+          'Phone Calls - Inv 20',
+          'Joseph W Phone I20',
         ]),
       );
       expect(docsApi.insertedText.join('\n'), contains('Ready phone note.'));
@@ -999,11 +999,11 @@ void main() {
           _FakeGoogleDocTab(id: 'type-tab', title: 'Texts'),
           _FakeGoogleDocTab(
             id: 'invoice-tab',
-            title: 'Invoice 10 2026-05-31 to 2026-06-13',
+            title: 'Invoice 20 2026-05-31 to 2026-06-13',
           ),
           _FakeGoogleDocTab(
             id: 'type-tab-new',
-            title: 'Texts - Inv 10',
+            title: 'Texts - Inv 20',
             parentId: 'invoice-tab',
           ),
           _FakeGoogleDocTab(
@@ -1143,11 +1143,11 @@ void main() {
         tabs: [
           _FakeGoogleDocTab(
             id: 'invoice-tab',
-            title: 'Invoice 10 2026-05-31 to 2026-06-13',
+            title: 'Invoice 20 2026-05-31 to 2026-06-13',
           ),
           _FakeGoogleDocTab(
             id: 'phone-tab',
-            title: 'Phone Calls - Inv 10',
+            title: 'Phone Calls - Inv 20',
             parentId: 'invoice-tab',
           ),
           _FakeGoogleDocTab(
@@ -1171,10 +1171,10 @@ void main() {
       expect(results.single.personName, 'All people');
       expect(
         results.single.invoiceTabTitle,
-        'Invoice 10 2026-05-31 to 2026-06-13',
+        'Invoice 20 2026-05-31 to 2026-06-13',
       );
       expect(results.single.subTabTitles, [
-        'Phone Calls - Inv 10',
+        'Phone Calls - Inv 20',
         'Phone 2026-06-02',
       ]);
     },
@@ -1251,7 +1251,7 @@ void main() {
           'client-folder': [
             const GoogleDriveFile(
               id: 'period-folder',
-              name: 'Invoice 10 - 2026-06-01 to 2026-06-14',
+              name: 'Invoice 20 - 2026-06-01 to 2026-06-14',
               mimeType: 'application/vnd.google-apps.folder',
             ),
           ],
@@ -1269,7 +1269,7 @@ void main() {
               mimeType: _googleDocsMimeType,
             ),
           ],
-          'client-folder/Invoice 10 - 2026-05-31 to 2026-06-13/Home Visits': [
+          'client-folder/Invoice 20 - 2026-05-31 to 2026-06-13/Home Visits': [
             const GoogleDriveFile(
               id: 'existing-google-doc',
               name: '2026-06-02_Jane_Smith_incomplete',
@@ -1335,7 +1335,7 @@ void main() {
         fileName: '2026-06-02_AB_in-progress.docx',
         noteText: 'Old note',
         mimeType: _docxMimeType,
-        parentFolderId: 'client-notes/AB/Invoice 10 - 2026-06-01 to 2026-06-14',
+        parentFolderId: 'client-notes/AB/Invoice 20 - 2026-06-01 to 2026-06-14',
       ),
     );
 
@@ -1377,7 +1377,7 @@ void main() {
           noteText: 'Old account note',
           mimeType: _docxMimeType,
           parentFolderId:
-              'client-notes/AB/Invoice 10 - 2026-06-01 to 2026-06-14',
+              'client-notes/AB/Invoice 20 - 2026-06-01 to 2026-06-14',
           googleAccountEmail: 'old-work@example.com',
         ),
       );

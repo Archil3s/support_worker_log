@@ -150,7 +150,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     _sessionExpiryRunning = true;
 
     try {
-      await appState.signOutIfSessionExpired();
+      await appState.lockAppIfSessionExpired();
     } finally {
       _sessionExpiryRunning = false;
     }

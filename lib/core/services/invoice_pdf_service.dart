@@ -13,8 +13,11 @@ import '../utils/totals.dart';
 class InvoicePdfService {
   const InvoicePdfService._();
 
-  static const int firstInvoiceNumber = 10;
+  static const int firstInvoiceNumber = 20;
+  static const int _legacyFirstInvoiceNumber = 10;
   static const String _lastInvoiceNumberKey = 'invoice_pdf_last_number_v1';
+  static const String _numberingBaseKey = 'invoice_pdf_numbering_base_v2';
+  static const String _periodInvoiceNumberPrefix = 'invoice_pdf_number_';
 
   static Future<void> exportInvoice({
     required int invoiceNumber,
@@ -48,6 +51,7 @@ class InvoicePdfService {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyInvoiceNumbers(prefs);
     final periodKey = _periodInvoiceNumberKey(period);
 
     final existing = prefs.getInt(periodKey);
@@ -84,6 +88,7 @@ class InvoicePdfService {
     int invoiceNumber,
   ) async {
     final prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyInvoiceNumbers(prefs);
     final periodKey = _periodInvoiceNumberKey(period);
     final lastNumber = prefs.getInt(_lastInvoiceNumberKey);
 
@@ -97,7 +102,34 @@ class InvoicePdfService {
   }
 
   static String _periodInvoiceNumberKey(PayPeriodRange period) {
-    return 'invoice_pdf_number_${_fileDate(period.start)}_${_fileDate(period.end)}';
+    return '$_periodInvoiceNumberPrefix'
+        '${_fileDate(period.start)}_${_fileDate(period.end)}';
+  }
+
+  static Future<void> _migrateLegacyInvoiceNumbers(
+    SharedPreferences prefs,
+  ) async {
+    if (prefs.getInt(_numberingBaseKey) == firstInvoiceNumber) return;
+
+    const offset = firstInvoiceNumber - _legacyFirstInvoiceNumber;
+    final invoiceNumberKeys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(_periodInvoiceNumberPrefix))
+        .toList();
+
+    for (final key in invoiceNumberKeys) {
+      final invoiceNumber = prefs.getInt(key);
+      if (invoiceNumber != null) {
+        await prefs.setInt(key, invoiceNumber + offset);
+      }
+    }
+
+    final lastInvoiceNumber = prefs.getInt(_lastInvoiceNumberKey);
+    if (lastInvoiceNumber != null) {
+      await prefs.setInt(_lastInvoiceNumberKey, lastInvoiceNumber + offset);
+    }
+
+    await prefs.setInt(_numberingBaseKey, firstInvoiceNumber);
   }
 
   static Future<Uint8List> buildInvoicePdf({

@@ -257,16 +257,10 @@ class AppState extends ChangeNotifier {
 
     try {
       await _cloudStorageService.signOutAnonymousUserIfNeeded();
-      final sessionExpired = await _cloudStorageService
-          .signOutIfSessionExpired();
-
-      if (sessionExpired) {
-        _cloudSyncReady = false;
-        _appUnlocked = false;
-        _cloudSyncError = null;
+      if (_cloudStorageService.isSignedIn) {
+        await _cloudStorageService.signOutIfSessionExpired();
         await _appLockService.clearRememberedUnlock();
-      } else if (_cloudStorageService.isSignedIn) {
-        _appUnlocked = await _appLockService.hasRememberedUnlock();
+        _appUnlocked = false;
         unawaited(_syncLocalAndCloudSafely());
       } else {
         _cloudSyncReady = false;
@@ -291,6 +285,7 @@ class AppState extends ChangeNotifier {
       password: password,
     );
 
+    _appUnlocked = true;
     _cloudSyncReady = false;
     _cloudSyncError = null;
     notifyListeners();
@@ -306,6 +301,7 @@ class AppState extends ChangeNotifier {
       password: password,
     );
 
+    _appUnlocked = true;
     _cloudSyncReady = false;
     _cloudSyncError = null;
     notifyListeners();
@@ -315,6 +311,7 @@ class AppState extends ChangeNotifier {
   Future<void> signInWithGoogle() async {
     await _cloudStorageService.signInWithGoogle();
 
+    _appUnlocked = true;
     _cloudSyncReady = false;
     _cloudSyncError = null;
     notifyListeners();
@@ -1078,23 +1075,26 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> signOutIfSessionExpired() async {
+  Future<bool> lockAppIfSessionExpired() async {
     final expired = await _cloudStorageService.signOutIfSessionExpired();
     if (!expired) return false;
 
     if (!_appUnlocked) return false;
 
     await _appLockService.clearRememberedUnlock();
+    await _cloudStorageService.renewSessionLockWindow();
     _appUnlocked = false;
     _cloudSyncError = null;
     notifyListeners();
     return true;
   }
 
+  Future<bool> signOutIfSessionExpired() => lockAppIfSessionExpired();
+
   Future<void> unlockApp() async {
     if (_appUnlocked) return;
 
-    await _appLockService.rememberUnlock();
+    await _appLockService.clearRememberedUnlock();
     await _cloudStorageService.renewSessionLockWindow();
     _appUnlocked = true;
     notifyListeners();
