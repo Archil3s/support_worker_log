@@ -33,6 +33,7 @@ void main() {
   test('persists mixed general actions', () {
     final createdAt = DateTime(2026, 6, 2, 9);
     final completedAt = DateTime(2026, 6, 2, 10);
+    final updatedAt = DateTime(2026, 6, 2, 10, 5);
     final data = StoredAppData(
       settings: const AppSettings(),
       clients: const ['AB'],
@@ -44,6 +45,7 @@ void main() {
           scope: GeneralActionScope.knowledgeGap,
           createdAt: createdAt,
           completedAt: completedAt,
+          updatedAt: updatedAt,
         ),
         GeneralActionItem(
           id: 'action-2',
@@ -63,6 +65,7 @@ void main() {
       GeneralActionScope.knowledgeGap,
     );
     expect(restored.generalActions.first.completedAt, completedAt);
+    expect(restored.generalActions.first.updatedAt, updatedAt);
     expect(restored.generalActions.last.client, 'AB');
   });
 
@@ -192,12 +195,14 @@ void main() {
       payeEntries: [],
       deletedEntryIds: {'entry-1'},
       deletedPayeEntryIds: {'paye-entry-1'},
+      deletedGeneralActionIds: {'action-1'},
     );
 
     final restored = StoredAppData.fromJson(data.toJson());
 
     expect(restored.deletedEntryIds, {'entry-1'});
     expect(restored.deletedPayeEntryIds, {'paye-entry-1'});
+    expect(restored.deletedGeneralActionIds, {'action-1'});
   });
 
   test('legacy data derives PAYE people only from PAYE entries', () {

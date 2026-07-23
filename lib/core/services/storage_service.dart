@@ -29,6 +29,7 @@ class StoredAppData {
     this.driveSupportNoteMetas = const {},
     this.deletedEntryIds = const {},
     this.deletedPayeEntryIds = const {},
+    this.deletedGeneralActionIds = const {},
   });
 
   final AppSettings settings;
@@ -46,6 +47,7 @@ class StoredAppData {
   final Map<String, EntryDriveSupportNoteMeta> driveSupportNoteMetas;
   final Set<String> deletedEntryIds;
   final Set<String> deletedPayeEntryIds;
+  final Set<String> deletedGeneralActionIds;
 
   factory StoredAppData.defaults() {
     return const StoredAppData(
@@ -80,6 +82,7 @@ class StoredAppData {
       ),
       'deletedEntryIds': deletedEntryIds.toList()..sort(),
       'deletedPayeEntryIds': deletedPayeEntryIds.toList()..sort(),
+      'deletedGeneralActionIds': deletedGeneralActionIds.toList()..sort(),
     };
   }
 
@@ -167,6 +170,9 @@ class StoredAppData {
     final rawDriveSupportNoteMetas = json['driveSupportNoteMetas'];
     final deletedEntryIds = _entryIdsFromJson(json['deletedEntryIds']);
     final deletedPayeEntryIds = _entryIdsFromJson(json['deletedPayeEntryIds']);
+    final deletedGeneralActionIds = _entryIdsFromJson(
+      json['deletedGeneralActionIds'],
+    );
     final personalLogEntries = <PersonalLogEntry>[];
     final supportNoteMetas = <String, EntrySupportNoteMeta>{};
     final driveSupportNoteMetas = <String, EntryDriveSupportNoteMeta>{};
@@ -268,6 +274,7 @@ class StoredAppData {
       driveSupportNoteMetas: driveSupportNoteMetas,
       deletedEntryIds: deletedEntryIds,
       deletedPayeEntryIds: deletedPayeEntryIds,
+      deletedGeneralActionIds: deletedGeneralActionIds,
     );
   }
 

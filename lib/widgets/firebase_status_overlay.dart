@@ -322,7 +322,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$sessionText\nYour app account signs out when this session ends.',
+              '$sessionText\nThe app locks when this session ends. Your account stays signed in.',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,

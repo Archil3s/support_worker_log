@@ -291,11 +291,16 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  final formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final emailFocusNode = FocusNode();
+  final passwordFocusNode = FocusNode();
+  final scrollController = ScrollController();
 
   bool createAccount = false;
   bool busy = false;
+  bool showPassword = false;
   String? errorText;
   String? successText;
 
@@ -303,12 +308,19 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    emailFocusNode.dispose();
+    passwordFocusNode.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    if (busy) return;
+    if (!(formKey.currentState?.validate() ?? false)) return;
+
     final email = emailController.text.trim();
     final password = passwordController.text;
+    FocusScope.of(context).unfocus();
 
     setState(() {
       busy = true;
@@ -325,6 +337,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await appState.signIn(email: email, password: password);
       }
     } catch (error) {
+      if (!mounted) return;
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
@@ -334,6 +347,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    if (busy) return;
+    FocusScope.of(context).unfocus();
+
     setState(() {
       busy = true;
       errorText = null;
@@ -343,6 +359,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       await context.read<AppState>().signInWithGoogle();
     } catch (error) {
+      if (!mounted) return;
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
@@ -352,12 +369,17 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _resetPassword() async {
+    if (busy) return;
+
     final email = emailController.text.trim();
 
-    if (email.isEmpty) {
-      setState(() => errorText = 'Enter your email first.');
+    if (_validateEmail(email) != null) {
+      emailFocusNode.requestFocus();
+      setState(() => errorText = 'Enter a valid email address first.');
       return;
     }
+
+    FocusScope.of(context).unfocus();
 
     setState(() {
       busy = true;
@@ -367,14 +389,41 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       await context.read<AppState>().sendPasswordResetEmail(email);
+      if (!mounted) return;
       setState(() => successText = 'Password reset email sent.');
     } catch (error) {
+      if (!mounted) return;
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
         setState(() => busy = false);
       }
     }
+  }
+
+  String? _validateEmail(String? value) {
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) return 'Enter your email address.';
+
+    final atIndex = email.indexOf('@');
+    final dotIndex = email.lastIndexOf('.');
+    if (atIndex <= 0 ||
+        dotIndex <= atIndex + 1 ||
+        dotIndex >= email.length - 1) {
+      return 'Enter a valid email address.';
+    }
+
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    final password = value ?? '';
+    if (password.isEmpty) return 'Enter your password.';
+    if (createAccount && password.length < 6) {
+      return 'Use at least 6 characters.';
+    }
+
+    return null;
   }
 
   String _friendlyError(Object error) {
@@ -385,6 +434,9 @@ class _AuthScreenState extends State<AuthScreen> {
       return 'No account found for this email.';
     }
     if (text.contains('wrong-password')) return 'Incorrect password.';
+    if (text.contains('invalid-credential')) {
+      return 'Email or password is incorrect.';
+    }
     if (text.contains('email-already-in-use')) {
       return 'An account already exists for this email.';
     }
@@ -392,10 +444,20 @@ class _AuthScreenState extends State<AuthScreen> {
       return 'Use a stronger password, at least 6 characters.';
     }
     if (text.contains('network-request-failed')) {
-      return 'Network error. Check your connection.';
+      return 'Could not connect. Check your internet and try again.';
+    }
+    if (text.contains('too-many-requests')) {
+      return 'Too many attempts. Wait a moment, then try again.';
+    }
+    if (text.contains('user-disabled')) return 'This account is disabled.';
+    if (text.contains('operation-not-allowed')) {
+      return 'This sign-in method is temporarily unavailable.';
     }
     if (text.contains('popup-closed-by-user')) {
       return 'Google sign-in was cancelled.';
+    }
+    if (text.contains('popup-blocked')) {
+      return 'Your browser blocked the Google sign-in window. Allow popups and try again.';
     }
     if (text.contains('unauthorized-domain')) {
       return 'This desktop app address is not authorized for Google sign-in.';
@@ -411,171 +473,245 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Support Worker Log')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            shrinkWrap: true,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF151B29),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFF34405F)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Icon(
-                      createAccount
-                          ? Icons.person_add_alt_1_outlined
-                          : Icons.lock_outline,
-                      size: 44,
-                      color: const Color(0xFF4F8DF7),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      createAccount
-                          ? 'Create your app account'
-                          : 'Sign in to your app',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      createAccount
-                          ? 'Your existing visits stay on this device and are '
-                                'added to your new cloud account after sign-in.'
-                          : 'Visits save on this device first. Signing in backs '
-                                'up and syncs your app data.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF8396C7),
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const _LoginAccountGuide(),
-                    const SizedBox(height: 18),
-                    TextField(
-                      controller: emailController,
-                      enabled: !busy,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: passwordController,
-                      enabled: !busy,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: Icon(Icons.password_outlined),
-                      ),
-                      onSubmitted: (_) {
-                        if (!busy) _submit();
-                      },
-                    ),
-                    if (errorText != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        errorText!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFFFF6B6B),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                    if (successText != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        successText!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFF31E981),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                    if (appState.cloudSyncError != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Sync warning: ${appState.cloudSyncError}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFFFFC857)),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: busy ? null : _submit,
-                      icon: busy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              createAccount
-                                  ? Icons.person_add_alt_1
-                                  : Icons.login,
+      body: SafeArea(
+        child: Scrollbar(
+          controller: scrollController,
+          interactive: true,
+          child: SingleChildScrollView(
+            controller: scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF151B29),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFF34405F)),
+                  ),
+                  child: AutofillGroup(
+                    child: Form(
+                      key: formKey,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Icon(
+                            createAccount
+                                ? Icons.person_add_alt_1_outlined
+                                : Icons.lock_outline,
+                            size: 44,
+                            color: const Color(0xFF4F8DF7),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            createAccount
+                                ? 'Create your app account'
+                                : 'Sign in to your app',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            createAccount
+                                ? 'Your existing visits stay on this device and are '
+                                      'added to your new cloud account after sign-in.'
+                                : 'Visits save on this device first. Signing in backs '
+                                      'up and syncs your app data.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFF8396C7),
+                              height: 1.35,
                             ),
-                      label: Text(
-                        createAccount ? 'Create account' : 'Sign in with email',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: busy ? null : _signInWithGoogle,
-                      icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                      label: const Text('Sign in with Google'),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Google sign-in also asks for Drive document access. '
-                      'Email sign-in can connect Drive later.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF8396C7),
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: busy
-                          ? null
-                          : () {
-                              setState(() {
-                                createAccount = !createAccount;
-                                errorText = null;
-                                successText = null;
-                              });
+                          ),
+                          const SizedBox(height: 16),
+                          const _LoginAccountGuide(),
+                          const SizedBox(height: 18),
+                          TextFormField(
+                            controller: emailController,
+                            focusNode: emailFocusNode,
+                            enabled: !busy,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                            autofillHints: const [AutofillHints.email],
+                            validator: _validateEmail,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              hintText: 'you@example.com',
+                              prefixIcon: Icon(Icons.email_outlined),
+                            ),
+                            onFieldSubmitted: (_) =>
+                                passwordFocusNode.requestFocus(),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: passwordController,
+                            focusNode: passwordFocusNode,
+                            enabled: !busy,
+                            obscureText: !showPassword,
+                            enableSuggestions: false,
+                            autocorrect: false,
+                            textInputAction: TextInputAction.done,
+                            autofillHints: [
+                              createAccount
+                                  ? AutofillHints.newPassword
+                                  : AutofillHints.password,
+                            ],
+                            validator: _validatePassword,
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: const Icon(Icons.password_outlined),
+                              suffixIcon: IconButton(
+                                tooltip: showPassword
+                                    ? 'Hide password'
+                                    : 'Show password',
+                                onPressed: busy
+                                    ? null
+                                    : () {
+                                        setState(
+                                          () => showPassword = !showPassword,
+                                        );
+                                      },
+                                icon: Icon(
+                                  showPassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                              ),
+                            ),
+                            onFieldSubmitted: (_) {
+                              if (!busy) _submit();
                             },
-                      child: Text(
-                        createAccount
-                            ? 'Already have an account? Sign in'
-                            : 'Need an account? Create one',
+                          ),
+                          if (errorText != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              errorText!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFF6B6B),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                          if (successText != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              successText!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFF31E981),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                          if (appState.cloudSyncError != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'Sync warning: ${appState.cloudSyncError}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Color(0xFFFFC857)),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: busy ? null : _submit,
+                            icon: busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    createAccount
+                                        ? Icons.person_add_alt_1
+                                        : Icons.login,
+                                  ),
+                            label: Text(
+                              createAccount
+                                  ? 'Create account'
+                                  : 'Sign in with email',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: busy ? null : _signInWithGoogle,
+                            icon: const Icon(
+                              Icons.g_mobiledata_rounded,
+                              size: 28,
+                            ),
+                            label: const Text('Sign in with Google'),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF101827),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Color(0xFF8EA7FF),
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Google sign-in also connects Drive. Email sign-in can connect Drive later.',
+                                    style: TextStyle(
+                                      color: Color(0xFF8396C7),
+                                      fontSize: 12,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: busy
+                                ? null
+                                : () {
+                                    setState(() {
+                                      createAccount = !createAccount;
+                                      showPassword = false;
+                                      errorText = null;
+                                      successText = null;
+                                    });
+                                  },
+                            child: Text(
+                              createAccount
+                                  ? 'Already have an account? Sign in'
+                                  : 'Need an account? Create one',
+                            ),
+                          ),
+                          if (!createAccount)
+                            TextButton(
+                              onPressed: busy ? null : _resetPassword,
+                              child: const Text('Forgot password?'),
+                            ),
+                        ],
                       ),
                     ),
-                    TextButton(
-                      onPressed: busy ? null : _resetPassword,
-                      child: const Text('Forgot password?'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

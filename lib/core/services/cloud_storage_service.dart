@@ -21,7 +21,7 @@ class CloudStorageService {
   static const _googleSignInTimeout = Duration(seconds: 75);
   static const _sessionStartedAtKey =
       'support_worker_log_session_started_at_v1';
-  static const _sessionMaxAge = Duration(hours: 3);
+  static const _sessionMaxAge = Duration(hours: 24);
 
   @visibleForTesting
   static Duration get sessionMaxAgeForTesting => _sessionMaxAge;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -56,6 +57,16 @@ class _SupportWorkerLogAppState extends State<SupportWorkerLogApp> {
       child: MaterialApp(
         title: 'Support Worker Log',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          scrollbars: true,
+          dragDevices: const {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.invertedStylus,
+            PointerDeviceKind.trackpad,
+          },
+        ),
         builder: (context, child) {
           return FirebaseStatusOverlay(child: child ?? const SizedBox.shrink());
         },

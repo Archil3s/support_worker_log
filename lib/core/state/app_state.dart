@@ -62,6 +62,7 @@ class AppState extends ChangeNotifier {
   final Map<String, EntryDriveSupportNoteMeta> _driveSupportNoteMetas = {};
   final Set<String> _deletedEntryIds = {};
   final Set<String> _deletedPayeEntryIds = {};
+  final Set<String> _deletedGeneralActionIds = {};
 
   late final List<String> _clientsView = UnmodifiableListView(_clients);
   late final List<String> _payeClientsView = UnmodifiableListView(_payeClients);
@@ -91,6 +92,8 @@ class AppState extends ChangeNotifier {
   bool _appUnlocked = false;
   String? _cloudSyncError;
   final bool _warmGoogleAccounts;
+  Future<void> _localSaveQueue = Future<void>.value();
+  Future<void> _cloudSaveQueue = Future<void>.value();
 
   AppSettings get settings => _settings;
   AppMode get appMode => _appMode;
@@ -938,7 +941,7 @@ class AppState extends ChangeNotifier {
     final index = entries.indexWhere((entry) => entry.id == updatedEntry.id);
     if (index == -1) return;
 
-    entries[index] = updatedEntry;
+    entries[index] = updatedEntry.copyWith(updatedAt: DateTime.now());
     _persistAndNotify();
     if (!payeMode) _scheduleDriveInvoiceSync();
   }
@@ -1165,6 +1168,7 @@ class AppState extends ChangeNotifier {
     _invoiceBaselineTotals.clear();
     _deletedEntryIds.clear();
     _deletedPayeEntryIds.clear();
+    _deletedGeneralActionIds.clear();
 
     await _save();
     notifyListeners();
@@ -1211,12 +1215,13 @@ class AppState extends ChangeNotifier {
   }
 
   void completeActiveVisit(WorkEntry entry) {
+    final savedEntry = _withInitialUpdatedAt(entry);
     if (isPayeMode) {
       _deletedPayeEntryIds.remove(entry.id.trim());
-      _payeEntries.insert(0, entry);
+      _payeEntries.insert(0, savedEntry);
     } else {
       _deletedEntryIds.remove(entry.id.trim());
-      _entries.insert(0, entry);
+      _entries.insert(0, savedEntry);
     }
     _activeVisit = null;
     _persistAndNotify();
@@ -1224,12 +1229,13 @@ class AppState extends ChangeNotifier {
   }
 
   void addEntry(WorkEntry entry) {
+    final savedEntry = _withInitialUpdatedAt(entry);
     if (isPayeMode) {
       _deletedPayeEntryIds.remove(entry.id.trim());
-      _payeEntries.insert(0, entry);
+      _payeEntries.insert(0, savedEntry);
     } else {
       _deletedEntryIds.remove(entry.id.trim());
-      _entries.insert(0, entry);
+      _entries.insert(0, savedEntry);
     }
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
@@ -1237,7 +1243,7 @@ class AppState extends ChangeNotifier {
 
   void addPayeEntry(WorkEntry entry) {
     _deletedPayeEntryIds.remove(entry.id.trim());
-    _payeEntries.insert(0, entry);
+    _payeEntries.insert(0, _withInitialUpdatedAt(entry));
     _persistAndNotify();
   }
 
@@ -1245,6 +1251,7 @@ class AppState extends ChangeNotifier {
     final title = action.title.trim();
     if (title.isEmpty) return;
 
+    _deletedGeneralActionIds.remove(action.id.trim());
     _generalActions.insert(
       0,
       action.copyWith(
@@ -1253,6 +1260,7 @@ class AppState extends ChangeNotifier {
             ? action.client?.trim()
             : null,
         clearClient: action.scope != GeneralActionScope.client,
+        updatedAt: DateTime.now(),
       ),
     );
     _persistAndNotify();
@@ -1262,12 +1270,15 @@ class AppState extends ChangeNotifier {
     final index = _generalActions.indexWhere((item) => item.id == action.id);
     if (index == -1) return;
 
-    _generalActions[index] = action;
+    _deletedGeneralActionIds.remove(action.id.trim());
+    _generalActions[index] = action.copyWith(updatedAt: DateTime.now());
     _persistAndNotify();
   }
 
   void deleteGeneralAction(GeneralActionItem action) {
     _generalActions.removeWhere((item) => item.id == action.id);
+    final id = action.id.trim();
+    if (id.isNotEmpty) _deletedGeneralActionIds.add(id);
     _persistAndNotify();
   }
 
@@ -1299,12 +1310,12 @@ class AppState extends ChangeNotifier {
       _deletedPayeEntryIds.removeAll(
         entries.map((entry) => entry.id.trim()).where((id) => id.isNotEmpty),
       );
-      _payeEntries.insertAll(0, entries);
+      _payeEntries.insertAll(0, entries.map(_withInitialUpdatedAt));
     } else {
       _deletedEntryIds.removeAll(
         entries.map((entry) => entry.id.trim()).where((id) => id.isNotEmpty),
       );
-      _entries.insertAll(0, entries);
+      _entries.insertAll(0, entries.map(_withInitialUpdatedAt));
     }
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
@@ -1323,9 +1334,13 @@ class AppState extends ChangeNotifier {
         updatedEntry.googleCalendarEntered &&
         !currentEntry.hasSameCalendarEventDetails(updatedEntry);
 
+    final changedAt = DateTime.now();
     activeEntries[index] = shouldResetCalendar
-        ? updatedEntry.copyWith(googleCalendarEntered: false)
-        : updatedEntry;
+        ? updatedEntry.copyWith(
+            googleCalendarEntered: false,
+            updatedAt: changedAt,
+          )
+        : updatedEntry.copyWith(updatedAt: changedAt);
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
@@ -1336,7 +1351,7 @@ class AppState extends ChangeNotifier {
     );
     if (index == -1) return;
 
-    _payeEntries[index] = updatedEntry;
+    _payeEntries[index] = updatedEntry.copyWith(updatedAt: DateTime.now());
     _persistAndNotify();
   }
 
@@ -1389,7 +1404,10 @@ class AppState extends ChangeNotifier {
     } else {
       _deletedEntryIds.remove(removedEntry.entry.id.trim());
     }
-    activeEntries.insert(index, removedEntry.entry);
+    activeEntries.insert(
+      index,
+      removedEntry.entry.copyWith(updatedAt: DateTime.now()),
+    );
     _persistAndNotify();
     if (!isPayeMode) _scheduleDriveInvoiceSync();
   }
@@ -1403,6 +1421,7 @@ class AppState extends ChangeNotifier {
         date: DateTime.now(),
         startTime: TimeOfDay.now(),
         googleCalendarEntered: false,
+        updatedAt: DateTime.now(),
       ),
     );
     _persistAndNotify();
@@ -1517,6 +1536,7 @@ class AppState extends ChangeNotifier {
     activeEntries[index] = currentEntry.copyWith(
       nextActions: updatedActions,
       supportNoteBreakdown: updatedBreakdown,
+      updatedAt: DateTime.now(),
     );
 
     _persistAndNotify();
@@ -1546,6 +1566,7 @@ class AppState extends ChangeNotifier {
       textReplyNeeded: clearTextReplyNeeded
           ? false
           : currentEntry.textReplyNeeded,
+      updatedAt: DateTime.now(),
     );
 
     _persistAndNotify();
@@ -1625,7 +1646,10 @@ class AppState extends ChangeNotifier {
       final entry = activeEntries[index];
 
       if (entry.client == oldName) {
-        activeEntries[index] = entry.copyWith(client: trimmed);
+        activeEntries[index] = entry.copyWith(
+          client: trimmed,
+          updatedAt: DateTime.now(),
+        );
       }
     }
 
@@ -1637,7 +1661,10 @@ class AppState extends ChangeNotifier {
       for (var index = 0; index < _generalActions.length; index++) {
         final action = _generalActions[index];
         if (action.client == oldName) {
-          _generalActions[index] = action.copyWith(client: trimmed);
+          _generalActions[index] = action.copyWith(
+            client: trimmed,
+            updatedAt: DateTime.now(),
+          );
         }
       }
     }
@@ -1675,11 +1702,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _syncLocalAndCloud() async {
-    final localData = _currentStoredData();
+    await _localSaveQueue.catchError((_) {});
+    await _cloudSaveQueue.catchError((_) {});
     final cloudData = await _cloudStorageService.load();
+    final localData = _currentStoredData();
 
     if (cloudData == null) {
-      await _cloudStorageService.save(localData);
+      await _queueCloudSave(localData);
       _cloudSyncReady = true;
       _cloudSyncError = null;
       _startCloudDataSubscription();
@@ -1697,8 +1726,10 @@ class AppState extends ChangeNotifier {
     _applyLaunchAppModeOverride();
     final dataToSave = _currentStoredData();
 
-    await _storageService.save(dataToSave);
-    await _cloudStorageService.save(dataToSave);
+    final localSave = _queueLocalSave(dataToSave);
+    final cloudSave = _queueCloudSave(dataToSave, after: localSave);
+    await localSave;
+    await cloudSave;
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
@@ -1761,7 +1792,7 @@ class AppState extends ChangeNotifier {
     _replaceInMemory(mergedData);
     _applyLaunchAppModeOverride();
     final dataToSave = _currentStoredData();
-    await _storageService.save(dataToSave);
+    await _queueLocalSave(dataToSave);
 
     _cloudSyncReady = true;
     _cloudSyncError = null;
@@ -2083,6 +2114,9 @@ class AppState extends ChangeNotifier {
     _deletedPayeEntryIds
       ..clear()
       ..addAll(data.deletedPayeEntryIds);
+    _deletedGeneralActionIds
+      ..clear()
+      ..addAll(data.deletedGeneralActionIds);
 
     final cleanedEntries = _dedupeEntries(
       _withoutDeletedEntries(data.entries, _deletedEntryIds),
@@ -2103,7 +2137,12 @@ class AppState extends ChangeNotifier {
       ..addAll(data.invoiceStatuses);
     _generalActions
       ..clear()
-      ..addAll(_dedupeGeneralActions(data.generalActions));
+      ..addAll(
+        _withoutDeletedGeneralActions(
+          _dedupeGeneralActions(data.generalActions),
+          _deletedGeneralActionIds,
+        ),
+      );
     _personalLogEntries
       ..clear()
       ..addAll(_dedupePersonalLogEntries(data.personalLogEntries));
@@ -2233,16 +2272,23 @@ class AppState extends ChangeNotifier {
       ...cloudData.deletedPayeEntryIds,
       ...localData.deletedPayeEntryIds,
     };
+    final deletedGeneralActionIds = {
+      ...cloudData.deletedGeneralActionIds,
+      ...localData.deletedGeneralActionIds,
+    };
     final mergedEntries = _dedupeEntries(
       _withoutDeletedEntries([
         ...cloudData.entries,
         ...localData.entries,
       ], deletedEntryIds),
     );
-    final mergedGeneralActions = _dedupeGeneralActions([
-      ...cloudData.generalActions,
-      ...localData.generalActions,
-    ]);
+    final mergedGeneralActions = _withoutDeletedGeneralActions(
+      _dedupeGeneralActions([
+        ...cloudData.generalActions,
+        ...localData.generalActions,
+      ]),
+      deletedGeneralActionIds,
+    );
     final mergedPayeEntries = _dedupeEntries(
       _withoutDeletedEntries([
         ...cloudData.payeEntries,
@@ -2284,7 +2330,16 @@ class AppState extends ChangeNotifier {
       driveSupportNoteMetas: mergedDriveSupportNoteMetas,
       deletedEntryIds: deletedEntryIds,
       deletedPayeEntryIds: deletedPayeEntryIds,
+      deletedGeneralActionIds: deletedGeneralActionIds,
     );
+  }
+
+  @visibleForTesting
+  StoredAppData mergeStoredDataForTesting({
+    required StoredAppData localData,
+    required StoredAppData cloudData,
+  }) {
+    return _mergeStoredData(localData: localData, cloudData: cloudData);
   }
 
   StoredAppData _currentStoredData() {
@@ -2304,6 +2359,7 @@ class AppState extends ChangeNotifier {
       driveSupportNoteMetas: _driveSupportNoteMetas,
       deletedEntryIds: _deletedEntryIds,
       deletedPayeEntryIds: _deletedPayeEntryIds,
+      deletedGeneralActionIds: _deletedGeneralActionIds,
     );
   }
 
@@ -2315,6 +2371,17 @@ class AppState extends ChangeNotifier {
 
     return entries
         .where((entry) => !deletedIds.contains(entry.id.trim()))
+        .toList();
+  }
+
+  List<GeneralActionItem> _withoutDeletedGeneralActions(
+    List<GeneralActionItem> actions,
+    Set<String> deletedIds,
+  ) {
+    if (deletedIds.isEmpty) return actions;
+
+    return actions
+        .where((action) => !deletedIds.contains(action.id.trim()))
         .toList();
   }
 
@@ -2558,8 +2625,9 @@ class AppState extends ChangeNotifier {
   }
 
   List<WorkEntry> _dedupeEntries(List<WorkEntry> entries) {
-    final seenIds = <String>{};
+    final idIndexes = <String, int>{};
     final seenContent = <String>{};
+    final contentKeys = <String>[];
     final result = <WorkEntry>[];
 
     for (final entry in entries) {
@@ -2576,7 +2644,15 @@ class AppState extends ChangeNotifier {
         entry.notes.join('|'),
       ].join('::');
 
-      if (id.isNotEmpty && seenIds.contains(id)) {
+      final existingIndex = id.isEmpty ? null : idIndexes[id];
+      if (existingIndex != null) {
+        final current = result[existingIndex];
+        if (_preferIncomingEntry(current, entry)) {
+          seenContent.remove(contentKeys[existingIndex]);
+          result[existingIndex] = entry;
+          contentKeys[existingIndex] = contentKey;
+          seenContent.add(contentKey);
+        }
         continue;
       }
 
@@ -2585,29 +2661,44 @@ class AppState extends ChangeNotifier {
       }
 
       if (id.isNotEmpty) {
-        seenIds.add(id);
+        idIndexes[id] = result.length;
       }
 
       seenContent.add(contentKey);
+      contentKeys.add(contentKey);
       result.add(entry);
     }
 
     return result;
   }
 
+  bool _preferIncomingEntry(WorkEntry current, WorkEntry incoming) {
+    final currentUpdatedAt = current.updatedAt;
+    final incomingUpdatedAt = incoming.updatedAt;
+    if (incomingUpdatedAt == null) return false;
+    if (currentUpdatedAt == null) return true;
+    return incomingUpdatedAt.isAfter(currentUpdatedAt);
+  }
+
   List<GeneralActionItem> _dedupeGeneralActions(
     List<GeneralActionItem> actions,
   ) {
-    final seenIds = <String>{};
+    final idIndexes = <String, int>{};
     final result = <GeneralActionItem>[];
 
     for (final action in actions) {
       final id = action.id.trim();
       final title = action.title.trim();
-      if (id.isEmpty || title.isEmpty || seenIds.contains(id)) continue;
+      if (id.isEmpty || title.isEmpty) continue;
 
-      seenIds.add(id);
-      result.add(action.copyWith(title: title));
+      final cleaned = action.copyWith(title: title);
+      final existingIndex = idIndexes[id];
+      if (existingIndex == null) {
+        idIndexes[id] = result.length;
+        result.add(cleaned);
+      } else if (_preferIncomingGeneralAction(result[existingIndex], cleaned)) {
+        result[existingIndex] = cleaned;
+      }
     }
 
     result.sort((a, b) {
@@ -2621,6 +2712,17 @@ class AppState extends ChangeNotifier {
     });
 
     return result;
+  }
+
+  bool _preferIncomingGeneralAction(
+    GeneralActionItem current,
+    GeneralActionItem incoming,
+  ) {
+    final currentChangedAt =
+        current.updatedAt ?? current.completedAt ?? current.createdAt;
+    final incomingChangedAt =
+        incoming.updatedAt ?? incoming.completedAt ?? incoming.createdAt;
+    return incomingChangedAt.isAfter(currentChangedAt);
   }
 
   List<PersonalLogEntry> _dedupePersonalLogEntries(
@@ -2654,6 +2756,11 @@ class AppState extends ChangeNotifier {
     return index;
   }
 
+  WorkEntry _withInitialUpdatedAt(WorkEntry entry) {
+    if (entry.updatedAt != null) return entry;
+    return entry.copyWith(updatedAt: DateTime.now());
+  }
+
   void _persistAndNotify() {
     notifyListeners();
     unawaited(_save());
@@ -2661,9 +2768,31 @@ class AppState extends ChangeNotifier {
 
   Future<void> _save() async {
     final data = _currentStoredData();
+    final localSave = _queueLocalSave(data);
 
-    await _storageService.save(data);
+    if (!_cloudStorageService.isSignedIn) return localSave;
 
+    return _queueCloudSave(data, after: localSave);
+  }
+
+  Future<void> _queueLocalSave(StoredAppData data) {
+    final localSave = _localSaveQueue
+        .catchError((_) {})
+        .then((_) => _storageService.save(data));
+    _localSaveQueue = localSave;
+    return localSave;
+  }
+
+  Future<void> _queueCloudSave(StoredAppData data, {Future<void>? after}) {
+    final cloudSave = _cloudSaveQueue.catchError((_) {}).then((_) async {
+      if (after != null) await after;
+      await _saveCloudSnapshot(data);
+    });
+    _cloudSaveQueue = cloudSave;
+    return cloudSave;
+  }
+
+  Future<void> _saveCloudSnapshot(StoredAppData data) async {
     if (!_cloudStorageService.isSignedIn) return;
 
     try {

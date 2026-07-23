@@ -117,6 +117,7 @@ class WorkEntry {
     this.textReplyNeeded = false,
     this.odometerStart,
     this.odometerEnd,
+    this.updatedAt,
   });
 
   final String id;
@@ -134,6 +135,7 @@ class WorkEntry {
   final bool textReplyNeeded;
   final double? odometerStart;
   final double? odometerEnd;
+  final DateTime? updatedAt;
 
   int get baseMinutes => minutes.clamp(0, 1440).toInt();
 
@@ -200,6 +202,7 @@ class WorkEntry {
     bool? textReplyNeeded,
     double? odometerStart,
     double? odometerEnd,
+    DateTime? updatedAt,
   }) {
     return WorkEntry(
       id: id ?? this.id,
@@ -218,6 +221,7 @@ class WorkEntry {
       textReplyNeeded: textReplyNeeded ?? this.textReplyNeeded,
       odometerStart: odometerStart ?? this.odometerStart,
       odometerEnd: odometerEnd ?? this.odometerEnd,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -239,6 +243,7 @@ class WorkEntry {
       'textReplyNeeded': textReplyNeeded,
       'odometerStart': odometerStart,
       'odometerEnd': odometerEnd,
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
@@ -312,6 +317,7 @@ class WorkEntry {
       textReplyNeeded: json['textReplyNeeded'] == true,
       odometerStart: readNullableDouble('odometerStart'),
       odometerEnd: readNullableDouble('odometerEnd'),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
     );
   }
 

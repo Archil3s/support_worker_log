@@ -20,6 +20,7 @@ class GeneralActionItem {
     required this.createdAt,
     this.client,
     this.completedAt,
+    this.updatedAt,
   });
 
   final String id;
@@ -28,6 +29,7 @@ class GeneralActionItem {
   final DateTime createdAt;
   final String? client;
   final DateTime? completedAt;
+  final DateTime? updatedAt;
 
   bool get isCompleted => completedAt != null;
 
@@ -40,6 +42,7 @@ class GeneralActionItem {
     bool clearClient = false,
     DateTime? completedAt,
     bool clearCompletedAt = false,
+    DateTime? updatedAt,
   }) {
     return GeneralActionItem(
       id: id ?? this.id,
@@ -48,6 +51,7 @@ class GeneralActionItem {
       createdAt: createdAt ?? this.createdAt,
       client: clearClient ? null : client ?? this.client,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -59,6 +63,7 @@ class GeneralActionItem {
       'createdAt': createdAt.toIso8601String(),
       'client': client,
       'completedAt': completedAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
@@ -80,6 +85,7 @@ class GeneralActionItem {
       createdAt: createdAt,
       client: json['client'] as String?,
       completedAt: DateTime.tryParse(json['completedAt'] as String? ?? ''),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
     );
   }
 }
