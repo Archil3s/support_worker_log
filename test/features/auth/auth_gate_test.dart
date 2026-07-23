@@ -5,9 +5,7 @@ import 'package:support_worker_log/core/state/app_state.dart';
 import 'package:support_worker_log/features/auth/auth_gate.dart';
 
 void main() {
-  testWidgets('login separates app account from Google Drive access', (
-    tester,
-  ) async {
+  testWidgets('login presents simple Google and email choices', (tester) async {
     final appState = AppState(warmGoogleAccounts: false);
     addTearDown(appState.dispose);
     addTearDown(() {
@@ -25,13 +23,14 @@ void main() {
       ),
     );
 
-    expect(find.text('Sign in to your app'), findsOneWidget);
-    expect(find.text('App account'), findsOneWidget);
-    expect(find.text('Google Drive'), findsOneWidget);
-    expect(find.text('Sign in with email'), findsOneWidget);
-    expect(find.text('Sign in with Google'), findsOneWidget);
-    expect(find.text('Sign In & Sync'), findsNothing);
-    expect(find.text('Continue with Google Sync'), findsNothing);
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('or use email'), findsOneWidget);
+    expect(find.text('Email address'), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('App account'), findsNothing);
+    expect(find.text('Google Drive'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('login validates locally and scrolls above a small keyboard', (
@@ -59,8 +58,8 @@ void main() {
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byTooltip('Show password'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Sign in with email'));
-    await tester.tap(find.text('Sign in with email'));
+    await tester.ensureVisible(find.text('Sign in'));
+    await tester.tap(find.text('Sign in'));
     await tester.pump();
 
     expect(find.text('Enter your email address.'), findsOneWidget);
