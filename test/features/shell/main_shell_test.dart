@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,6 +44,18 @@ void main() {
         ],
         odometerStart: 100,
         odometerEnd: 110,
+      ),
+    );
+    final now = DateTime.now();
+    appState.addEntry(
+      WorkEntry(
+        id: 'previous-month-text',
+        client: 'Previous client',
+        type: EntryType.textNote,
+        date: DateTime(now.year, now.month - 1, 15),
+        startTime: const TimeOfDay(hour: 10, minute: 0),
+        minutes: 20,
+        notes: const [],
       ),
     );
 
@@ -126,8 +139,65 @@ void main() {
       find.byKey(const ValueKey('work-contact-type-adminEducationResources')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('work-month-copy-totals')),
+      findsOneWidget,
+    );
     expect(find.text('1 to finish'), findsOneWidget);
     expect(find.text('1 open'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('work-month-previous')));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('work-month-stat-entries')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('work-contact-type-homeVisit')),
+        matching: find.text('0'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('work-contact-type-textNote')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    await tester.tap(find.byKey(const ValueKey('work-month-copy-totals')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(copiedText, contains('Work totals -'));
+    expect(copiedText, contains('Texts: 1'));
+    expect(find.textContaining('totals copied'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('work-month-next')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const ValueKey('work-flow-notes')));
     await tester.pump(const Duration(milliseconds: 200));

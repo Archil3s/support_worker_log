@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/entry_type.dart';
+import '../models/work_contact_type_display.dart';
 
 class WorkContactTypeBreakdown extends StatelessWidget {
   const WorkContactTypeBreakdown({required this.entriesByType, super.key});
@@ -26,15 +27,21 @@ class WorkContactTypeBreakdown extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              for (var index = 0; index < _displayOrder.length; index++) ...[
+              for (
+                var index = 0;
+                index < workContactTypeDisplayOrder.length;
+                index++
+              ) ...[
                 _ContactTypeTotal(
                   key: ValueKey(
-                    'work-contact-type-${_displayOrder[index].name}',
+                    'work-contact-type-'
+                    '${workContactTypeDisplayOrder[index].name}',
                   ),
-                  type: _displayOrder[index],
-                  count: entriesByType[_displayOrder[index]] ?? 0,
+                  type: workContactTypeDisplayOrder[index],
+                  count: entriesByType[workContactTypeDisplayOrder[index]] ?? 0,
                 ),
-                if (index < _displayOrder.length - 1) const SizedBox(width: 8),
+                if (index < workContactTypeDisplayOrder.length - 1)
+                  const SizedBox(width: 8),
               ],
             ],
           ),
@@ -67,7 +74,7 @@ class _ContactTypeTotal extends StatelessWidget {
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              _displayLabel(type),
+              workContactTypeDisplayLabel(type),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -99,37 +106,5 @@ class _ContactTypeTotal extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-const _displayOrder = [
-  EntryType.homeVisit,
-  EntryType.professionalContact,
-  EntryType.textNote,
-  EntryType.phoneCall,
-  EntryType.videoCall,
-  EntryType.emailClient,
-  EntryType.emailProfessional,
-  EntryType.adminEducationResources,
-];
-
-String _displayLabel(EntryType type) {
-  switch (type) {
-    case EntryType.homeVisit:
-      return 'Home visits';
-    case EntryType.professionalContact:
-      return 'Professional contacts';
-    case EntryType.textNote:
-      return 'Texts';
-    case EntryType.phoneCall:
-      return 'Phone calls';
-    case EntryType.videoCall:
-      return 'Video calls';
-    case EntryType.emailClient:
-      return 'Client emails';
-    case EntryType.emailProfessional:
-      return 'Professional emails';
-    case EntryType.adminEducationResources:
-      return 'Admin / resources';
   }
 }

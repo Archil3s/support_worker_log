@@ -1,7 +1,9 @@
 import '../../../../core/models/entry_type.dart';
 import '../../../../core/services/local_support_note_service.dart';
 import '../../../../core/state/app_state.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/totals.dart';
+import 'work_contact_type_display.dart';
 
 class WorkMonthSummary {
   const WorkMonthSummary({
@@ -60,6 +62,30 @@ class WorkMonthSummary {
   final int notesToFinish;
   final int openActions;
   final Map<EntryType, int> entriesByType;
+
+  String get readableText {
+    final buffer = StringBuffer()
+      ..writeln('Work totals - $label')
+      ..writeln('Total entries: $entries')
+      ..writeln('Billable hours: ${hours.toStringAsFixed(2)}')
+      ..writeln('Earnings: ${money(earned)}')
+      ..writeln('Travel: ${kilometres.toStringAsFixed(1)} km')
+      ..writeln()
+      ..writeln('Contact type totals');
+
+    for (final type in workContactTypeDisplayOrder) {
+      buffer.writeln(
+        '${workContactTypeDisplayLabel(type)}: ${entriesByType[type] ?? 0}',
+      );
+    }
+
+    buffer
+      ..writeln()
+      ..writeln('Notes to finish: $notesToFinish')
+      ..write('Open actions: $openActions');
+
+    return buffer.toString();
+  }
 }
 
 const _monthNames = [

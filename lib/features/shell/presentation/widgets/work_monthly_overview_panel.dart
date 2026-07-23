@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/formatters.dart';
 import '../models/work_month_summary.dart';
 import 'work_contact_type_breakdown.dart';
+import 'work_month_controls.dart';
 
-class WorkMonthlyOverviewPanel extends StatelessWidget {
+class WorkMonthlyOverviewPanel extends StatefulWidget {
   const WorkMonthlyOverviewPanel({
     required this.onWork,
     required this.onNotes,
@@ -21,10 +23,49 @@ class WorkMonthlyOverviewPanel extends StatelessWidget {
   final VoidCallback onPayPeriod;
 
   @override
+  State<WorkMonthlyOverviewPanel> createState() =>
+      _WorkMonthlyOverviewPanelState();
+}
+
+class _WorkMonthlyOverviewPanelState extends State<WorkMonthlyOverviewPanel> {
+  late DateTime _selectedMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedMonth = DateTime(now.year, now.month);
+  }
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + offset,
+      );
+    });
+  }
+
+  bool get _canGoNext {
+    final now = DateTime.now();
+    return _selectedMonth.year < now.year ||
+        (_selectedMonth.year == now.year && _selectedMonth.month < now.month);
+  }
+
+  Future<void> _copyTotals(WorkMonthSummary summary) async {
+    await Clipboard.setData(ClipboardData(text: summary.readableText));
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${summary.label} totals copied')));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final summary = WorkMonthSummary.fromState(
       context.watch<AppState>(),
-      DateTime.now(),
+      _selectedMonth,
     );
 
     return LayoutBuilder(
@@ -32,10 +73,14 @@ class WorkMonthlyOverviewPanel extends StatelessWidget {
         return _OverviewCard(
           summary: summary,
           maxWidth: constraints.maxWidth,
-          onWork: onWork,
-          onNotes: onNotes,
-          onActions: onActions,
-          onPayPeriod: onPayPeriod,
+          onPreviousMonth: () => _changeMonth(-1),
+          onNextMonth: () => _changeMonth(1),
+          canGoNext: _canGoNext,
+          onCopy: () => _copyTotals(summary),
+          onWork: widget.onWork,
+          onNotes: widget.onNotes,
+          onActions: widget.onActions,
+          onPayPeriod: widget.onPayPeriod,
         );
       },
     );
@@ -50,6 +95,10 @@ class _OverviewCard extends StatelessWidget {
     required this.onNotes,
     required this.onActions,
     required this.onPayPeriod,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.canGoNext,
+    required this.onCopy,
   });
 
   final WorkMonthSummary summary;
@@ -58,6 +107,10 @@ class _OverviewCard extends StatelessWidget {
   final VoidCallback onNotes;
   final VoidCallback onActions;
   final VoidCallback onPayPeriod;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final bool canGoNext;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +130,14 @@ class _OverviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _OverviewHeader(summary: summary),
+          const SizedBox(height: 13),
+          WorkMonthControls(
+            label: summary.label,
+            onPrevious: onPreviousMonth,
+            onNext: onNextMonth,
+            onCopy: onCopy,
+            canGoNext: canGoNext,
+          ),
           const SizedBox(height: 13),
           _MonthlyMetrics(summary: summary, metricWidth: metricWidth),
           const SizedBox(height: 13),
@@ -137,17 +198,17 @@ class _OverviewHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${summary.label} overview',
-                style: const TextStyle(
+              const Text(
+                'Work monthly overview',
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const Text(
-                'Month to date',
-                style: TextStyle(
+              Text(
+                summary.label,
+                style: const TextStyle(
                   color: Color(0xFFAFC6F5),
                   fontSize: 12,
                   fontWeight: FontWeight.w700,

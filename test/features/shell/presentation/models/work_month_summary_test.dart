@@ -30,6 +30,13 @@ void main() {
     expect(summary.entriesByType[EntryType.professionalContact], 1);
     expect(summary.entriesByType[EntryType.phoneCall], 0);
     expect(summary.entriesByType.length, EntryType.values.length);
+    expect(summary.readableText, contains('Work totals - July 2026'));
+    expect(summary.readableText, contains('Total entries: 4'));
+    expect(summary.readableText, contains('Home visits: 2'));
+    expect(summary.readableText, contains('Professional contacts: 1'));
+    expect(summary.readableText, contains('Texts: 1'));
+    expect(summary.readableText, contains('Phone calls: 0'));
+    expect(summary.readableText, contains('Client emails: 0'));
   });
 }
 
