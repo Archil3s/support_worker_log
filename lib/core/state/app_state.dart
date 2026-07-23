@@ -33,6 +33,14 @@ class RemovedEntry {
 
 enum CalendarEntryExportResult { created, draftOpened }
 
+enum AppSaveSyncStatus {
+  savingLocally,
+  savedLocally,
+  syncing,
+  synced,
+  syncError,
+}
+
 class AppState extends ChangeNotifier {
   AppState({bool warmGoogleAccounts = true})
     : _warmGoogleAccounts = warmGoogleAccounts;
@@ -94,6 +102,11 @@ class AppState extends ChangeNotifier {
   final bool _warmGoogleAccounts;
   Future<void> _localSaveQueue = Future<void>.value();
   Future<void> _cloudSaveQueue = Future<void>.value();
+  int _pendingLocalSaveCount = 0;
+  int _pendingCloudSaveCount = 0;
+  DateTime? _lastLocalSavedAt;
+  DateTime? _lastCloudSyncedAt;
+  bool _disposed = false;
 
   AppSettings get settings => _settings;
   AppMode get appMode => _appMode;
@@ -122,6 +135,25 @@ class AppState extends ChangeNotifier {
   bool get appUnlocked => _appUnlocked;
   bool get cloudSyncReady => _cloudSyncReady;
   String? get cloudSyncError => _cloudSyncError;
+  DateTime? get lastLocalSavedAt => _lastLocalSavedAt;
+  DateTime? get lastCloudSyncedAt => _lastCloudSyncedAt;
+  AppSaveSyncStatus get saveSyncStatus {
+    if (_pendingLocalSaveCount > 0) {
+      return AppSaveSyncStatus.savingLocally;
+    }
+    if (_pendingCloudSaveCount > 0 ||
+        (isSignedIn && !_cloudSyncReady && _cloudSyncError == null)) {
+      return AppSaveSyncStatus.syncing;
+    }
+    if (_cloudSyncError != null) {
+      return AppSaveSyncStatus.syncError;
+    }
+    if (isSignedIn && _cloudSyncReady) {
+      return AppSaveSyncStatus.synced;
+    }
+    return AppSaveSyncStatus.savedLocally;
+  }
+
   String? get cloudUserId => _cloudStorageService.userId;
   String? get cloudEmail => _cloudStorageService.email;
   DateTime? get sessionExpiresAt => _cloudStorageService.sessionExpiresAt;
@@ -2776,20 +2808,35 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _queueLocalSave(StoredAppData data) {
-    final localSave = _localSaveQueue
-        .catchError((_) {})
-        .then((_) => _storageService.save(data));
-    _localSaveQueue = localSave;
-    return localSave;
+    _pendingLocalSaveCount += 1;
+    _notifySaveStatusChanged();
+
+    final localSave = _localSaveQueue.catchError((_) {}).then((_) async {
+      await _storageService.save(data);
+      _lastLocalSavedAt = DateTime.now();
+    });
+    final trackedSave = localSave.whenComplete(() {
+      _pendingLocalSaveCount -= 1;
+      _notifySaveStatusChanged();
+    });
+    _localSaveQueue = trackedSave;
+    return trackedSave;
   }
 
   Future<void> _queueCloudSave(StoredAppData data, {Future<void>? after}) {
+    _pendingCloudSaveCount += 1;
+    _notifySaveStatusChanged();
+
     final cloudSave = _cloudSaveQueue.catchError((_) {}).then((_) async {
       if (after != null) await after;
       await _saveCloudSnapshot(data);
     });
-    _cloudSaveQueue = cloudSave;
-    return cloudSave;
+    final trackedSave = cloudSave.whenComplete(() {
+      _pendingCloudSaveCount -= 1;
+      _notifySaveStatusChanged();
+    });
+    _cloudSaveQueue = trackedSave;
+    return trackedSave;
   }
 
   Future<void> _saveCloudSnapshot(StoredAppData data) async {
@@ -2799,14 +2846,22 @@ class AppState extends ChangeNotifier {
       await _cloudStorageService.save(data);
       _cloudSyncReady = true;
       _cloudSyncError = null;
+      _lastCloudSyncedAt = DateTime.now();
     } catch (error) {
       _cloudSyncReady = false;
       _cloudSyncError = error.toString();
     }
   }
 
+  void _notifySaveStatusChanged() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     _driveInvoiceSyncDebounce?.cancel();
     _drivePersonalSyncDebounce?.cancel();
     unawaited(_stopCloudDataSubscription());

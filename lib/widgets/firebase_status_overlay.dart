@@ -160,27 +160,64 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
     return user.email ?? user.displayName ?? user.phoneNumber ?? user.uid;
   }
 
-  bool _isLive(AppState appState) {
-    return appState.isSignedIn &&
-        appState.cloudSyncReady &&
-        appState.cloudSyncError == null;
-  }
-
   String _syncLabel(AppState appState) {
     if (_syncing) return 'Syncing app data';
-    if (_isLive(appState)) return 'App data synced';
-    if (appState.cloudSyncError != null) return 'Sync needs attention';
-    return 'Connecting app sync';
+
+    return switch (appState.saveSyncStatus) {
+      AppSaveSyncStatus.savingLocally => 'Saving locally…',
+      AppSaveSyncStatus.savedLocally => 'Saved locally',
+      AppSaveSyncStatus.syncing => 'Syncing…',
+      AppSaveSyncStatus.synced => 'Synced',
+      AppSaveSyncStatus.syncError => 'Saved locally',
+    };
   }
 
   String _statusMessage(AppState appState) {
     if (_syncing) return _manualMessage ?? 'Syncing app data...';
     if (_manualMessage != null) return _manualMessage!;
-    if (_isLive(appState)) return 'App data is backed up and up to date.';
-    if (appState.cloudSyncError != null) {
-      return 'App sync needs attention: ${appState.cloudSyncError}';
+
+    return switch (appState.saveSyncStatus) {
+      AppSaveSyncStatus.savingLocally =>
+        'Saving the latest change safely on this device.',
+      AppSaveSyncStatus.savedLocally =>
+        'Saved safely on this device. Notes remain available offline.',
+      AppSaveSyncStatus.syncing =>
+        'Saved locally. Sending the latest changes to app sync now.',
+      AppSaveSyncStatus.synced =>
+        'Saved locally and app data is backed up and up to date.',
+      AppSaveSyncStatus.syncError =>
+        'Saved safely on this device. App sync needs a retry: '
+            '${appState.cloudSyncError}',
+    };
+  }
+
+  String _timeText(BuildContext context, DateTime value) {
+    final localValue = value.toLocal();
+    final today = DateUtils.dateOnly(DateTime.now());
+    final date = DateUtils.dateOnly(localValue);
+    final time = TimeOfDay.fromDateTime(localValue).format(context);
+
+    if (date == today) return time;
+
+    return '${localValue.day}/${localValue.month}/${localValue.year} $time';
+  }
+
+  String _localSaveSubtitle(AppState appState) {
+    final savedAt = appState.lastLocalSavedAt;
+    if (savedAt == null) {
+      return 'Notes are safe on this device, including offline.';
     }
-    return 'Signed in. Waiting for the first app-data sync.';
+
+    return 'Last saved locally at ${_timeText(context, savedAt)}. '
+        'Notes are safe offline.';
+  }
+
+  String _cloudSyncSubtitle(AppState appState) {
+    final message = _statusMessage(appState);
+    final syncedAt = appState.lastCloudSyncedAt;
+    if (syncedAt == null) return message;
+
+    return '$message Last synced at ${_timeText(context, syncedAt)}.';
   }
 
   String? _sessionCountdownText(AppState appState) {
@@ -231,9 +268,12 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
   }
 
   Widget _collapsed({required AppState appState}) {
-    final live = _isLive(appState);
+    final status = appState.saveSyncStatus;
+    final live = status == AppSaveSyncStatus.synced;
+    final saving = status == AppSaveSyncStatus.savingLocally;
+    final syncing = _syncing || status == AppSaveSyncStatus.syncing;
     final sessionText = _sessionCountdownText(appState);
-    final hasError = appState.cloudSyncError != null;
+    final hasError = status == AppSaveSyncStatus.syncError;
 
     return GestureDetector(
       onTap: () {
@@ -260,16 +300,24 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              live
+              saving
+                  ? Icons.save_outlined
+                  : live
                   ? Icons.cloud_done
+                  : syncing
+                  ? Icons.cloud_sync
                   : hasError
-                  ? Icons.cloud_off
-                  : Icons.cloud_sync,
-              color: live
+                  ? Icons.cloud_off_outlined
+                  : Icons.save_outlined,
+              color: saving
+                  ? const Color(0xFFFFC857)
+                  : live
                   ? const Color(0xFF31E981)
+                  : syncing
+                  ? const Color(0xFF67E8F9)
                   : hasError
-                  ? const Color(0xFFFF6B6B)
-                  : const Color(0xFFFFC857),
+                  ? const Color(0xFFFFC857)
+                  : const Color(0xFF31E981),
               size: 17,
             ),
             const SizedBox(width: 7),
@@ -290,8 +338,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                   ),
                   Text(
                     sessionText == null
-                        ? 'Saved locally'
-                        : 'Saved locally · $sessionText',
+                        ? 'Notes safe offline'
+                        : 'Notes safe offline • $sessionText',
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF8396C7),
@@ -406,7 +454,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
   }
 
   Widget _expandedPanel({required User user, required AppState appState}) {
-    final live = _isLive(appState);
+    final status = appState.saveSyncStatus;
+    final live = status == AppSaveSyncStatus.synced;
     final driveConnected = appState.googleDriveConnectedForScope(
       appState.notesGoogleScope,
     );
@@ -494,18 +543,23 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
                 ),
                 const SizedBox(height: 14),
                 _statusDetailRow(
-                  icon: Icons.save_outlined,
-                  color: const Color(0xFF31E981),
-                  title: 'Saved locally',
-                  subtitle:
-                      'Visit changes save on this device before cloud sync.',
+                  icon: status == AppSaveSyncStatus.savingLocally
+                      ? Icons.save_as_outlined
+                      : Icons.save_outlined,
+                  color: status == AppSaveSyncStatus.savingLocally
+                      ? const Color(0xFFFFC857)
+                      : const Color(0xFF31E981),
+                  title: status == AppSaveSyncStatus.savingLocally
+                      ? 'Saving locally…'
+                      : 'Saved locally',
+                  subtitle: _localSaveSubtitle(appState),
                 ),
                 const SizedBox(height: 8),
                 _statusDetailRow(
                   icon: statusIcon,
                   color: statusColor,
                   title: 'App cloud sync',
-                  subtitle: _statusMessage(appState),
+                  subtitle: _cloudSyncSubtitle(appState),
                 ),
                 const SizedBox(height: 8),
                 _statusDetailRow(

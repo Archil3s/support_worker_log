@@ -158,7 +158,7 @@ class _GoogleAccountConnectionCardState
         ? const Color(0xFF31E981)
         : const Color(0xFFFFC857);
     final statusText = connected
-        ? email ?? 'Google Drive connected'
+        ? 'Connected and ready'
         : checkingSession
         ? 'Checking saved Google login'
         : signedIn
@@ -248,56 +248,160 @@ class _GoogleAccountConnectionCardState
             const SizedBox(height: 12),
           ],
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: statusColor),
+              gradient: LinearGradient(
+                colors: connected
+                    ? const [Color(0xFF13342B), Color(0xFF162A45)]
+                    : const [Color(0xFF2D2819), Color(0xFF182540)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: statusColor.withValues(alpha: 0.55)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.account_circle_outlined, color: statusColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        statusText,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.w900,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F1728),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.45),
                         ),
                       ),
-                      if ((email ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          email!,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFEAF0FF),
-                            fontWeight: FontWeight.w700,
+                      child: Icon(
+                        connected
+                            ? Icons.add_to_drive
+                            : Icons.add_to_drive_outlined,
+                        color: statusColor,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            connected
+                                ? 'Google Drive is ready'
+                                : 'Connect Google Drive',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            statusText,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      connected
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: statusColor,
+                    ),
+                  ],
+                ),
+                if ((email ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x66101827),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.account_circle_outlined,
+                          color: statusColor,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            email!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFEAF0FF),
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
-                    ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Text(
+                  detailText,
+                  style: const TextStyle(
+                    color: Color(0xFFB8C4E2),
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            detailText,
-            style: const TextStyle(color: Color(0xFF8396C7), height: 1.35),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF101827),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF26385F)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Google account',
+                  style: TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GoogleAccountSelector(scope: widget.scope),
+                const SizedBox(height: 10),
+                const GoogleSessionCountdown(),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          GoogleAccountSelector(scope: widget.scope),
-          const SizedBox(height: 10),
-          const GoogleSessionCountdown(),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           FilledButton.icon(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              backgroundColor: const Color(0xFF4F8DF7),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
             onPressed: checkingSession || connecting || signingOut
                 ? null
                 : _connect,
@@ -314,8 +418,25 @@ class _GoogleAccountConnectionCardState
                   ? 'Reconnecting Google Drive'
                   : signedIn
                   ? 'Reconnect Google Drive'
-                  : 'Choose Google Account',
+                  : 'Connect a Google Account',
             ),
+          ),
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 17, color: Color(0xFF8396C7)),
+              SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Your notes stay saved locally before anything syncs.',
+                  style: TextStyle(
+                    color: Color(0xFF8396C7),
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
           ),
           if (widget.showAccessChecklist) ...[
             const SizedBox(height: 6),

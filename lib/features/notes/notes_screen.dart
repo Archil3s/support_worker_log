@@ -16,6 +16,7 @@ import '../../core/services/google_drive_service.dart';
 import '../../core/services/local_support_note_service.dart';
 import '../../core/state/app_state.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/google_docs_download_utils.dart';
 import '../../core/utils/pay_period_utils.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/note_text_input_tools.dart';
@@ -411,6 +412,25 @@ class _NotesScreenState extends State<NotesScreen> {
     await _launchDriveLink(Uri.parse(link));
   }
 
+  Future<void> _downloadLivingDocument(
+    LivingSupportDocumentSummary document,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    try {
+      await _launchDriveLink(googleDocsDownloadUri(document.file.id));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Google Doc download started as a Word file.'),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not download Google Doc: $error')),
+      );
+    }
+  }
+
   Future<void> _openUnsubmittedNotesSheet() async {
     if (loadingUnsubmittedNotes) return;
 
@@ -557,6 +577,7 @@ class _NotesScreenState extends State<NotesScreen> {
         onPrepareSubmissionDocs: _prepareSubmissionDocs,
         onLoadLivingDocuments: _loadLivingDocuments,
         onOpenLivingDocument: _openLivingDocument,
+        onDownloadLivingDocument: _downloadLivingDocument,
         onLoadUnsubmittedNotes: _openUnsubmittedNotesSheet,
         syncingCurrentPeriodLivingDocs: syncingCurrentPeriodLivingDocs,
         syncingReadyToSubmitDocs: syncingReadyToSubmitDocs,
@@ -590,6 +611,7 @@ class _NotesListTab extends StatelessWidget {
     required this.onPrepareSubmissionDocs,
     required this.onLoadLivingDocuments,
     required this.onOpenLivingDocument,
+    required this.onDownloadLivingDocument,
     required this.onLoadUnsubmittedNotes,
     required this.syncingCurrentPeriodLivingDocs,
     required this.syncingReadyToSubmitDocs,
@@ -618,6 +640,7 @@ class _NotesListTab extends StatelessWidget {
   final VoidCallback onPrepareSubmissionDocs;
   final VoidCallback onLoadLivingDocuments;
   final ValueChanged<LivingSupportDocumentSummary> onOpenLivingDocument;
+  final ValueChanged<LivingSupportDocumentSummary> onDownloadLivingDocument;
   final VoidCallback onLoadUnsubmittedNotes;
   final bool syncingCurrentPeriodLivingDocs;
   final bool syncingReadyToSubmitDocs;
@@ -797,6 +820,7 @@ class _NotesListTab extends StatelessWidget {
                     _LivingDocumentTile(
                       document: document,
                       onOpen: () => onOpenLivingDocument(document),
+                      onDownload: () => onDownloadLivingDocument(document),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -1198,10 +1222,15 @@ String _payPeriodLabel(PayPeriodRange range) {
 }
 
 class _LivingDocumentTile extends StatelessWidget {
-  const _LivingDocumentTile({required this.document, required this.onOpen});
+  const _LivingDocumentTile({
+    required this.document,
+    required this.onOpen,
+    required this.onDownload,
+  });
 
   final LivingSupportDocumentSummary document;
   final VoidCallback onOpen;
+  final VoidCallback onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -1270,6 +1299,11 @@ class _LivingDocumentTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Download Google Doc as a Word file',
+              onPressed: onDownload,
+              icon: const Icon(Icons.download_outlined),
+            ),
             IconButton(
               tooltip: 'Open',
               onPressed: onOpen,
@@ -2310,6 +2344,31 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
   }
 
+  Future<void> _downloadDriveFile() async {
+    final current = driveMeta;
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    if (current == null || !_isDownloadableGoogleDoc(current)) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Create the Google Doc first.')),
+      );
+      return;
+    }
+
+    try {
+      await _launchDriveLink(googleDocsDownloadUri(current.fileId));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Google Doc download started as a Word file.'),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not download Google Doc: $error')),
+      );
+    }
+  }
+
   Future<void> _deleteEntry() async {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
@@ -2381,6 +2440,8 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
     final hasLocal = meta?.fileName.isNotEmpty == true;
     final hasDriveNote = driveMeta?.openLink?.isNotEmpty == true;
+    final canDownloadGoogleDoc =
+        driveMeta != null && _isDownloadableGoogleDoc(driveMeta!);
     final appState = context.watch<AppState>();
     final fallbackName = _bestPersonNameFallback(
       widget.entry,
@@ -2508,10 +2569,12 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
             _NoteCardActionBar(
               createNote: meta == null && driveMeta == null,
               hasDriveNote: hasDriveNote,
+              canDownloadGoogleDoc: canDownloadGoogleDoc,
               hasLocal: hasLocal,
               important: widget.entry.importantText,
               onOpenNote: _openSheet,
               onOpenDrive: _openDriveFile,
+              onDownloadGoogleDoc: _downloadDriveFile,
               onOpenLocal: _openLocalFile,
               onToggleImportant: _toggleImportant,
               onDelete: _deleteEntry,
@@ -2584,10 +2647,12 @@ class _NoteCardActionBar extends StatelessWidget {
   const _NoteCardActionBar({
     required this.createNote,
     required this.hasDriveNote,
+    required this.canDownloadGoogleDoc,
     required this.hasLocal,
     required this.important,
     required this.onOpenNote,
     required this.onOpenDrive,
+    required this.onDownloadGoogleDoc,
     required this.onOpenLocal,
     required this.onToggleImportant,
     required this.onDelete,
@@ -2595,10 +2660,12 @@ class _NoteCardActionBar extends StatelessWidget {
 
   final bool createNote;
   final bool hasDriveNote;
+  final bool canDownloadGoogleDoc;
   final bool hasLocal;
   final bool important;
   final VoidCallback onOpenNote;
   final VoidCallback onOpenDrive;
+  final VoidCallback onDownloadGoogleDoc;
   final VoidCallback onOpenLocal;
   final VoidCallback onToggleImportant;
   final VoidCallback onDelete;
@@ -2618,6 +2685,12 @@ class _NoteCardActionBar extends StatelessWidget {
               tooltip: 'Open Google Drive note',
               onPressed: onOpenDrive,
               icon: const Icon(Icons.open_in_new),
+            ),
+          if (canDownloadGoogleDoc)
+            IconButton.filledTonal(
+              tooltip: 'Download Google Doc as a Word file',
+              onPressed: onDownloadGoogleDoc,
+              icon: const Icon(Icons.download_outlined),
             ),
           if (hasLocal)
             IconButton(
@@ -3593,6 +3666,39 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
     await _launchDriveLink(Uri.parse(link));
   }
 
+  Future<void> _downloadDriveFile() async {
+    final current = driveMeta;
+    final appState = context.read<AppState>();
+    final accountMeta = _driveMetaForAccount(
+      current,
+      _currentGoogleAccountEmail(appState),
+    );
+
+    if (current == null ||
+        accountMeta == null ||
+        !_isDownloadableGoogleDoc(current)) {
+      setState(() {
+        message = 'Save the Google Doc under the selected account first.';
+      });
+      return;
+    }
+
+    try {
+      await _launchDriveLink(googleDocsDownloadUri(current.fileId));
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Google Doc download started as a Word file.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        message = 'Could not download Google Doc: ${_friendlyError(error)}';
+      });
+    }
+  }
+
   Future<void> _syncFromGoogleDoc({bool silent = false}) async {
     final appState = context.read<AppState>();
     final previousStatus = status;
@@ -3817,9 +3923,23 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  'Google Docs note:\n${driveMeta!.fileName}',
-                  style: const TextStyle(fontSize: 13),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        'Google Docs note:\n${driveMeta!.fileName}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    if (_isDownloadableGoogleDoc(driveMeta!)) ...[
+                      const SizedBox(width: 10),
+                      IconButton.filledTonal(
+                        tooltip: 'Download Google Doc as a Word file',
+                        onPressed: busy ? null : _downloadDriveFile,
+                        icon: const Icon(Icons.download_outlined),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -4191,6 +4311,15 @@ Future<void> _launchDriveLink(Uri uri) async {
   if (!launched) {
     await launchUrl(uri);
   }
+}
+
+bool _isDownloadableGoogleDoc(EntryDriveSupportNoteMeta meta) {
+  if (meta.fileId.trim().isEmpty) return false;
+  if (meta.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType) {
+    return true;
+  }
+
+  return meta.openLink?.contains('docs.google.com/document/') == true;
 }
 
 String _googleDocsLink(GoogleDriveFile file) {

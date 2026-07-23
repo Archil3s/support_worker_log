@@ -52,6 +52,21 @@ void main() {
     expect(state.payeClients, isEmpty);
   });
 
+  test('reports local save progress and completion time', () async {
+    final state = AppState(warmGoogleAccounts: false);
+    addTearDown(state.dispose);
+
+    expect(state.saveSyncStatus, AppSaveSyncStatus.savedLocally);
+
+    expect(state.addClient('Saved person'), isTrue);
+    expect(state.saveSyncStatus, AppSaveSyncStatus.savingLocally);
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(state.saveSyncStatus, AppSaveSyncStatus.savedLocally);
+    expect(state.lastLocalSavedAt, isNotNull);
+  });
+
   test(
     'load migrates local support note status into synced app data',
     () async {
