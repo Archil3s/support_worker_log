@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/formatters.dart';
 import '../models/work_month_summary.dart';
+import 'work_contact_type_breakdown.dart';
 
 class WorkMonthlyOverviewPanel extends StatelessWidget {
   const WorkMonthlyOverviewPanel({
@@ -78,6 +79,8 @@ class _OverviewCard extends StatelessWidget {
           _OverviewHeader(summary: summary),
           const SizedBox(height: 13),
           _MonthlyMetrics(summary: summary, metricWidth: metricWidth),
+          const SizedBox(height: 13),
+          WorkContactTypeBreakdown(entriesByType: summary.entriesByType),
           const SizedBox(height: 13),
           _WorkflowStrip(
             summary: summary,

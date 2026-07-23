@@ -88,6 +88,44 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('work-contact-type-homeVisit')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('work-contact-type-textNote')),
+        matching: find.text('0'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-professionalContact')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-phoneCall')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-videoCall')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-emailClient')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-emailProfessional')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-contact-type-adminEducationResources')),
+      findsOneWidget,
+    );
     expect(find.text('1 to finish'), findsOneWidget);
     expect(find.text('1 open'), findsOneWidget);
 

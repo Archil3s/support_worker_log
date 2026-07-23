@@ -1,3 +1,4 @@
+import '../../../../core/models/entry_type.dart';
 import '../../../../core/services/local_support_note_service.dart';
 import '../../../../core/state/app_state.dart';
 import '../../../../core/utils/totals.dart';
@@ -11,6 +12,7 @@ class WorkMonthSummary {
     required this.kilometres,
     required this.notesToFinish,
     required this.openActions,
+    required this.entriesByType,
   });
 
   factory WorkMonthSummary.fromState(AppState appState, DateTime now) {
@@ -31,6 +33,12 @@ class WorkMonthSummary {
     final generalActions = appState.generalActions
         .where((action) => !action.isCompleted)
         .length;
+    final entriesByType = <EntryType, int>{
+      for (final type in EntryType.values) type: 0,
+    };
+    for (final entry in entries) {
+      entriesByType[entry.type] = entriesByType[entry.type]! + 1;
+    }
 
     return WorkMonthSummary(
       label: '${_monthNames[now.month - 1]} ${now.year}',
@@ -40,6 +48,7 @@ class WorkMonthSummary {
       kilometres: totalKilometres(entries),
       notesToFinish: notesToFinish,
       openActions: entryActions + generalActions,
+      entriesByType: Map.unmodifiable(entriesByType),
     );
   }
 
@@ -50,6 +59,7 @@ class WorkMonthSummary {
   final double kilometres;
   final int notesToFinish;
   final int openActions;
+  final Map<EntryType, int> entriesByType;
 }
 
 const _monthNames = [
