@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/google_export_account_scope.dart';
 import '../../core/state/app_state.dart';
 import 'google_account_selector.dart';
+import 'google_drive_connection_animation.dart';
 import 'google_session_countdown.dart';
 import 'section_card.dart';
 
@@ -169,6 +170,10 @@ class _GoogleAccountConnectionCardState
         : signedIn
         ? 'Your app login is still active. Only Google Drive access needs reconnecting.'
         : widget.disconnectedText;
+
+    if ((checkingSession && !connected) || connecting) {
+      return GoogleDriveConnectionAnimation(reconnecting: connecting);
+    }
 
     return SectionCard(
       title: cardTitle,
@@ -402,23 +407,10 @@ class _GoogleAccountConnectionCardState
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            onPressed: checkingSession || connecting || signingOut
-                ? null
-                : _connect,
-            icon: checkingSession || connecting
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.add_to_drive_outlined),
+            onPressed: signingOut ? null : _connect,
+            icon: const Icon(Icons.add_to_drive_outlined),
             label: Text(
-              checkingSession
-                  ? 'Checking Saved Google Login'
-                  : connecting
-                  ? 'Reconnecting Google Drive'
-                  : signedIn
-                  ? 'Reconnect Google Drive'
-                  : 'Connect a Google Account',
+              signedIn ? 'Reconnect Google Drive' : 'Connect a Google Account',
             ),
           ),
           const SizedBox(height: 8),
@@ -441,9 +433,7 @@ class _GoogleAccountConnectionCardState
           if (widget.showAccessChecklist) ...[
             const SizedBox(height: 6),
             TextButton.icon(
-              onPressed: checkingSession || connecting || signingOut
-                  ? null
-                  : _signOut,
+              onPressed: signingOut ? null : _signOut,
               icon: signingOut
                   ? const SizedBox.square(
                       dimension: 16,
@@ -451,15 +441,6 @@ class _GoogleAccountConnectionCardState
                     )
                   : const Icon(Icons.logout_outlined),
               label: Text(signingOut ? 'Signing Out' : 'Sign out / reset'),
-            ),
-          ],
-          if (checkingSession && !connected) ...[
-            const SizedBox(height: 10),
-            const LinearProgressIndicator(),
-            const SizedBox(height: 8),
-            const Text(
-              'Checking saved Google login. No popup is needed for this step.',
-              style: TextStyle(color: Color(0xFF8396C7), height: 1.35),
             ),
           ],
           if (message != null) ...[
