@@ -21,6 +21,7 @@ import '../settings/settings_screen.dart';
 import '../tax/tax_screen.dart';
 import 'mode_screen_loader.dart';
 import 'more_screen.dart';
+import 'presentation/widgets/work_monthly_overview_panel.dart';
 
 enum _Section {
   quick,
@@ -104,6 +105,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   String _title(AppMode mode) {
+    if (mode == AppMode.work && section == _Section.quick) return 'Work';
     if (mode == AppMode.personal) return 'Personal Mode';
     if (mode == AppMode.massage) return 'Massage';
     if (mode == AppMode.mood) return 'Mood Tracker';
@@ -281,7 +283,10 @@ class _MainShellState extends State<MainShell> {
             : groceryMode && wide
             ? 1240.0
             : maxContentWidth;
-        final showWorkStatus = wide && appMode == AppMode.work;
+        final showWorkOverview =
+            appMode == AppMode.work && section == _Section.quick;
+        final showWorkStatus =
+            wide && appMode == AppMode.work && !showWorkOverview;
 
         return Scaffold(
           appBar: AppBar(
@@ -400,6 +405,7 @@ class _MainShellState extends State<MainShell> {
                     sections: _railSections(appMode),
                     selectedIndex: _railIndex(appMode),
                     onTap: (index) => _onRailTap(index, appMode),
+                    quickLabel: appMode == AppMode.work ? 'Work' : 'Quick',
                   ),
                 Expanded(
                   child: Center(
@@ -407,6 +413,13 @@ class _MainShellState extends State<MainShell> {
                       constraints: BoxConstraints(maxWidth: contentWidth),
                       child: Column(
                         children: [
+                          if (showWorkOverview)
+                            WorkMonthlyOverviewPanel(
+                              onWork: () => _go(_Section.quick),
+                              onNotes: () => _go(_Section.notes),
+                              onActions: () => _go(_Section.actions),
+                              onPayPeriod: () => _go(_Section.pay),
+                            ),
                           if (showWorkStatus)
                             _WorkStatusBar(selected: section, onSelected: _go),
                           Expanded(
@@ -435,6 +448,7 @@ class _MainShellState extends State<MainShell> {
               : _KeyboardAwareBottomNav(
                   selectedIndex: navIndex,
                   onTap: _onNavTap,
+                  quickLabel: appMode == AppMode.work ? 'Work' : 'Quick',
                 ),
         );
       },
@@ -626,10 +640,12 @@ class _KeyboardAwareBottomNav extends StatelessWidget {
   const _KeyboardAwareBottomNav({
     required this.selectedIndex,
     required this.onTap,
+    required this.quickLabel,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final String quickLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -643,7 +659,11 @@ class _KeyboardAwareBottomNav extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          child: _FastBottomNav(selectedIndex: selectedIndex, onTap: onTap),
+          child: _FastBottomNav(
+            selectedIndex: selectedIndex,
+            onTap: onTap,
+            quickLabel: quickLabel,
+          ),
         ),
       ),
     );
@@ -655,11 +675,13 @@ class _SideRail extends StatelessWidget {
     required this.sections,
     required this.selectedIndex,
     required this.onTap,
+    required this.quickLabel,
   });
 
   final List<_Section> sections;
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final String quickLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -708,10 +730,10 @@ class _SideRail extends StatelessWidget {
           label: Text('Actions'),
         );
       case _Section.quick:
-        return const NavigationRailDestination(
-          icon: Icon(Icons.bolt_outlined),
-          selectedIcon: Icon(Icons.bolt_rounded),
-          label: Text('Quick'),
+        return NavigationRailDestination(
+          icon: const Icon(Icons.bolt_outlined),
+          selectedIcon: const Icon(Icons.bolt_rounded),
+          label: Text(quickLabel),
         );
       case _Section.notes:
         return const NavigationRailDestination(
@@ -759,10 +781,15 @@ class _SideRail extends StatelessWidget {
 }
 
 class _FastBottomNav extends StatelessWidget {
-  const _FastBottomNav({required this.selectedIndex, required this.onTap});
+  const _FastBottomNav({
+    required this.selectedIndex,
+    required this.onTap,
+    required this.quickLabel,
+  });
 
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final String quickLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -781,7 +808,7 @@ class _FastBottomNav extends StatelessWidget {
             selectedIndex: selectedIndex,
             icon: Icons.bolt_outlined,
             selectedIcon: Icons.bolt_rounded,
-            label: 'Quick',
+            label: quickLabel,
             onTap: onTap,
           ),
           _FastNavItem(
