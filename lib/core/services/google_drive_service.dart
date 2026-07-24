@@ -1523,15 +1523,37 @@ class GoogleDriveService {
               a.entry,
             ).compareTo(_minutesFromStart(b.entry));
           });
-    final file = await _findOrCreateReadyToSubmitLivingDocument(
+    var file = await _findOrCreateReadyToSubmitLivingDocument(
       accessToken: accessToken,
       clientNotesFolderId: clientNotesFolderId,
     );
-    final tabCache = _LivingSupportTabCache(
+    var tabCache = _LivingSupportTabCache(
       this,
       accessToken: accessToken,
       documentId: file.id,
     );
+    await tabCache.load();
+
+    if (_isLegacyReadyToSubmitDocument(tabCache.tabs)) {
+      final livingFolder = await findOrCreateFolder(
+        accessToken: accessToken,
+        parentId: clientNotesFolderId,
+        name: _livingSupportFolderName,
+      );
+      file = await _replaceGoogleDocThroughDrive(
+        accessToken: accessToken,
+        oldFileId: file.id,
+        parentId: livingFolder.id,
+        name: _livingSupportReadyToSubmitDocumentName,
+        bytes: await _supportNoteTemplateBytes(),
+      );
+      tabCache = _LivingSupportTabCache(
+        this,
+        accessToken: accessToken,
+        documentId: file.id,
+      );
+    }
+
     final dashboardTab = await tabCache.ensureTab(
       title: _livingSupportReadyDashboardTabName,
     );
@@ -1919,13 +1941,22 @@ class GoogleDriveService {
     );
     if (existing != null) return existing;
 
+    final templateBytes = await _supportNoteTemplateBytes();
     return _api.uploadFile(
       accessToken: accessToken,
       name: _livingSupportReadyToSubmitDocumentName,
       mimeType: _googleDocsMimeType,
-      bytes: utf8.encode('Ready to submit living support notes'),
+      bytes: templateBytes,
       parentId: livingFolder.id,
-      contentMimeType: 'text/plain',
+      contentMimeType: _docxMimeType,
+    );
+  }
+
+  bool _isLegacyReadyToSubmitDocument(List<_LivingSupportTab> tabs) {
+    return tabs.any(
+      (tab) =>
+          tab.parentId == null &&
+          tab.text.trim() == _legacyReadyToSubmitDocumentText,
     );
   }
 
@@ -2474,6 +2505,8 @@ class GoogleDriveService {
   static const _livingSupportMasterDocumentName = 'Master Living Support Notes';
   static const _livingSupportReadyToSubmitDocumentName =
       'Ready to Submit - Living Support Notes';
+  static const _legacyReadyToSubmitDocumentText =
+      'Ready to submit living support notes';
   static const _livingSupportReadyDashboardTabName = 'Dashboard';
 
   String _livingSupportInvoicePeriodDocumentName(String invoiceTitle) {

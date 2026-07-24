@@ -258,6 +258,7 @@ class AppState extends ChangeNotifier {
       _replaceInMemory(localData);
       await _migrateLocalSupportNoteMetadata();
       _applyLaunchAppModeOverride();
+      await _cloudStorageService.restoreWebRedirectSession();
 
       try {
         await _cloudStorageService.signOutAnonymousUserIfNeeded();
@@ -336,6 +337,14 @@ class AppState extends ChangeNotifier {
     unawaited(_syncLocalAndCloudSafely());
     _scheduleDriveInvoiceSync();
     _scheduleDrivePersonalSync();
+  }
+
+  Future<void> signInWithGoogleRedirect() {
+    return _cloudStorageService.startGoogleSignInRedirect();
+  }
+
+  String? takeGoogleRedirectError() {
+    return _cloudStorageService.takeGoogleRedirectError();
   }
 
   Future<void> sendPasswordResetEmail(String email) {

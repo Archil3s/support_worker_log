@@ -806,6 +806,10 @@ void main() {
       );
       expect(driveApi.uploads.single.mimeType, _googleDocsMimeType);
       expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
+      expect(
+        _docxEntryNames(driveApi.uploads.single.bytes),
+        contains('word/media/image1.png'),
+      );
       expect(result.invoiceTabTitle, 'Invoice 5 2026-05-31 to 2026-06-13');
       expect(
         result.subTabTitles,
@@ -945,6 +949,12 @@ void main() {
         driveApi.uploads.single.name,
         'Ready to Submit - Living Support Notes',
       );
+      expect(driveApi.uploads.single.mimeType, _googleDocsMimeType);
+      expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
+      expect(
+        _docxEntryNames(driveApi.uploads.single.bytes),
+        contains('word/media/image1.png'),
+      );
       expect(
         result.subTabTitles,
         containsAll([
@@ -963,6 +973,73 @@ void main() {
       expect(
         docsApi.insertedText.join('\n'),
         isNot(contains('Submitted text note.')),
+      );
+    },
+  );
+
+  test(
+    'syncReadyToSubmitLivingDocument migrates the legacy plain document',
+    () async {
+      final driveApi = _FakeGoogleDriveApi(
+        childrenByParent: {
+          'client-notes': [
+            const GoogleDriveFile(
+              id: 'living-folder',
+              name: 'Living Support Notes',
+              mimeType: 'application/vnd.google-apps.folder',
+            ),
+          ],
+          'living-folder': [
+            const GoogleDriveFile(
+              id: 'legacy-ready-doc',
+              name: 'Ready to Submit - Living Support Notes',
+              mimeType: _googleDocsMimeType,
+            ),
+          ],
+        },
+      );
+      final docsApi = _FakeGoogleDocsApi(
+        tabs: [
+          _FakeGoogleDocTab(
+            id: 'legacy-root',
+            title: 'Document',
+            text: 'Ready to submit living support notes\n',
+          ),
+        ],
+      );
+      final service = GoogleDriveService(api: driveApi, docsApi: docsApi);
+
+      final result = await service.syncReadyToSubmitLivingDocument(
+        accessToken: 'token',
+        clientNotesFolderId: 'client-notes',
+        entries: [
+          LivingSupportDocumentEntry(
+            entry: WorkEntry(
+              id: 'finished-entry',
+              client: 'AB',
+              type: EntryType.homeVisit,
+              date: DateTime(2026, 6, 2),
+              startTime: const TimeOfDay(hour: 9, minute: 30),
+              minutes: 30,
+              notes: const ['Home visit'],
+            ),
+            personName: 'Joseph W',
+            status: EntrySupportNoteStatus.finished,
+            noteText: 'What happened\nTemplate migration note.',
+          ),
+        ],
+      );
+
+      expect(driveApi.deletedFileIds, ['legacy-ready-doc']);
+      expect(driveApi.uploads.single.name, result.file.name);
+      expect(driveApi.uploads.single.contentMimeType, _docxMimeType);
+      expect(
+        _docxEntryNames(driveApi.uploads.single.bytes),
+        contains('word/media/image1.png'),
+      );
+      expect(
+        docsApi.insertedText.join('\n'),
+        contains('Template migration note.'),
       );
     },
   );

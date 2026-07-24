@@ -90,6 +90,47 @@ void main() {
     expect(find.textContaining('Bad state:'), findsNothing);
   });
 
+  testWidgets('web Google login uses the current window without a popup', (
+    tester,
+  ) async {
+    final appState = _DelayedGoogleAuthAppState();
+    addTearDown(appState.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: appState,
+        child: const MaterialApp(home: AuthScreen(useGoogleRedirect: true)),
+      ),
+    );
+
+    expect(find.text('Continue with Google in this window'), findsOneWidget);
+    expect(find.textContaining('No pop-up window'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('auth-google-redirect-note')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('auth-google-button')));
+    await tester.pump();
+
+    expect(find.text('Opening Google sign-in...'), findsOneWidget);
+    expect(
+      find.textContaining('Google sign-in will open in this window'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('auth-google-redirect-note')),
+      findsNothing,
+    );
+
+    appState.googleRedirectSignIn.completeError(
+      StateError('Google sign-in was cancelled.'),
+    );
+    await tester.pump();
+
+    expect(find.text('Google sign-in was cancelled.'), findsOneWidget);
+  });
+
   testWidgets('login validates locally and scrolls above a small keyboard', (
     tester,
   ) async {
@@ -135,7 +176,11 @@ class _DelayedGoogleAuthAppState extends AppState {
   _DelayedGoogleAuthAppState() : super(warmGoogleAccounts: false);
 
   final Completer<void> googleSignIn = Completer<void>();
+  final Completer<void> googleRedirectSignIn = Completer<void>();
 
   @override
   Future<void> signInWithGoogle() => googleSignIn.future;
+
+  @override
+  Future<void> signInWithGoogleRedirect() => googleRedirectSignIn.future;
 }

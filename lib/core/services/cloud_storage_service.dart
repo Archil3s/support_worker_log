@@ -12,10 +12,14 @@ class CloudStorageService {
     : _authOverride = auth,
       _firestoreOverride = firestore;
 
+  static UserCredential? _pendingWebRedirectCredential;
+  static FirebaseAuthException? _pendingWebRedirectError;
+
   final FirebaseAuth? _authOverride;
   final FirebaseFirestore? _firestoreOverride;
   String? _googleCalendarAccessToken;
   String? _googleDriveAccessToken;
+  String? _googleRedirectError;
   DateTime? _sessionExpiresAt;
 
   static const _googleSignInTimeout = Duration(seconds: 75);
@@ -30,6 +34,16 @@ class CloudStorageService {
 
   FirebaseFirestore get _firestore =>
       _firestoreOverride ?? FirebaseFirestore.instance;
+
+  static void rememberWebRedirectCredential(UserCredential credential) {
+    _pendingWebRedirectCredential = credential.user == null ? null : credential;
+    _pendingWebRedirectError = null;
+  }
+
+  static void rememberWebRedirectError(FirebaseAuthException error) {
+    _pendingWebRedirectCredential = null;
+    _pendingWebRedirectError = error;
+  }
 
   User? get currentUser {
     try {
@@ -149,6 +163,33 @@ class CloudStorageService {
     await _recordSessionStart();
 
     return user;
+  }
+
+  Future<void> startGoogleSignInRedirect() {
+    return _auth.signInWithRedirect(_googleServicesProvider());
+  }
+
+  Future<void> restoreWebRedirectSession() async {
+    final credential = _pendingWebRedirectCredential;
+    final error = _pendingWebRedirectError;
+    _pendingWebRedirectCredential = null;
+    _pendingWebRedirectError = null;
+
+    if (error != null) {
+      _googleRedirectError = _authErrorMessage('Google sign-in', error);
+      return;
+    }
+
+    if (credential?.user == null) return;
+
+    _storeGoogleServicesToken(credential!);
+    await _recordSessionStart();
+  }
+
+  String? takeGoogleRedirectError() {
+    final error = _googleRedirectError;
+    _googleRedirectError = null;
+    return error;
   }
 
   Future<void> connectGoogleServicesForCurrentUser({

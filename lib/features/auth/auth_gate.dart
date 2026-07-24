@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -485,7 +486,9 @@ class _AppPasswordField extends StatelessWidget {
 }
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({super.key, this.useGoogleRedirect = kIsWeb});
+
+  final bool useGoogleRedirect;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -508,6 +511,19 @@ class _AuthScreenState extends State<AuthScreen> {
   String? successText;
 
   bool get busy => activeAction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final redirectError = context.read<AppState>().takeGoogleRedirectError();
+      if (redirectError == null || redirectError.trim().isEmpty) return;
+
+      setState(() => errorText = _friendlyError(redirectError));
+    });
+  }
 
   @override
   void dispose() {
@@ -562,7 +578,12 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      await context.read<AppState>().signInWithGoogle();
+      final appState = context.read<AppState>();
+      if (widget.useGoogleRedirect) {
+        await appState.signInWithGoogleRedirect();
+      } else {
+        await appState.signInWithGoogle();
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => errorText = _friendlyError(error));
@@ -760,7 +781,11 @@ class _AuthScreenState extends State<AuthScreen> {
                                       ),
                                 label: Text(
                                   activeAction == _AuthAction.google
-                                      ? 'Connecting to Google...'
+                                      ? widget.useGoogleRedirect
+                                            ? 'Opening Google sign-in...'
+                                            : 'Connecting to Google...'
+                                      : widget.useGoogleRedirect
+                                      ? 'Continue with Google in this window'
                                       : 'Continue with Google',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w900,
@@ -769,13 +794,21 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                               if (activeAction == _AuthAction.google) ...[
                                 const SizedBox(height: 10),
-                                const _AuthMessageBanner(
-                                  message:
-                                      'Choose your Google account in the '
-                                      'secure window, then return here.',
+                                _AuthMessageBanner(
+                                  message: widget.useGoogleRedirect
+                                      ? 'Google sign-in will open in this '
+                                            'window. You will return to the '
+                                            'app automatically.'
+                                      : 'Choose your Google account in the '
+                                            'secure window, then return here.',
                                   color: Color(0xFF67E8F9),
-                                  icon: Icons.open_in_new_rounded,
+                                  icon: widget.useGoogleRedirect
+                                      ? Icons.sync_alt_rounded
+                                      : Icons.open_in_new_rounded,
                                 ),
+                              ] else if (widget.useGoogleRedirect) ...[
+                                const SizedBox(height: 9),
+                                const _GoogleRedirectNote(),
                               ],
                               const SizedBox(height: 16),
                               const _LoginDivider(),
@@ -1061,6 +1094,34 @@ class _LoginDivider extends StatelessWidget {
           ),
         ),
         Expanded(child: Divider(color: Color(0xFF34405F))),
+      ],
+    );
+  }
+}
+
+class _GoogleRedirectNote extends StatelessWidget {
+  const _GoogleRedirectNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      key: ValueKey('auth-google-redirect-note'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.web_asset_rounded, color: Color(0xFF8CB8FF), size: 17),
+        SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            'No pop-up window. Google opens securely on this page and '
+            'returns you to the app.',
+            style: TextStyle(
+              color: Color(0xFF9AAAD2),
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ],
     );
   }

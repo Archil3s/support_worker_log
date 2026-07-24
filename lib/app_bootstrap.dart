@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'core/services/cloud_storage_service.dart';
 import 'firebase_options.dart';
 import 'shared/widgets/app_boot_logo.dart';
 
@@ -28,10 +29,19 @@ class _AppBootstrapState extends State<AppBootstrap> {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     if (kIsWeb) {
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-      await FirebaseAuth.instance.authStateChanges().first.timeout(
+      final auth = FirebaseAuth.instance;
+      await auth.setPersistence(Persistence.LOCAL);
+
+      try {
+        final redirectCredential = await auth.getRedirectResult();
+        CloudStorageService.rememberWebRedirectCredential(redirectCredential);
+      } on FirebaseAuthException catch (error) {
+        CloudStorageService.rememberWebRedirectError(error);
+      }
+
+      await auth.authStateChanges().first.timeout(
         const Duration(seconds: 5),
-        onTimeout: () => FirebaseAuth.instance.currentUser,
+        onTimeout: () => auth.currentUser,
       );
     }
   }
