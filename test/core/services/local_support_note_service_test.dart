@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -311,5 +314,50 @@ void main() {
     await LocalSupportNoteService.removeMeta(entry.id);
 
     expect(await LocalSupportNoteService.loadMeta(entry.id), isNull);
+  });
+
+  test('reads current text from a Word document', () {
+    final archive = Archive();
+    final documentBytes = utf8.encode(
+      '<?xml version="1.0" encoding="UTF-8"?>'
+      '<w:document xmlns:w="word">'
+      '<w:body>'
+      '<w:p><w:r><w:t>What happened</w:t></w:r></w:p>'
+      '<w:p><w:r><w:t>Current Word edit &amp; follow-up.</w:t></w:r></w:p>'
+      '<w:p><w:r><w:t>Outcome</w:t></w:r></w:p>'
+      '<w:p><w:r><w:t>Updated in Word.</w:t></w:r></w:p>'
+      '</w:body>'
+      '</w:document>',
+    );
+    archive.addFile(
+      ArchiveFile('word/document.xml', documentBytes.length, documentBytes),
+    );
+    final bytes = ZipEncoder().encode(archive)!;
+
+    expect(
+      LocalSupportNoteService.wordDocumentText(bytes),
+      [
+        'What happened',
+        'Current Word edit & follow-up.',
+        'Outcome',
+        'Updated in Word.',
+      ].join('\n'),
+    );
+  });
+
+  test('support note metadata keeps its document update time', () {
+    final updatedAt = DateTime.utc(2026, 7, 24, 3, 15);
+    final meta = EntrySupportNoteMeta(
+      entryId: 'word-meta',
+      initials: 'Jane Smith',
+      status: EntrySupportNoteStatus.inProgress,
+      fileName: 'Jane Smith/current.docx',
+      noteText: 'Current document text',
+      updatedAt: updatedAt,
+    );
+
+    final restored = EntrySupportNoteMeta.fromJson(meta.toJson());
+
+    expect(restored.updatedAt, updatedAt);
   });
 }

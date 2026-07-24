@@ -1,3 +1,15 @@
+import 'dart:typed_data';
+
+class LocalSupportNoteFileSnapshot {
+  const LocalSupportNoteFileSnapshot({
+    required this.bytes,
+    required this.modifiedAt,
+  });
+
+  final Uint8List bytes;
+  final DateTime modifiedAt;
+}
+
 class LocalSupportNotesPlatform {
   bool hasFolder() {
     return false;
@@ -37,6 +49,12 @@ class LocalSupportNotesPlatform {
   Future<bool> openFolder(String fileName) async {
     throw UnsupportedError(
       'Opening folders is only available on web or Windows.',
+    );
+  }
+
+  Future<LocalSupportNoteFileSnapshot> readFile(String fileName) async {
+    throw UnsupportedError(
+      'Reading local Word documents is only available on web or Windows.',
     );
   }
 }

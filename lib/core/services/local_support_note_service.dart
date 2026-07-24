@@ -49,6 +49,7 @@ class EntrySupportNoteMeta {
     required this.status,
     required this.fileName,
     required this.noteText,
+    this.updatedAt,
   });
 
   final String entryId;
@@ -56,6 +57,7 @@ class EntrySupportNoteMeta {
   final EntrySupportNoteStatus status;
   final String fileName;
   final String noteText;
+  final DateTime? updatedAt;
 
   Map<String, dynamic> toJson() {
     return {
@@ -64,6 +66,7 @@ class EntrySupportNoteMeta {
       'status': status.name,
       'fileName': fileName,
       'noteText': noteText,
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
@@ -81,6 +84,7 @@ class EntrySupportNoteMeta {
       status: status,
       fileName: json['fileName'] as String? ?? '',
       noteText: json['noteText'] as String? ?? '',
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
     );
   }
 }
@@ -171,6 +175,7 @@ class LocalSupportNoteService {
       status: status,
       fileName: fileName,
       noteText: noteText,
+      updatedAt: DateTime.now(),
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -222,6 +227,7 @@ class LocalSupportNoteService {
       status: status,
       fileName: fileName,
       noteText: noteText,
+      updatedAt: DateTime.now(),
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -247,6 +253,7 @@ class LocalSupportNoteService {
         status: status,
       ),
       noteText: noteText,
+      updatedAt: DateTime.now(),
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -257,6 +264,69 @@ class LocalSupportNoteService {
 
   static Future<bool> openNote(EntrySupportNoteMeta meta) {
     return _platform.openFile(meta.fileName);
+  }
+
+  static Future<EntrySupportNoteMeta?> refreshFromWordDocument({
+    required WorkEntry entry,
+    EntrySupportNoteMeta? existingMeta,
+  }) async {
+    final current = existingMeta ?? await loadMeta(entry.id);
+    if (current == null || current.fileName.trim().isEmpty) return current;
+
+    final snapshot = await _platform.readFile(current.fileName);
+    final lastAppEdit = current.updatedAt;
+    if (lastAppEdit != null && !snapshot.modifiedAt.isAfter(lastAppEdit)) {
+      return current;
+    }
+
+    final documentText = wordDocumentText(snapshot.bytes);
+    if (documentText.trim().isEmpty) return current;
+
+    final noteText = payeNotePlainText(entry: entry, noteText: documentText);
+    final updated = EntrySupportNoteMeta(
+      entryId: current.entryId,
+      initials: current.initials,
+      status: current.status,
+      fileName: current.fileName,
+      noteText: noteText,
+      updatedAt: snapshot.modifiedAt,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_metaKey(entry.id), jsonEncode(updated.toJson()));
+    return updated;
+  }
+
+  static String wordDocumentText(List<int> bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final document = archive.files
+        .where((file) => file.isFile && file.name == 'word/document.xml')
+        .firstOrNull;
+    if (document == null) {
+      throw StateError('Word document is missing word/document.xml.');
+    }
+
+    var xml = utf8.decode(document.content as List<int>);
+    xml = xml
+        .replaceAll(RegExp(r'<w:tab\b[^>]*/>'), '\t')
+        .replaceAll(RegExp(r'<w:br\b[^>]*/>'), '\n')
+        .replaceAll(RegExp(r'</w:p>'), '\n')
+        .replaceAll(RegExp(r'</w:tr>'), '\n')
+        .replaceAll(RegExp(r'<[^>]+>'), '');
+
+    return _decodeXmlText(xml)
+        .replaceAll('\r\n', '\n')
+        .replaceAll(RegExp(r'[ \t]+\n'), '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  static String _decodeXmlText(String value) {
+    return value
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&amp;', '&');
   }
 
   static Future<bool> openNoteFolder(EntrySupportNoteMeta meta) {

@@ -2,6 +2,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
+import 'dart:typed_data';
+
+class LocalSupportNoteFileSnapshot {
+  const LocalSupportNoteFileSnapshot({
+    required this.bytes,
+    required this.modifiedAt,
+  });
+
+  final Uint8List bytes;
+  final DateTime modifiedAt;
+}
 
 class LocalSupportNotesPlatform {
   static const String _writerUrl = 'http://127.0.0.1:51239';
@@ -47,7 +58,29 @@ class LocalSupportNotesPlatform {
     return true;
   }
 
-  Future<void> _post(String path, Map<String, dynamic> body) async {
+  Future<LocalSupportNoteFileSnapshot> readFile(String fileName) async {
+    final response = await _post('/read-note', <String, dynamic>{
+      'fileName': fileName,
+    });
+    final encoded = response['contentsBase64'] as String? ?? '';
+    final modifiedAt = DateTime.tryParse(
+      response['modifiedAt'] as String? ?? '',
+    );
+
+    if (encoded.isEmpty || modifiedAt == null) {
+      throw StateError('Local Word document returned invalid file data.');
+    }
+
+    return LocalSupportNoteFileSnapshot(
+      bytes: Uint8List.fromList(base64Decode(encoded)),
+      modifiedAt: modifiedAt,
+    );
+  }
+
+  Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     html.HttpRequest response;
 
     try {
@@ -78,11 +111,13 @@ class LocalSupportNotesPlatform {
       );
     }
 
-    if (raw.trim().isEmpty) return;
+    if (raw.trim().isEmpty) return const {};
 
     final decoded = jsonDecode(raw);
 
-    if (decoded is Map && decoded['ok'] == true) return;
+    if (decoded is Map && decoded['ok'] == true) {
+      return Map<String, dynamic>.from(decoded);
+    }
 
     throw StateError(raw);
   }

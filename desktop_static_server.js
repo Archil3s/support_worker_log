@@ -5,7 +5,7 @@ const path = require('path');
 
 const PORT = Number(process.env.SUPPORT_WORKER_WEB_PORT || 51243);
 const ROOT = path.resolve(__dirname, 'build', 'web');
-const SERVER_VERSION = '2026-07-23-drive-docx-download-v2';
+const SERVER_VERSION = '2026-07-24-drive-word-import-v1';
 
 const TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -809,6 +809,49 @@ async function exportGoogleDocDocx(req, res) {
   }
 }
 
+async function downloadGoogleDriveFile(req, res) {
+  if (req.method === 'OPTIONS') {
+    send(res, 204, '');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    send(res, 405, 'Method not allowed');
+    return;
+  }
+
+  try {
+    const payload = await readJsonBody(req);
+    const fileId = String(payload.fileId || '').trim();
+
+    if (!fileId) {
+      send(res, 400, 'Missing Drive file id.');
+      return;
+    }
+
+    const bytes = await googleDriveBinaryRequest({
+      accessToken: String(payload.accessToken || ''),
+      method: 'GET',
+      path: `/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+    });
+
+    send(
+      res,
+      200,
+      JSON.stringify({ bytesBase64: bytes.toString('base64') }),
+      'application/json; charset=utf-8',
+    );
+  } catch (error) {
+    send(
+      res,
+      502,
+      error && error.message
+        ? error.message
+        : 'Google Drive file download failed.',
+    );
+  }
+}
+
 async function createPrivateCalendarEvent(req, res) {
   if (req.method === 'OPTIONS') {
     send(res, 204, '');
@@ -969,6 +1012,14 @@ function handleRequest(req, res) {
     '/__google_drive/export_google_doc_docx'
   ) {
     exportGoogleDocDocx(req, res);
+    return;
+  }
+
+  if (
+    (req.url || '').split('?')[0] ===
+    '/__google_drive/download_file'
+  ) {
+    downloadGoogleDriveFile(req, res);
     return;
   }
 

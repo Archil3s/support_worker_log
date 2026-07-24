@@ -1618,6 +1618,19 @@ void main() {
     expect(bytes, [80, 75, 3, 4]);
     expect(api.exportedDocxFileIds, ['google-doc-id']);
   });
+
+  test('downloadWordDocument reads the current Drive Word file', () async {
+    final api = _FakeGoogleDriveApi(downloadedBytes: const [80, 75, 3, 4]);
+    final service = GoogleDriveService(api: api);
+
+    final bytes = await service.downloadWordDocument(
+      accessToken: 'token',
+      fileId: 'word-file-id',
+    );
+
+    expect(bytes, [80, 75, 3, 4]);
+    expect(api.downloadedFileIds, ['word-file-id']);
+  });
 }
 
 const _docxMimeType =
@@ -1798,12 +1811,14 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
     this.childrenByParent = const {},
     this.exportedText = '',
     this.exportedDocxBytes = const [],
+    this.downloadedBytes = const [],
   });
 
   final List<GoogleDriveFile> children;
   final Map<String, List<GoogleDriveFile>> childrenByParent;
   final String exportedText;
   final List<int> exportedDocxBytes;
+  final List<int> downloadedBytes;
   final uploads = <_Upload>[];
   final updates = <_Update>[];
   final movedFiles = <_Move>[];
@@ -1812,6 +1827,7 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   final deletedFileIds = <String>[];
   final exportedFileIds = <String>[];
   final exportedDocxFileIds = <String>[];
+  final downloadedFileIds = <String>[];
 
   @override
   Future<GoogleDriveFile> createFolder({
@@ -1919,6 +1935,15 @@ class _FakeGoogleDriveApi extends GoogleDriveApiPlatform {
   }) async {
     exportedDocxFileIds.add(fileId);
     return Uint8List.fromList(exportedDocxBytes);
+  }
+
+  @override
+  Future<Uint8List> downloadFile({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    downloadedFileIds.add(fileId);
+    return Uint8List.fromList(downloadedBytes);
   }
 }
 

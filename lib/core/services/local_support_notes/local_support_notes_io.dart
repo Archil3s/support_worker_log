@@ -3,6 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+class LocalSupportNoteFileSnapshot {
+  const LocalSupportNoteFileSnapshot({
+    required this.bytes,
+    required this.modifiedAt,
+  });
+
+  final Uint8List bytes;
+  final DateTime modifiedAt;
+}
+
 class LocalSupportNotesPlatform {
   static const String defaultRootPath =
       r'C:\Users\Danie\OneDrive\Desktop\MR notes to submit';
@@ -112,6 +122,38 @@ class LocalSupportNotesPlatform {
     );
   }
 
+  Future<LocalSupportNoteFileSnapshot> readFile(String fileName) async {
+    if (Platform.isAndroid) {
+      final response = await _post('/read-note', <String, dynamic>{
+        'fileName': fileName,
+      });
+      final encoded = response['contentsBase64'] as String? ?? '';
+      final modifiedAt = DateTime.tryParse(
+        response['modifiedAt'] as String? ?? '',
+      );
+
+      if (encoded.isEmpty || modifiedAt == null) {
+        throw StateError('Local Word document returned invalid file data.');
+      }
+
+      return LocalSupportNoteFileSnapshot(
+        bytes: Uint8List.fromList(base64Decode(encoded)),
+        modifiedAt: modifiedAt,
+      );
+    }
+
+    final file = await _fileForRelativePath(fileName);
+    if (!await file.exists()) {
+      throw StateError('Local note file does not exist: ${file.path}');
+    }
+
+    final stat = await file.stat();
+    return LocalSupportNoteFileSnapshot(
+      bytes: await file.readAsBytes(),
+      modifiedAt: stat.modified,
+    );
+  }
+
   Future<File> _fileForRelativePath(String relativePath) async {
     final root = Directory(defaultRootPath);
     await root.create(recursive: true);
@@ -143,7 +185,10 @@ class LocalSupportNotesPlatform {
   }
 }
 
-Future<void> _post(String path, Map<String, dynamic> body) async {
+Future<Map<String, dynamic>> _post(
+  String path,
+  Map<String, dynamic> body,
+) async {
   final client = HttpClient();
 
   try {
@@ -172,11 +217,13 @@ Future<void> _post(String path, Map<String, dynamic> body) async {
       );
     }
 
-    if (raw.trim().isEmpty) return;
+    if (raw.trim().isEmpty) return const {};
 
     final decoded = jsonDecode(raw);
 
-    if (decoded is Map && decoded['ok'] == true) return;
+    if (decoded is Map && decoded['ok'] == true) {
+      return Map<String, dynamic>.from(decoded);
+    }
 
     throw StateError(raw);
   } on TimeoutException {

@@ -288,6 +288,37 @@ class GoogleDriveApiPlatform {
     );
   }
 
+  Future<Uint8List> downloadFile({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    if (_useDesktopProxy) {
+      final decoded = await _proxyJson(
+        '/__google_drive/download_file',
+        {'accessToken': accessToken, 'fileId': fileId},
+        failureMessage: 'Google Drive file download failed',
+      );
+      final encoded = decoded['bytesBase64'] as String? ?? '';
+      if (encoded.isEmpty) {
+        throw StateError('Google Drive file download returned an empty file.');
+      }
+      return Uint8List.fromList(base64Decode(encoded));
+    }
+
+    final response = await _request(
+      _driveDownloadUri(fileId).toString(),
+      method: 'GET',
+      requestHeaders: {'Authorization': 'Bearer $accessToken'},
+      failureMessage: 'Google Drive file download failed',
+      responseType: 'arraybuffer',
+    );
+
+    return _decodeBinaryResponse(
+      response,
+      failureMessage: 'Google Drive file download failed',
+    );
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -371,6 +402,12 @@ class GoogleDriveApiPlatform {
   Uri _driveFileUri(String fileId) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveDownloadUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
+      'alt': 'media',
     });
   }
 

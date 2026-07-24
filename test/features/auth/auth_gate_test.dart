@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -19,8 +21,9 @@ void main() {
     );
 
     expect(find.byKey(const Key('session-restore-screen')), findsOneWidget);
-    expect(find.text('Restoring your saved session'), findsOneWidget);
+    expect(find.text('Opening your saved work...'), findsOneWidget);
     expect(find.text('Welcome back'), findsNothing);
+    expect(find.byType(AnimatedSwitcher), findsOneWidget);
   });
 
   testWidgets('login presents simple Google and email choices', (tester) async {
@@ -53,6 +56,38 @@ void main() {
     expect(find.text('App account'), findsNothing);
     expect(find.text('Google Drive'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Google login shows progress on the Google button', (
+    tester,
+  ) async {
+    final appState = _DelayedGoogleAuthAppState();
+    addTearDown(appState.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: appState,
+        child: const MaterialApp(home: AuthScreen()),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('auth-google-button')));
+    await tester.pump();
+
+    expect(find.text('Connecting to Google...'), findsOneWidget);
+    expect(find.textContaining('Choose your Google account'), findsOneWidget);
+    final emailButton = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('auth-email-button')),
+    );
+    expect(emailButton.onPressed, isNull);
+
+    appState.googleSignIn.completeError(
+      StateError('Google sign-in was cancelled.'),
+    );
+    await tester.pump();
+
+    expect(find.text('Google sign-in was cancelled.'), findsOneWidget);
+    expect(find.textContaining('Bad state:'), findsNothing);
   });
 
   testWidgets('login validates locally and scrolls above a small keyboard', (
@@ -94,4 +129,13 @@ void main() {
     expect(find.byTooltip('Hide password'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _DelayedGoogleAuthAppState extends AppState {
+  _DelayedGoogleAuthAppState() : super(warmGoogleAccounts: false);
+
+  final Completer<void> googleSignIn = Completer<void>();
+
+  @override
+  Future<void> signInWithGoogle() => googleSignIn.future;
 }

@@ -5,6 +5,7 @@ Set-Location "C:\Users\Danie\support_worker_log"
 $AdbPath = "C:\Users\Danie\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 $WriterPath = "C:\Users\Danie\support_worker_log\mr_notes_node_writer.js"
 $Port = 51239
+$WriterVersion = "2026-07-24-document-read-v1"
 $DeviceId = "emulator-5554"
 $PackageName = "com.archil3s.support_worker_log"
 
@@ -17,19 +18,36 @@ function Test-Writer {
             -ContentType "application/json" `
             -TimeoutSec 3
 
-        return $Result.ok -eq $true
+        return $Result.ok -eq $true -and $Result.version -eq $WriterVersion
     }
     catch {
         return $false
     }
 }
 
+function Stop-StaleWriter {
+    $Connections = Get-NetTCPConnection `
+        -LocalPort $Port `
+        -State Listen `
+        -ErrorAction SilentlyContinue
+
+    $ProcessIds = $Connections |
+        Select-Object -ExpandProperty OwningProcess -Unique
+
+    foreach ($ProcessId in $ProcessIds) {
+        if ($ProcessId -gt 0 -and $ProcessId -ne $PID) {
+            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 if (-not (Test-Writer)) {
+    Stop-StaleWriter
     Start-Process `
         -FilePath "node" `
         -ArgumentList "`"$WriterPath`"" `
         -WorkingDirectory "C:\Users\Danie\support_worker_log" `
-        -WindowStyle Minimized
+        -WindowStyle Hidden
 
     Start-Sleep -Seconds 2
 }

@@ -16,13 +16,11 @@ class FirebaseStatusOverlay extends StatefulWidget {
 }
 
 class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
-  Timer? _autoSyncTimer;
   Timer? _sessionCountdownTimer;
 
   bool _expanded = false;
   bool _syncing = false;
   bool _sessionExpiryRunning = false;
-  String? _lastAutoSyncUid;
   String? _manualMessage;
   DateTime? _lastChecked;
 
@@ -38,21 +36,8 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
 
   @override
   void dispose() {
-    _autoSyncTimer?.cancel();
     _sessionCountdownTimer?.cancel();
     super.dispose();
-  }
-
-  void _scheduleFirstLoginSync(String uid) {
-    if (_lastAutoSyncUid == uid) return;
-
-    _lastAutoSyncUid = uid;
-    _autoSyncTimer?.cancel();
-
-    _autoSyncTimer = Timer(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      _syncNow();
-    });
   }
 
   Future<void> _syncNow() async {
@@ -126,7 +111,6 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
         _expanded = false;
         _syncing = false;
         _manualMessage = null;
-        _lastAutoSyncUid = null;
         _lastChecked = DateTime.now();
       });
     } catch (error) {
@@ -621,12 +605,7 @@ class _FirebaseStatusOverlayState extends State<FirebaseStatusOverlay> {
           builder: (context, snapshot) {
             final user = snapshot.data ?? FirebaseAuth.instance.currentUser;
 
-            if (user == null) {
-              _lastAutoSyncUid = null;
-              return widget.child;
-            }
-
-            _scheduleFirstLoginSync(user.uid);
+            if (user == null) return widget.child;
 
             return Stack(
               fit: StackFit.expand,

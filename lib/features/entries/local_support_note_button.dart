@@ -109,6 +109,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   EntrySupportNoteMeta? meta;
   EntryDriveSupportNoteMeta? driveMeta;
   bool busy = false;
+  bool documentDirty = false;
   String? message;
   bool draftAutosaveReady = false;
   Timer? draftAutosaveTimer;
@@ -138,7 +139,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
   void _startGoogleDocSyncTimer() {
     googleDocSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (!mounted || busy || driveMeta == null) return;
+      if (!mounted || busy || documentDirty || driveMeta == null) return;
       unawaited(_syncFromGoogleDoc(silent: true));
     });
   }
@@ -155,6 +156,13 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         loaded,
         appState.supportNoteMetaFor(widget.entry.id),
       );
+      if (loaded != null) {
+        loaded = await appState.syncEntryNoteFromLocalWord(
+          entry: widget.entry,
+          existingMeta: loaded,
+          payeMode: appState.isPayeMode,
+        );
+      }
     } catch (_) {
       loaded = appState.supportNoteMetaFor(widget.entry.id);
     }
@@ -356,11 +364,13 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
 
     if (!mounted) return;
 
+    draftAutosaveReady = false;
     setState(() {
       if (!appState.isPayeMode) noteController.text = noteText;
       meta = updated;
       if (showMessage) message = nextMessage;
     });
+    draftAutosaveReady = true;
     appState.upsertSupportNoteMeta(updated);
     _updatePayeEntry(appState);
   }
@@ -386,11 +396,11 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
   void _scheduleDraftAutosave() {
     if (!draftAutosaveReady || busy) return;
 
+    documentDirty = true;
     draftAutosaveTimer?.cancel();
     draftAutosaveTimer = Timer(const Duration(milliseconds: 350), () async {
       try {
         await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
-        await _autoSaveAttachedFiles();
       } catch (_) {
         // Explicit save buttons show errors.
       }
@@ -571,6 +581,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
       setState(() {
         if (!payeMode) noteController.text = updated.noteText;
         driveMeta = updated;
+        documentDirty = false;
         message =
             payeMode ||
                 updated.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType
@@ -977,6 +988,7 @@ class _LocalSupportNoteSheetState extends State<LocalSupportNoteSheet> {
         initialsController.text = updated.initials;
         noteController.text = updated.noteText;
         status = updated.status;
+        documentDirty = false;
         if (!silent) {
           message = 'Synced Google Doc edits into the app.';
         }

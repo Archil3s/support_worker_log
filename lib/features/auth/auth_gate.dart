@@ -15,18 +15,31 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
+    final Widget screen;
+    final String screenKey;
 
     if (!appState.initialLoadComplete) {
-      return const _SessionRestoreScreen();
+      screen = const _SessionRestoreScreen();
+      screenKey = 'restoring';
+    } else if (appState.isSignedIn) {
+      if (appState.appUnlocked) {
+        screen = const MainShell();
+        screenKey = 'app';
+      } else {
+        screen = const AppLockScreen();
+        screenKey = 'lock';
+      }
+    } else {
+      screen = const AuthScreen();
+      screenKey = 'login';
     }
 
-    if (appState.isSignedIn) {
-      if (!appState.appUnlocked) return const AppLockScreen();
-
-      return const MainShell();
-    }
-
-    return const AuthScreen();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: KeyedSubtree(key: ValueKey(screenKey), child: screen),
+    );
   }
 }
 
@@ -47,21 +60,19 @@ class _SessionRestoreScreen extends StatelessWidget {
                 AppBootLogo(size: 60, borderRadius: 18, fontSize: 25),
                 SizedBox(height: 18),
                 Text(
-                  'Restoring your saved session',
+                  'Support Worker Log',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'You will stay signed in. Face ID or your app password is '
-                  'all you need next.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF8396C7), height: 1.4),
                 ),
                 SizedBox(height: 18),
                 SizedBox.square(
                   dimension: 24,
                   child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Opening your saved work...',
+                  style: TextStyle(color: Color(0xFF8396C7)),
                 ),
               ],
             ),
@@ -480,6 +491,8 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
+enum _AuthAction { email, google, passwordReset }
+
 class _AuthScreenState extends State<AuthScreen> {
   final formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
@@ -489,10 +502,12 @@ class _AuthScreenState extends State<AuthScreen> {
   final scrollController = ScrollController();
 
   bool createAccount = false;
-  bool busy = false;
   bool showPassword = false;
+  _AuthAction? activeAction;
   String? errorText;
   String? successText;
+
+  bool get busy => activeAction != null;
 
   @override
   void dispose() {
@@ -513,7 +528,7 @@ class _AuthScreenState extends State<AuthScreen> {
     FocusScope.of(context).unfocus();
 
     setState(() {
-      busy = true;
+      activeAction = _AuthAction.email;
       errorText = null;
       successText = null;
     });
@@ -531,7 +546,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
-        setState(() => busy = false);
+        setState(() => activeAction = null);
       }
     }
   }
@@ -541,7 +556,7 @@ class _AuthScreenState extends State<AuthScreen> {
     FocusScope.of(context).unfocus();
 
     setState(() {
-      busy = true;
+      activeAction = _AuthAction.google;
       errorText = null;
       successText = null;
     });
@@ -553,7 +568,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
-        setState(() => busy = false);
+        setState(() => activeAction = null);
       }
     }
   }
@@ -572,7 +587,7 @@ class _AuthScreenState extends State<AuthScreen> {
     FocusScope.of(context).unfocus();
 
     setState(() {
-      busy = true;
+      activeAction = _AuthAction.passwordReset;
       errorText = null;
       successText = null;
     });
@@ -586,7 +601,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => errorText = _friendlyError(error));
     } finally {
       if (mounted) {
-        setState(() => busy = false);
+        setState(() => activeAction = null);
       }
     }
   }
@@ -656,7 +671,7 @@ class _AuthScreenState extends State<AuthScreen> {
       return 'An account already exists with a different sign-in method.';
     }
 
-    return text.replaceFirst('Exception: ', '');
+    return text.replaceFirst('Exception: ', '').replaceFirst('Bad state: ', '');
   }
 
   @override
@@ -716,6 +731,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               _LoginHeading(createAccount: createAccount),
                               const SizedBox(height: 20),
                               OutlinedButton.icon(
+                                key: const ValueKey('auth-google-button'),
                                 style: OutlinedButton.styleFrom(
                                   minimumSize: const Size.fromHeight(52),
                                   backgroundColor: Colors.white,
@@ -726,19 +742,41 @@ class _AuthScreenState extends State<AuthScreen> {
                                   ),
                                 ),
                                 onPressed: busy ? null : _signInWithGoogle,
-                                icon: const Text(
-                                  'G',
-                                  style: TextStyle(
-                                    color: Color(0xFF4285F4),
-                                    fontSize: 19,
+                                icon: activeAction == _AuthAction.google
+                                    ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF4285F4),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'G',
+                                        style: TextStyle(
+                                          color: Color(0xFF4285F4),
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                label: Text(
+                                  activeAction == _AuthAction.google
+                                      ? 'Connecting to Google...'
+                                      : 'Continue with Google',
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
-                                label: const Text(
-                                  'Continue with Google',
-                                  style: TextStyle(fontWeight: FontWeight.w900),
-                                ),
                               ),
+                              if (activeAction == _AuthAction.google) ...[
+                                const SizedBox(height: 10),
+                                const _AuthMessageBanner(
+                                  message:
+                                      'Choose your Google account in the '
+                                      'secure window, then return here.',
+                                  color: Color(0xFF67E8F9),
+                                  icon: Icons.open_in_new_rounded,
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               const _LoginDivider(),
                               const SizedBox(height: 16),
@@ -827,6 +865,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ],
                               const SizedBox(height: 16),
                               FilledButton.icon(
+                                key: const ValueKey('auth-email-button'),
                                 style: FilledButton.styleFrom(
                                   minimumSize: const Size.fromHeight(52),
                                   shape: RoundedRectangleBorder(
@@ -834,7 +873,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                   ),
                                 ),
                                 onPressed: busy ? null : _submit,
-                                icon: busy
+                                icon: activeAction == _AuthAction.email
                                     ? const SizedBox.square(
                                         dimension: 18,
                                         child: CircularProgressIndicator(
@@ -847,7 +886,13 @@ class _AuthScreenState extends State<AuthScreen> {
                                             : Icons.arrow_forward,
                                       ),
                                 label: Text(
-                                  createAccount ? 'Create account' : 'Sign in',
+                                  activeAction == _AuthAction.email
+                                      ? createAccount
+                                            ? 'Creating account...'
+                                            : 'Signing in...'
+                                      : createAccount
+                                      ? 'Create account'
+                                      : 'Sign in',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w900,
                                   ),
@@ -862,7 +907,12 @@ class _AuthScreenState extends State<AuthScreen> {
                                   if (!createAccount)
                                     TextButton(
                                       onPressed: busy ? null : _resetPassword,
-                                      child: const Text('Forgot password?'),
+                                      child: Text(
+                                        activeAction ==
+                                                _AuthAction.passwordReset
+                                            ? 'Sending reset...'
+                                            : 'Forgot password?',
+                                      ),
                                     ),
                                   TextButton(
                                     onPressed: busy

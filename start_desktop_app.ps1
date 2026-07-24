@@ -4,9 +4,10 @@ Set-Location "C:\Users\Danie\support_worker_log"
 
 $WriterPath = "C:\Users\Danie\support_worker_log\mr_notes_node_writer.js"
 $Port = 51239
+$WriterVersion = "2026-07-24-document-read-v1"
 $WebPort = 51243
 $ServerPath = "C:\Users\Danie\support_worker_log\desktop_static_server.js"
-$ServerVersion = "2026-06-02-drive-proxy-v1"
+$ServerVersion = "2026-07-24-drive-word-import-v1"
 $RentalScraperScript = "C:\Users\Danie\support_worker_log\tools\rental_scraper\rental_scraper_server.js"
 $RentalScraperPort = 51247
 $BuildStamp = "C:\Users\Danie\support_worker_log\build\web\.desktop_build_stamp"
@@ -22,10 +23,26 @@ function Test-Writer {
             -ContentType "application/json" `
             -TimeoutSec 3
 
-        return $Result.ok -eq $true
+        return $Result.ok -eq $true -and $Result.version -eq $WriterVersion
     }
     catch {
         return $false
+    }
+}
+
+function Stop-StaleWriter {
+    $Connections = Get-NetTCPConnection `
+        -LocalPort $Port `
+        -State Listen `
+        -ErrorAction SilentlyContinue
+
+    $ProcessIds = $Connections |
+        Select-Object -ExpandProperty OwningProcess -Unique
+
+    foreach ($ProcessId in $ProcessIds) {
+        if ($ProcessId -gt 0 -and $ProcessId -ne $PID) {
+            Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -108,6 +125,7 @@ function Get-NewestSourceWrite {
 
 if (-not (Test-Writer)) {
     Write-Host "Starting local notes writer..."
+    Stop-StaleWriter
 
     Start-Process `
         -FilePath "node" `

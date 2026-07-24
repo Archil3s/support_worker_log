@@ -135,6 +135,7 @@ start_invoice_web.ps1
 start_offline_notes.ps1
 mr_notes_*.ps1
 mr_notes_*.js
+!mr_notes_node_writer.js
 web/local_support_notes.js
 
 # Private generated notes

@@ -582,6 +582,30 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<EntrySupportNoteMeta?> syncEntryNoteFromLocalWord({
+    required WorkEntry entry,
+    EntrySupportNoteMeta? existingMeta,
+    required bool payeMode,
+  }) async {
+    final updated = await LocalSupportNoteService.refreshFromWordDocument(
+      entry: entry,
+      existingMeta: existingMeta,
+    );
+    if (updated == null) return null;
+
+    _supportNoteMetas[entry.id] = updated;
+    if (updated.noteText != entry.supportNoteBreakdown) {
+      _updateEntryForSupportNoteSync(
+        entry.copyWith(supportNoteBreakdown: updated.noteText),
+        payeMode: payeMode,
+      );
+    } else {
+      _persistAndNotify();
+    }
+
+    return updated;
+  }
+
   Future<EntryDriveSupportNoteMeta> syncEntryNoteFromGoogleDoc({
     required WorkEntry entry,
     EntryDriveSupportNoteMeta? existingMeta,
@@ -925,6 +949,14 @@ class AppState extends ChangeNotifier {
     required bool payeMode,
     required String? googleAccountEmail,
   }) async {
+    var wordDocumentText = '';
+    if (sourceMeta.mimeType == EntryDriveSupportNoteMeta.wordDocumentMimeType) {
+      final wordBytes = await _googleDriveService.downloadWordDocument(
+        accessToken: accessToken,
+        fileId: sourceMeta.fileId,
+      );
+      wordDocumentText = LocalSupportNoteService.wordDocumentText(wordBytes);
+    }
     final localMeta = await LocalSupportNoteService.loadMeta(entry.id);
     final initials = localMeta?.initials.trim().isNotEmpty == true
         ? localMeta!.initials
@@ -932,16 +964,25 @@ class AppState extends ChangeNotifier {
         ? sourceMeta.initials
         : LocalSupportNoteService.defaultInitialsForEntry(entry);
     final status = localMeta?.status ?? sourceMeta.status;
-    final noteText =
-        LocalSupportNoteService.hasEnteredSupportNoteContent(
-          localMeta?.noteText ?? '',
-        )
-        ? localMeta!.noteText
-        : LocalSupportNoteService.hasEnteredSupportNoteContent(
-            entry.supportNoteBreakdown,
-          )
-        ? entry.supportNoteBreakdown
-        : sourceMeta.noteText;
+    final String noteText;
+    if (LocalSupportNoteService.hasEnteredSupportNoteContent(
+      wordDocumentText,
+    )) {
+      noteText = LocalSupportNoteService.payeNotePlainText(
+        entry: entry,
+        noteText: wordDocumentText,
+      );
+    } else if (LocalSupportNoteService.hasEnteredSupportNoteContent(
+      localMeta?.noteText ?? '',
+    )) {
+      noteText = localMeta!.noteText;
+    } else if (LocalSupportNoteService.hasEnteredSupportNoteContent(
+      entry.supportNoteBreakdown,
+    )) {
+      noteText = entry.supportNoteBreakdown;
+    } else {
+      noteText = sourceMeta.noteText;
+    }
     final updatedEntry = entry.copyWith(supportNoteBreakdown: noteText);
 
     if (payeMode) {

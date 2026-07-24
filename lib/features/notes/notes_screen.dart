@@ -90,6 +90,28 @@ bool _shouldAutoSyncGoogleDoc(EntrySupportNoteStatus status) {
       status == EntrySupportNoteStatus.submitted;
 }
 
+String _representedDocumentText({
+  required WorkEntry entry,
+  EntrySupportNoteMeta? localMeta,
+  EntryDriveSupportNoteMeta? driveMeta,
+}) {
+  final candidates = [
+    localMeta?.noteText ?? '',
+    driveMeta?.noteText ?? '',
+    entry.supportNoteBreakdown,
+  ];
+
+  for (final candidate in candidates) {
+    if (LocalSupportNoteService.hasEnteredSupportNoteContent(candidate)) {
+      return candidate.trim();
+    }
+  }
+
+  return candidates
+      .firstWhere((candidate) => candidate.trim().isNotEmpty, orElse: () => '')
+      .trim();
+}
+
 String _friendlyErrorText(Object error) {
   final text = error.toString().trim();
   if (text.startsWith('Bad state: ')) {
@@ -2232,6 +2254,7 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
 
   EntrySupportNoteMeta? meta;
   EntryDriveSupportNoteMeta? driveMeta;
+  bool refreshingDocument = false;
 
   @override
   void initState() {
@@ -2256,6 +2279,17 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
       localMeta,
       appState.supportNoteMetaFor(widget.entry.id),
     );
+    if (loaded != null) {
+      try {
+        loaded = await appState.syncEntryNoteFromLocalWord(
+          entry: widget.entry,
+          existingMeta: loaded,
+          payeMode: appState.isPayeMode,
+        );
+      } catch (_) {
+        // Keep the app copy when the optional local Word file is unavailable.
+      }
+    }
     final savedDrive = _driveMetaForAccount(
       await driveService.loadSupportNoteMeta(widget.entry.id),
       googleAccountEmail,
@@ -2305,6 +2339,38 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
     );
 
     await _load();
+  }
+
+  Future<void> _refreshDocument() async {
+    if (refreshingDocument) return;
+
+    setState(() => refreshingDocument = true);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+
+    try {
+      await _load();
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Document refreshed from the current Google Doc or Word file.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not refresh document: ${_friendlyErrorText(error)}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => refreshingDocument = false);
+    }
   }
 
   Future<void> _openLocalFile() async {
@@ -2466,10 +2532,12 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
       widget.entry,
       fallback: fallbackName,
     );
-    final notePreview = widget.entry.supportNoteBreakdown.trim().replaceAll(
-      RegExp(r'\s+'),
-      ' ',
+    final representedDocument = _representedDocumentText(
+      entry: widget.entry,
+      localMeta: meta,
+      driveMeta: driveMeta,
     );
+    final notePreview = representedDocument.replaceAll(RegExp(r'\s+'), ' ');
     final hasDetails =
         notePreview.isNotEmpty ||
         widget.entry.nextActions.isNotEmpty ||
@@ -2585,7 +2653,9 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
               canDownloadGoogleDoc: canDownloadGoogleDoc,
               hasLocal: hasLocal,
               important: widget.entry.importantText,
+              refreshingDocument: refreshingDocument,
               onOpenNote: _openSheet,
+              onRefreshDocument: _refreshDocument,
               onOpenDrive: _openDriveFile,
               onDownloadGoogleDoc: _downloadDriveFile,
               onOpenLocal: _openLocalFile,
@@ -2598,7 +2668,7 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(bottom: 4),
                 title: const Text(
-                  'View note details',
+                  'Document shown in app',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 leading: const Icon(Icons.subject_outlined),
@@ -2621,10 +2691,8 @@ class _NoteEntryCardState extends State<_NoteEntryCard> {
                     ),
                     const SizedBox(height: 10),
                   ],
-                  if (widget.entry.supportNoteBreakdown.trim().isNotEmpty)
-                    SupportNoteBreakdownText(
-                      text: widget.entry.supportNoteBreakdown.trim(),
-                    ),
+                  if (representedDocument.isNotEmpty)
+                    SupportNoteBreakdownText(text: representedDocument),
                   if (widget.entry.nextActions.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     const Align(
@@ -2663,7 +2731,9 @@ class _NoteCardActionBar extends StatelessWidget {
     required this.canDownloadGoogleDoc,
     required this.hasLocal,
     required this.important,
+    required this.refreshingDocument,
     required this.onOpenNote,
+    required this.onRefreshDocument,
     required this.onOpenDrive,
     required this.onDownloadGoogleDoc,
     required this.onOpenLocal,
@@ -2676,7 +2746,9 @@ class _NoteCardActionBar extends StatelessWidget {
   final bool canDownloadGoogleDoc;
   final bool hasLocal;
   final bool important;
+  final bool refreshingDocument;
   final VoidCallback onOpenNote;
+  final VoidCallback onRefreshDocument;
   final VoidCallback onOpenDrive;
   final VoidCallback onDownloadGoogleDoc;
   final VoidCallback onOpenLocal;
@@ -2693,6 +2765,16 @@ class _NoteCardActionBar extends StatelessWidget {
           label: Text(createNote ? 'Create note' : 'Open, edit & sync'),
         );
         final secondaryActions = <Widget>[
+          IconButton.filledTonal(
+            tooltip: 'Refresh document from Google Docs or Word',
+            onPressed: refreshingDocument ? null : onRefreshDocument,
+            icon: refreshingDocument
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_outlined),
+          ),
           if (hasDriveNote)
             IconButton.filledTonal(
               tooltip: 'Open Google Drive note',
@@ -2839,6 +2921,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   bool busy = false;
   bool autoSaving = false;
   bool suppressAutoSave = false;
+  bool documentDirty = false;
   Timer? autoSaveDebounce;
   Timer? googleDocSyncTimer;
   int autoSaveVersion = 0;
@@ -2867,7 +2950,13 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
   void _startGoogleDocSyncTimer() {
     googleDocSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (!mounted || busy || autoSaving || driveMeta == null) return;
+      if (!mounted ||
+          busy ||
+          autoSaving ||
+          documentDirty ||
+          driveMeta == null) {
+        return;
+      }
       unawaited(_syncFromGoogleDoc(silent: true));
     });
   }
@@ -2875,9 +2964,14 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
   void _onAttachedNoteChanged() {
     if (suppressAutoSave || (meta == null && driveMeta == null)) return;
 
+    documentDirty = true;
     autoSaveDebounce?.cancel();
-    autoSaveDebounce = Timer(const Duration(milliseconds: 350), () {
-      unawaited(_autoSaveAttachedFiles());
+    autoSaveDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        await _saveDraftOnly('Draft autosaved in the app.', showMessage: false);
+      } catch (_) {
+        // Explicit save buttons report storage errors.
+      }
     });
   }
 
@@ -2889,6 +2983,17 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       localMeta,
       appState.supportNoteMetaFor(widget.entry.id),
     );
+    if (loaded != null) {
+      try {
+        loaded = await appState.syncEntryNoteFromLocalWord(
+          entry: widget.entry,
+          existingMeta: loaded,
+          payeMode: appState.isPayeMode,
+        );
+      } catch (_) {
+        // Keep the app copy when the optional local Word file is unavailable.
+      }
+    }
     final savedDrive = _driveMetaForAccount(
       await driveService.loadSupportNoteMeta(widget.entry.id),
       googleAccountEmail,
@@ -3072,11 +3177,13 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
 
     if (!mounted) return;
 
+    suppressAutoSave = true;
     setState(() {
       if (!appState.isPayeMode) noteController.text = noteText;
       meta = updated;
       if (showMessage) message = nextMessage;
     });
+    suppressAutoSave = false;
     appState.upsertSupportNoteMeta(updated);
     _updatePayeEntry(appState);
   }
@@ -3222,6 +3329,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       setState(() {
         noteController.text = updated.noteText;
         driveMeta = updated;
+        documentDirty = false;
         message =
             updated.mimeType == EntryDriveSupportNoteMeta.googleDocsMimeType
             ? 'Saved to Google Docs as ${updated.fileName}'
@@ -3596,6 +3704,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
       setState(() {
         meta = updatedLocal ?? meta;
         driveMeta = updatedDrive ?? driveMeta;
+        if (updatedDrive != null) documentDirty = false;
         message = 'Auto-saved attached note files.';
       });
       if (updatedLocal != null) {
@@ -3747,6 +3856,7 @@ class _EntryNoteSheetState extends State<EntryNoteSheet> {
         initialsController.text = updated.initials;
         noteController.text = updated.noteText;
         status = updated.status;
+        documentDirty = false;
         if (!silent) {
           message = 'Synced Google Doc edits into the app.';
         }

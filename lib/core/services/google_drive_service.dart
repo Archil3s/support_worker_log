@@ -105,6 +105,8 @@ class EntryDriveSupportNoteMeta {
   });
 
   static const googleDocsMimeType = 'application/vnd.google-apps.document';
+  static const wordDocumentMimeType =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   static const stableContentFormat = 'drive-docx-v2';
 
   final String entryId;
@@ -720,6 +722,18 @@ class GoogleDriveService {
       accessToken: accessToken,
       fileId: cleanFileId,
     );
+  }
+
+  Future<Uint8List> downloadWordDocument({
+    required String accessToken,
+    required String fileId,
+  }) {
+    final cleanFileId = fileId.trim();
+    if (cleanFileId.isEmpty) {
+      throw StateError('Word document is missing its Drive file id.');
+    }
+
+    return _api.downloadFile(accessToken: accessToken, fileId: cleanFileId);
   }
 
   bool isGoogleDocsSupportNote(EntryDriveSupportNoteMeta? meta) {

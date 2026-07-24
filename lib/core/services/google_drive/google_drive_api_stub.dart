@@ -185,6 +185,46 @@ class GoogleDriveApiPlatform {
     }
   }
 
+  Future<Uint8List> downloadFile({
+    required String accessToken,
+    required String fileId,
+  }) async {
+    final client = HttpClient();
+
+    try {
+      final request = await client.getUrl(_driveDownloadUri(fileId));
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer $accessToken',
+      );
+
+      final response = await request.close();
+      final builder = BytesBuilder();
+      await for (final chunk in response) {
+        builder.add(chunk);
+      }
+      final bytes = builder.takeBytes();
+      final status = response.statusCode;
+
+      if (status < 200 || status >= 300) {
+        final raw = utf8.decode(bytes, allowMalformed: true);
+        throw StateError(
+          _googleApiError(raw) ??
+              'Google Drive file download failed with HTTP $status.',
+        );
+      }
+
+      return bytes;
+    } on SocketException catch (error) {
+      throw StateError(
+        'Google Drive file download failed: could not reach Google Drive. '
+        '${error.message}',
+      );
+    } finally {
+      client.close();
+    }
+  }
+
   Future<List<GoogleDriveFile>> listChildren({
     required String accessToken,
     required String parentId,
@@ -246,6 +286,12 @@ class GoogleDriveApiPlatform {
   Uri _driveFileUri(String fileId) {
     return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
       'fields': 'id,name,mimeType,webViewLink',
+    });
+  }
+
+  Uri _driveDownloadUri(String fileId) {
+    return Uri.https('www.googleapis.com', '/drive/v3/files/$fileId', {
+      'alt': 'media',
     });
   }
 

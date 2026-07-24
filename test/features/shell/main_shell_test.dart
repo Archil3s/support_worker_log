@@ -71,6 +71,9 @@ void main() {
       find.byKey(const ValueKey('work-monthly-overview-panel')),
       findsOneWidget,
     );
+    expect(find.text('BROWSE MONTHS'), findsOneWidget);
+    expect(find.text('Previous'), findsOneWidget);
+    expect(find.text('Next'), findsOneWidget);
     expect(find.byKey(const ValueKey('desktop-work-status-bar')), findsNothing);
     expect(find.byKey(const ValueKey('desktop-workflow-strip')), findsNothing);
     expect(
@@ -239,6 +242,12 @@ void main() {
       find.byKey(const ValueKey('work-monthly-overview-panel')),
       findsOneWidget,
     );
+    expect(find.text('BROWSE MONTHS'), findsOneWidget);
+    expect(find.text('Previous'), findsOneWidget);
+    expect(find.text('Next'), findsOneWidget);
+    final browseMonthsRect = tester.getRect(find.text('BROWSE MONTHS'));
+    expect(browseMonthsRect.top, greaterThanOrEqualTo(0));
+    expect(browseMonthsRect.bottom, lessThanOrEqualTo(800));
     expect(find.byKey(const ValueKey('desktop-work-status-bar')), findsNothing);
     final entriesRect = tester.getRect(
       find.byKey(const ValueKey('work-month-stat-entries')),
