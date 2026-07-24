@@ -68,6 +68,20 @@ void main() {
 
     expect(find.text('Work'), findsWidgets);
     expect(
+      find.byKey(const ValueKey('work-monthly-overview-launcher')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-monthly-overview-panel')),
+      findsNothing,
+    );
+    expect(find.text('BROWSE MONTHS'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('work-monthly-overview-open')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(
       find.byKey(const ValueKey('work-monthly-overview-panel')),
       findsOneWidget,
     );
@@ -202,8 +216,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('work-month-next')));
     await tester.pump();
 
+    await tester.ensureVisible(find.byKey(const ValueKey('work-flow-notes')));
     await tester.tap(find.byKey(const ValueKey('work-flow-notes')));
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Notes'), findsWidgets);
     expect(
@@ -239,6 +255,19 @@ void main() {
 
     expect(find.text('Work'), findsWidgets);
     expect(
+      find.byKey(const ValueKey('work-monthly-overview-launcher')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('work-monthly-overview-panel')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('work-monthly-overview-open')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(
       find.byKey(const ValueKey('work-monthly-overview-panel')),
       findsOneWidget,
     );
@@ -260,6 +289,19 @@ void main() {
     );
     expect(entriesRect.top, hoursRect.top);
     expect(earnedRect.top, greaterThan(entriesRect.top));
+
+    await tester.tap(find.byKey(const ValueKey('work-monthly-overview-close')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(
+      find.byKey(const ValueKey('work-monthly-overview-panel')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('work-monthly-overview-launcher')),
+      findsOneWidget,
+    );
 
     final actionsPosition = tester.getCenter(find.text('Actions').last);
     final calendarPosition = tester.getCenter(find.text('Calendar'));
@@ -289,6 +331,10 @@ void main() {
     expect(find.text('Quick'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('work-monthly-overview-panel')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('work-monthly-overview-launcher')),
       findsNothing,
     );
   });

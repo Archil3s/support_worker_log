@@ -8,8 +8,8 @@ import '../models/work_month_summary.dart';
 import 'work_contact_type_breakdown.dart';
 import 'work_month_controls.dart';
 
-class WorkMonthlyOverviewPanel extends StatefulWidget {
-  const WorkMonthlyOverviewPanel({
+class WorkMonthlyOverviewLauncher extends StatelessWidget {
+  const WorkMonthlyOverviewLauncher({
     required this.onWork,
     required this.onNotes,
     required this.onActions,
@@ -21,6 +21,141 @@ class WorkMonthlyOverviewPanel extends StatefulWidget {
   final VoidCallback onNotes;
   final VoidCallback onActions;
   final VoidCallback onPayPeriod;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final summary = WorkMonthSummary.fromState(
+      context.watch<AppState>(),
+      DateTime(now.year, now.month),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Material(
+        key: const ValueKey('work-monthly-overview-launcher'),
+        color: const Color(0xFF151B29),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: const ValueKey('work-monthly-overview-open'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showOverview(context),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF34405F)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F8DF7).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.insights_rounded,
+                    color: Color(0xFF8CB8FF),
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Monthly overview',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${summary.label} · ${summary.entries} entries · '
+                        '${summary.hours.toStringAsFixed(2)}h',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFAFC6F5),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.open_in_new_rounded,
+                  color: Color(0xFF8CB8FF),
+                  size: 21,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOverview(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0xB3000000),
+      builder: (sheetContext) {
+        void closeAndRun(VoidCallback action) {
+          Navigator.of(sheetContext).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) => action());
+        }
+
+        return FractionallySizedBox(
+          heightFactor: 0.92,
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B101B),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: WorkMonthlyOverviewPanel(
+                onClose: () => Navigator.of(sheetContext).pop(),
+                onWork: () => closeAndRun(onWork),
+                onNotes: () => closeAndRun(onNotes),
+                onActions: () => closeAndRun(onActions),
+                onPayPeriod: () => closeAndRun(onPayPeriod),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class WorkMonthlyOverviewPanel extends StatefulWidget {
+  const WorkMonthlyOverviewPanel({
+    required this.onWork,
+    required this.onNotes,
+    required this.onActions,
+    required this.onPayPeriod,
+    this.onClose,
+    super.key,
+  });
+
+  final VoidCallback onWork;
+  final VoidCallback onNotes;
+  final VoidCallback onActions;
+  final VoidCallback onPayPeriod;
+  final VoidCallback? onClose;
 
   @override
   State<WorkMonthlyOverviewPanel> createState() =>
@@ -73,6 +208,7 @@ class _WorkMonthlyOverviewPanelState extends State<WorkMonthlyOverviewPanel> {
         return _OverviewCard(
           summary: summary,
           maxWidth: constraints.maxWidth,
+          onClose: widget.onClose,
           onPreviousMonth: () => _changeMonth(-1),
           onNextMonth: () => _changeMonth(1),
           canGoNext: _canGoNext,
@@ -99,6 +235,7 @@ class _OverviewCard extends StatelessWidget {
     required this.onNextMonth,
     required this.canGoNext,
     required this.onCopy,
+    this.onClose,
   });
 
   final WorkMonthSummary summary;
@@ -111,6 +248,7 @@ class _OverviewCard extends StatelessWidget {
   final VoidCallback onNextMonth;
   final bool canGoNext;
   final VoidCallback onCopy;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +267,7 @@ class _OverviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _OverviewHeader(summary: summary),
+          _OverviewHeader(summary: summary, onClose: onClose),
           const SizedBox(height: 13),
           WorkMonthControls(
             label: summary.label,
@@ -176,9 +314,10 @@ class _OverviewCard extends StatelessWidget {
 }
 
 class _OverviewHeader extends StatelessWidget {
-  const _OverviewHeader({required this.summary});
+  const _OverviewHeader({required this.summary, this.onClose});
 
   final WorkMonthSummary summary;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -218,6 +357,16 @@ class _OverviewHeader extends StatelessWidget {
           ),
         ),
         _CountBadge(count: summary.entries),
+        if (onClose != null) ...[
+          const SizedBox(width: 4),
+          IconButton(
+            key: const ValueKey('work-monthly-overview-close'),
+            onPressed: onClose,
+            tooltip: 'Close monthly overview',
+            icon: const Icon(Icons.close_rounded),
+            color: const Color(0xFFD8E6FF),
+          ),
+        ],
       ],
     );
   }

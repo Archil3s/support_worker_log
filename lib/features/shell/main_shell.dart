@@ -414,7 +414,7 @@ class _MainShellState extends State<MainShell> {
                       child: Column(
                         children: [
                           if (showWorkOverview)
-                            WorkMonthlyOverviewPanel(
+                            WorkMonthlyOverviewLauncher(
                               onWork: () => _go(_Section.quick),
                               onNotes: () => _go(_Section.notes),
                               onActions: () => _go(_Section.actions),
