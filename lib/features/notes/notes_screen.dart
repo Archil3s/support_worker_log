@@ -733,7 +733,7 @@ class _NotesListTab extends StatelessWidget {
         _NotesOverview(entries: allNoteEntries),
         const SizedBox(height: 12),
         SectionCard(
-          title: payeMode ? 'PAYE notes workspace' : 'Pay period workspace',
+          title: payeMode ? 'PAYE notes workspace' : 'Submission workspace',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -762,7 +762,7 @@ class _NotesListTab extends StatelessWidget {
                         Text(
                           payeMode
                               ? 'Manage saved PAYE notes'
-                              : 'Choose the period you are preparing',
+                              : 'Prepare one fortnight',
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -772,7 +772,7 @@ class _NotesListTab extends StatelessWidget {
                         Text(
                           payeMode
                               ? 'Save in the app first, then create or update the Google Doc.'
-                              : 'Counts and document actions below apply only to the selected fortnight.',
+                              : 'Select a period, review what is ready, then update the submission documents.',
                           style: const TextStyle(
                             color: Color(0xFF8396C7),
                             height: 1.35,
@@ -784,15 +784,20 @@ class _NotesListTab extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: onChooseFolder,
-                icon: const Icon(Icons.folder_open_outlined),
-                label: Text(
-                  payeMode ? 'PAYE notes folder' : 'Local notes folder',
+              if (payeMode)
+                OutlinedButton.icon(
+                  onPressed: onChooseFolder,
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: const Text('PAYE notes folder'),
+                )
+              else ...[
+                const _WorkspaceStepHeading(
+                  number: 1,
+                  title: 'Select a pay period',
+                  subtitle:
+                      'Every count and document action will use this period.',
                 ),
-              ),
-              if (!payeMode) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: selectedPayPeriodKey,
@@ -825,12 +830,13 @@ class _NotesListTab extends StatelessWidget {
                   onPrepare: onPrepareSubmissionDocs,
                 ),
                 const SizedBox(height: 12),
-                _PayPeriodActionGrid(
+                _DocumentToolsPanel(
                   workflowBusy: workflowBusy,
                   syncingMaster: syncingCurrentPeriodLivingDocs,
                   syncingReady: syncingReadyToSubmitDocs,
                   loadingMaster: loadingLivingDocs,
                   loadingUnsubmitted: loadingUnsubmittedNotes,
+                  onChooseFolder: onChooseFolder,
                   onSyncMaster: onSyncCurrentPayPeriodLivingDocuments,
                   onSyncReady: onSyncReadyToSubmitDocument,
                   onLoadMaster: onLoadLivingDocuments,
@@ -838,19 +844,50 @@ class _NotesListTab extends StatelessWidget {
                 ),
                 if (livingDocs.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  const Text(
-                    'Loaded documents',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final document in livingDocs) ...[
-                    _LivingDocumentTile(
-                      document: document,
-                      onOpen: () => onOpenLivingDocument(document),
-                      onDownload: () => onDownloadLivingDocument(document),
+                  Container(
+                    key: const ValueKey('submission-loaded-documents'),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF101827),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF26385F)),
                     ),
-                    const SizedBox(height: 8),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.cloud_done_outlined,
+                              color: Color(0xFF67E8F9),
+                            ),
+                            const SizedBox(width: 9),
+                            const Expanded(
+                              child: Text(
+                                'Loaded documents',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                            _CountPill(label: '${livingDocs.length} found'),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        for (var index = 0; index < livingDocs.length; index++)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index == livingDocs.length - 1 ? 0 : 8,
+                            ),
+                            child: _LivingDocumentTile(
+                              document: livingDocs[index],
+                              onOpen: () =>
+                                  onOpenLivingDocument(livingDocs[index]),
+                              onDownload: () =>
+                                  onDownloadLivingDocument(livingDocs[index]),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ],
@@ -1001,13 +1038,78 @@ EntrySupportNoteStatus _cachedStatusForEntry(
   );
 }
 
-class _PayPeriodActionGrid extends StatelessWidget {
-  const _PayPeriodActionGrid({
+class _WorkspaceStepHeading extends StatelessWidget {
+  const _WorkspaceStepHeading({
+    required this.number,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final int number;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFF4F8DF7).withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF4F8DF7)),
+          ),
+          child: Text(
+            '$number',
+            style: const TextStyle(
+              color: Color(0xFF8CB8FF),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Color(0xFF8396C7),
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DocumentToolsPanel extends StatelessWidget {
+  const _DocumentToolsPanel({
     required this.workflowBusy,
     required this.syncingMaster,
     required this.syncingReady,
     required this.loadingMaster,
     required this.loadingUnsubmitted,
+    required this.onChooseFolder,
     required this.onSyncMaster,
     required this.onSyncReady,
     required this.onLoadMaster,
@@ -1019,6 +1121,76 @@ class _PayPeriodActionGrid extends StatelessWidget {
   final bool syncingReady;
   final bool loadingMaster;
   final bool loadingUnsubmitted;
+  final VoidCallback onChooseFolder;
+  final VoidCallback onSyncMaster;
+  final VoidCallback onSyncReady;
+  final VoidCallback onLoadMaster;
+  final VoidCallback onLoadUnsubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('submission-document-tools'),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101827),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF26385F)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const ValueKey('submission-document-tools-toggle'),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          leading: const Icon(Icons.tune_rounded, color: Color(0xFF8CB8FF)),
+          title: const Text(
+            'More document tools',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          ),
+          subtitle: const Text(
+            'Open the local folder, sync one document, or review notes',
+            style: TextStyle(color: Color(0xFF8396C7), fontSize: 12),
+          ),
+          children: [
+            _PayPeriodActionGrid(
+              workflowBusy: workflowBusy,
+              syncingMaster: syncingMaster,
+              syncingReady: syncingReady,
+              loadingMaster: loadingMaster,
+              loadingUnsubmitted: loadingUnsubmitted,
+              onChooseFolder: onChooseFolder,
+              onSyncMaster: onSyncMaster,
+              onSyncReady: onSyncReady,
+              onLoadMaster: onLoadMaster,
+              onLoadUnsubmitted: onLoadUnsubmitted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PayPeriodActionGrid extends StatelessWidget {
+  const _PayPeriodActionGrid({
+    required this.workflowBusy,
+    required this.syncingMaster,
+    required this.syncingReady,
+    required this.loadingMaster,
+    required this.loadingUnsubmitted,
+    required this.onChooseFolder,
+    required this.onSyncMaster,
+    required this.onSyncReady,
+    required this.onLoadMaster,
+    required this.onLoadUnsubmitted,
+  });
+
+  final bool workflowBusy;
+  final bool syncingMaster;
+  final bool syncingReady;
+  final bool loadingMaster;
+  final bool loadingUnsubmitted;
+  final VoidCallback onChooseFolder;
   final VoidCallback onSyncMaster;
   final VoidCallback onSyncReady;
   final VoidCallback onLoadMaster;
@@ -1039,44 +1211,68 @@ class _PayPeriodActionGrid extends StatelessWidget {
           children: [
             SizedBox(
               width: width,
-              child: FilledButton.tonalIcon(
-                onPressed: workflowBusy ? null : onSyncMaster,
-                icon: syncingMaster
-                    ? const _SmallProgressIndicator()
-                    : const Icon(Icons.sync_outlined),
-                label: Text(syncingMaster ? 'Syncing master' : 'Sync master'),
+              child: _DocumentToolButton(
+                key: const ValueKey('submission-tool-local-folder'),
+                title: 'Open local notes folder',
+                subtitle: 'View the Word files saved on this device',
+                icon: Icons.folder_open_outlined,
+                onTap: onChooseFolder,
               ),
             ),
             SizedBox(
               width: width,
-              child: FilledButton.tonalIcon(
-                onPressed: workflowBusy ? null : onSyncReady,
-                icon: syncingReady
-                    ? const _SmallProgressIndicator()
-                    : const Icon(Icons.fact_check_outlined),
-                label: Text(syncingReady ? 'Syncing ready' : 'Sync ready'),
+              child: _DocumentToolButton(
+                key: const ValueKey('submission-tool-sync-master'),
+                title: syncingMaster
+                    ? 'Syncing master document'
+                    : 'Sync master document',
+                subtitle: 'Update every note in the selected pay period',
+                icon: Icons.sync_outlined,
+                loading: syncingMaster,
+                enabled: !workflowBusy,
+                onTap: onSyncMaster,
               ),
             ),
             SizedBox(
               width: width,
-              child: OutlinedButton.icon(
-                onPressed: workflowBusy ? null : onLoadMaster,
-                icon: loadingMaster
-                    ? const _SmallProgressIndicator()
-                    : const Icon(Icons.tab_outlined),
-                label: Text(loadingMaster ? 'Loading master' : 'Load master'),
+              child: _DocumentToolButton(
+                key: const ValueKey('submission-tool-sync-ready'),
+                title: syncingReady
+                    ? 'Syncing ready-to-submit'
+                    : 'Sync ready-to-submit',
+                subtitle: 'Update the document containing finished notes',
+                icon: Icons.fact_check_outlined,
+                loading: syncingReady,
+                enabled: !workflowBusy,
+                onTap: onSyncReady,
               ),
             ),
             SizedBox(
               width: width,
-              child: OutlinedButton.icon(
-                onPressed: loadingUnsubmitted ? null : onLoadUnsubmitted,
-                icon: loadingUnsubmitted
-                    ? const _SmallProgressIndicator()
-                    : const Icon(Icons.pending_actions_outlined),
-                label: Text(
-                  loadingUnsubmitted ? 'Loading notes' : 'Not submitted',
-                ),
+              child: _DocumentToolButton(
+                key: const ValueKey('submission-tool-load-master'),
+                title: loadingMaster
+                    ? 'Loading Google documents'
+                    : 'Load Google documents',
+                subtitle: 'Show the selected period documents from Drive',
+                icon: Icons.tab_outlined,
+                loading: loadingMaster,
+                enabled: !workflowBusy,
+                onTap: onLoadMaster,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _DocumentToolButton(
+                key: const ValueKey('submission-tool-not-submitted'),
+                title: loadingUnsubmitted
+                    ? 'Loading unfinished notes'
+                    : 'Review not submitted',
+                subtitle: 'See notes that still need the submission step',
+                icon: Icons.pending_actions_outlined,
+                loading: loadingUnsubmitted,
+                enabled: !loadingUnsubmitted,
+                onTap: onLoadUnsubmitted,
               ),
             ),
           ],
@@ -1086,14 +1282,96 @@ class _PayPeriodActionGrid extends StatelessWidget {
   }
 }
 
-class _SmallProgressIndicator extends StatelessWidget {
-  const _SmallProgressIndicator();
+class _DocumentToolButton extends StatelessWidget {
+  const _DocumentToolButton({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+    this.loading = false,
+    this.enabled = true,
+    super.key,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool loading;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.square(
-      dimension: 18,
-      child: CircularProgressIndicator(strokeWidth: 2),
+    final foreground = enabled
+        ? const Color(0xFFE7EEFF)
+        : const Color(0xFF6D7D98);
+
+    return Material(
+      color: const Color(0xFF182238),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: enabled && !loading ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 76),
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF2E426C)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4F8DF7).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: const Color(0xFF8CB8FF), size: 21),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: foreground,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFF8396C7),
+                        fontSize: 11,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (loading)
+                const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: enabled
+                      ? const Color(0xFF8CB8FF)
+                      : const Color(0xFF52617D),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1261,16 +1539,24 @@ class _LivingDocumentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF26385F)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final details = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.description_outlined, size: 20),
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F8DF7).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.description_outlined,
+                color: Color(0xFF8CB8FF),
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1280,9 +1566,12 @@ class _LivingDocumentTile extends StatelessWidget {
                     document.personName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     document.file.name,
                     maxLines: 1,
@@ -1293,7 +1582,7 @@ class _LivingDocumentTile extends StatelessWidget {
                     ),
                   ),
                   if (document.invoiceTabTitle != null) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       document.invoiceTabTitle!,
                       maxLines: 1,
@@ -1306,18 +1595,28 @@ class _LivingDocumentTile extends StatelessWidget {
                     ),
                   ],
                   if (document.subTabTitles.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 7),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: [
                         for (final title in document.subTabTitles.take(6))
-                          Chip(
-                            label: Text(title),
-                            visualDensity: VisualDensity.compact,
-                            side: const BorderSide(color: Color(0xFF34405F)),
-                            backgroundColor: const Color(0xFF20283B),
-                            labelStyle: const TextStyle(fontSize: 11),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF20283B),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(0xFF34405F),
+                              ),
+                            ),
+                            child: Text(
+                              title,
+                              style: const TextStyle(fontSize: 10),
+                            ),
                           ),
                       ],
                     ),
@@ -1325,20 +1624,52 @@ class _LivingDocumentTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton.filledTonal(
-              tooltip: 'Download Google Doc as a Word file',
+          ],
+        );
+        final actions = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              key: ValueKey('download-living-doc-${document.file.id}'),
               onPressed: onDownload,
-              icon: const Icon(Icons.download_outlined),
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Word file'),
             ),
-            IconButton(
-              tooltip: 'Open',
+            FilledButton.tonalIcon(
+              key: ValueKey('open-living-doc-${document.file.id}'),
               onPressed: onOpen,
-              icon: const Icon(Icons.open_in_new),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Open doc'),
             ),
           ],
-        ),
-      ),
+        );
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF182238),
+            border: Border.all(color: const Color(0xFF2E426C)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    details,
+                    const SizedBox(height: 11),
+                    Align(alignment: Alignment.centerRight, child: actions),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: details),
+                    const SizedBox(width: 12),
+                    actions,
+                  ],
+                ),
+        );
+      },
     );
   }
 }
@@ -1378,65 +1709,191 @@ class _SubmissionPrepPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _SubmissionChip(
-              label: 'Total',
-              value: summary.total,
-              color: const Color(0xFF8EA7FF),
+    final canPrepare = !disabled && !preparing && summary.total > 0;
+
+    return Container(
+      key: const ValueKey('submission-prep-card'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF13294D), Color(0xFF101B32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF355C9A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _WorkspaceStepHeading(
+            number: 2,
+            title: 'Prepare submission documents',
+            subtitle:
+                'One action updates the selected-period master document and '
+                'the ready-to-submit document.',
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SubmissionMetric(
+                  key: const ValueKey('submission-stat-ready'),
+                  label: 'Ready now',
+                  value: summary.finished,
+                  icon: Icons.task_alt_rounded,
+                  color: _statusColor(EntrySupportNoteStatus.finished),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SubmissionMetric(
+                  key: const ValueKey('submission-stat-open'),
+                  label: 'Needs work',
+                  value: summary.open,
+                  icon: Icons.edit_note_rounded,
+                  color: _statusColor(EntrySupportNoteStatus.inProgress),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _SubmissionCountPill(
+                key: const ValueKey('submission-stat-total'),
+                label: 'Total',
+                value: summary.total,
+                color: const Color(0xFF8EA7FF),
+              ),
+              _SubmissionCountPill(
+                key: const ValueKey('submission-stat-submitted'),
+                label: 'Submitted',
+                value: summary.submitted,
+                color: _statusColor(EntrySupportNoteStatus.submitted),
+              ),
+              _SubmissionCountPill(
+                key: const ValueKey('submission-stat-drive'),
+                label: 'On Drive',
+                value: summary.withDrive,
+                color: const Color(0xFF67E8F9),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            key: const ValueKey('prepare-submission-docs-button'),
+            onPressed: canPrepare ? onPrepare : null,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              backgroundColor: const Color(0xFF4F8DF7),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
-            _SubmissionChip(
-              label: 'Ready',
-              value: summary.finished,
-              color: _statusColor(EntrySupportNoteStatus.finished),
+            icon: preparing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.rule_folder_outlined),
+            label: Text(
+              preparing
+                  ? 'Preparing submission documents'
+                  : 'Prepare submission documents',
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
-            _SubmissionChip(
-              label: 'Submitted',
-              value: summary.submitted,
-              color: _statusColor(EntrySupportNoteStatus.submitted),
-            ),
-            _SubmissionChip(
-              label: 'Open',
-              value: summary.open,
-              color: _statusColor(EntrySupportNoteStatus.inProgress),
-            ),
-            _SubmissionChip(
-              label: 'On Drive',
-              value: summary.withDrive,
-              color: const Color(0xFF67E8F9),
+          ),
+          if (summary.total == 0) ...[
+            const SizedBox(height: 9),
+            const Text(
+              'No home-visit notes are recorded in this pay period yet.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFAFC6F5),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: disabled || preparing || summary.total == 0
-              ? null
-              : onPrepare,
-          icon: preparing
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.rule_folder_outlined),
-          label: Text(
-            preparing ? 'Preparing Submission Docs' : 'Prepare Submission Docs',
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _SubmissionChip extends StatelessWidget {
-  const _SubmissionChip({
+class _SubmissionMetric extends StatelessWidget {
+  const _SubmissionMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    super.key,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1527).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.46)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 21),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFAFC6F5),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubmissionCountPill extends StatelessWidget {
+  const _SubmissionCountPill({
     required this.label,
     required this.value,
     required this.color,
+    super.key,
   });
 
   final String label;
@@ -1445,19 +1902,21 @@ class _SubmissionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.24),
-        foregroundColor: color,
-        child: Text(
-          value.toString(),
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B1527),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.46)),
+      ),
+      child: Text(
+        '$label  $value',
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
         ),
       ),
-      label: Text(label),
-      side: BorderSide(color: color.withValues(alpha: 0.38)),
-      backgroundColor: const Color(0xFF20283B),
-      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
     );
   }
 }

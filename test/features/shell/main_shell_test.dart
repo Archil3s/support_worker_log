@@ -5,13 +5,93 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:support_worker_log/core/models/app_mode.dart';
 import 'package:support_worker_log/core/models/entry_type.dart';
+import 'package:support_worker_log/core/models/google_export_account_scope.dart';
 import 'package:support_worker_log/core/models/work_entry.dart';
 import 'package:support_worker_log/core/state/app_state.dart';
+import 'package:support_worker_log/features/notes/notes_screen.dart';
 import 'package:support_worker_log/features/shell/main_shell.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('submission workspace prioritises preparation and hides tools', (
+    tester,
+  ) async {
+    final appState = _ReadyNotesAppState();
+    addTearDown(appState.dispose);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    appState.addEntry(
+      WorkEntry(
+        id: 'submission-entry',
+        client: 'Test client',
+        type: EntryType.homeVisit,
+        date: DateTime.now(),
+        startTime: const TimeOfDay(hour: 9, minute: 0),
+        minutes: 60,
+        notes: const [],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: appState,
+        child: const MaterialApp(home: Scaffold(body: NotesScreen())),
+      ),
+    );
+
+    expect(find.text('Submission workspace'), findsOneWidget);
+    expect(find.byKey(const ValueKey('submission-prep-card')), findsOneWidget);
+    expect(find.byKey(const ValueKey('submission-stat-ready')), findsOneWidget);
+    expect(find.byKey(const ValueKey('submission-stat-open')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('prepare-submission-docs-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-document-tools')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-tool-sync-master')),
+      findsNothing,
+    );
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('submission-document-tools-toggle')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey('submission-tool-local-folder')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-tool-sync-master')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-tool-sync-ready')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-tool-load-master')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('submission-tool-not-submitted')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('desktop Work shell shows monthly statistics and guided flow', (
@@ -338,4 +418,11 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class _ReadyNotesAppState extends AppState {
+  _ReadyNotesAppState() : super(warmGoogleAccounts: false);
+
+  @override
+  bool notesStorageReadyForScope(GoogleExportAccountScope scope) => true;
 }
