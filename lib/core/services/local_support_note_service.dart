@@ -89,6 +89,55 @@ class EntrySupportNoteMeta {
   }
 }
 
+class SupportNoteTemplateContent {
+  const SupportNoteTemplateContent({
+    required this.clientName,
+    required this.date,
+    required this.interactionDetails,
+    required this.mainTopics,
+    required this.outcomes,
+    required this.overallImpression,
+    required this.nextActions,
+  });
+
+  final String clientName;
+  final String date;
+  final String interactionDetails;
+  final String mainTopics;
+  final String outcomes;
+  final String overallImpression;
+  final String nextActions;
+
+  String get plainText {
+    return [
+      'Template for reporting of interactions with survivors.',
+      '',
+      'This template is aimed at providing information in a format that '
+          'meets the requirements of the Ministry of Social Development.',
+      '',
+      'Geographical area. Blenheim',
+      'Name of client. $clientName',
+      'Date: $date',
+      'Date/time/length of interaction. Also record calls and texts, just '
+          'time spent on each, no need for non important calls and texts. '
+          'Record travel time.',
+      interactionDetails,
+      '',
+      'Main topic(s)  (max. 200 words)',
+      mainTopics,
+      '',
+      'Outcome(s)  (Max. 100 words)',
+      outcomes,
+      '',
+      'Overall impression (Max. 150 words)`',
+      overallImpression,
+      '',
+      'Next actions  Max. 150 words)`',
+      nextActions,
+    ].join('\n').trim();
+  }
+}
+
 class LocalSupportNoteService {
   LocalSupportNoteService._();
 
@@ -481,6 +530,52 @@ Referrals
         .trim();
   }
 
+  static SupportNoteTemplateContent templateContentForEntry({
+    required WorkEntry entry,
+    String? noteText,
+    String? clientDisplayName,
+  }) {
+    final canonicalText = payeNotePlainText(entry: entry, noteText: noteText);
+    final sections = _PayeSupportSections.fromEntry(
+      entry.copyWith(supportNoteBreakdown: canonicalText),
+    );
+    final byTitle = {
+      for (final section in sections) section.title: section.body,
+    };
+
+    String groupedField(List<String> titles) {
+      final blocks = <String>[];
+      for (final title in titles) {
+        final body = byTitle[title]?.trim() ?? '';
+        blocks.add('$title\n${_blankIfEmpty(body)}');
+      }
+      return blocks.join('\n\n');
+    }
+
+    final attendance = byTitle['Attendance']?.trim() ?? '';
+    final clientName = clientDisplayName?.trim();
+
+    return SupportNoteTemplateContent(
+      clientName: clientName == null || clientName.isEmpty
+          ? personNameForEntry(entry)
+          : clientName,
+      date: formatDate(entry.date),
+      interactionDetails: [
+        '${entry.type.label}; ${formatTime(entry.startTime)}; '
+            '${entry.baseMinutes} minutes.',
+        'Attendance\n${_blankIfEmpty(attendance)}',
+      ].join('\n'),
+      mainTopics: groupedField(['What happened', 'Work/task completed']),
+      outcomes: groupedField(['Outcome']),
+      overallImpression: groupedField(['Support given', 'Issue/problem']),
+      nextActions: groupedField([
+        'Next step',
+        'Anything to follow up',
+        'Referrals',
+      ]),
+    );
+  }
+
   static String noteTitle({
     required WorkEntry entry,
     required String initials,
@@ -518,6 +613,7 @@ Referrals
       return _payeDocxFromTemplate(
         bytes: bytes,
         entry: entry.copyWith(supportNoteBreakdown: noteText),
+        clientDisplayName: clientDisplayName,
       );
     } catch (error) {
       throw StateError(
@@ -609,6 +705,7 @@ Referrals
   static List<int> _payeDocxFromTemplate({
     required Uint8List bytes,
     required WorkEntry entry,
+    String? clientDisplayName,
   }) {
     final source = ZipDecoder().decodeBytes(bytes);
     final archive = Archive();
@@ -622,7 +719,11 @@ Referrals
       } else if (file.name == 'word/document.xml') {
         final xml = utf8.decode(file.content as List<int>);
         final documentBytes = utf8.encode(
-          _payeDocumentXmlFromTemplate(xml: xml, entry: entry),
+          _payeDocumentXmlFromTemplate(
+            xml: xml,
+            entry: entry,
+            clientDisplayName: clientDisplayName,
+          ),
         );
         archive.addFile(
           ArchiveFile(file.name, documentBytes.length, documentBytes),
@@ -752,6 +853,7 @@ Referrals
   static String _payeDocumentXmlFromTemplate({
     required String xml,
     required WorkEntry entry,
+    String? clientDisplayName,
   }) {
     const bodyOpen = '<w:body>';
     const bodyClose = '</w:body>';
@@ -759,42 +861,89 @@ Referrals
     final bodyEnd = xml.lastIndexOf(bodyClose);
 
     if (bodyStart == -1 || bodyEnd == -1 || bodyEnd <= bodyStart) {
-      return _payeDocumentXml(entry);
+      return _payeDocumentXml(entry, clientDisplayName: clientDisplayName);
     }
 
     final prefix = xml.substring(0, bodyStart + bodyOpen.length);
     final body = xml.substring(bodyStart + bodyOpen.length, bodyEnd);
-    final headerImageParagraph = RegExp(
-      r'<w:p(?:\s|>)[\s\S]*?<w:drawing>[\s\S]*?<\/w:p>',
-    ).firstMatch(body)?.group(0);
+    final templateParagraphs = RegExp(
+      r'<w:p(?:\s|>)[\s\S]*?<\/w:p>',
+    ).allMatches(body).map((match) => match.group(0)!).toList();
     final sectionProperties = RegExp(
       r'<w:sectPr[\s\S]*?<\/w:sectPr>',
     ).allMatches(body).fold<String?>(null, (_, match) => match.group(0));
-    final sections = _PayeSupportSections.fromEntry(entry);
-    final paragraphs = <String>[
-      if (headerImageParagraph != null) ...[
-        headerImageParagraph,
-        _personalSpacer,
-      ],
-      for (final section in sections) ...[
-        _personalParagraph(section.title, style: 'Heading1'),
-        _personalParagraph(_blankIfEmpty(section.body)),
-        _personalSpacer,
-      ],
+    if (templateParagraphs.length < 19) {
+      return _payeDocumentXml(entry, clientDisplayName: clientDisplayName);
+    }
+
+    final content = templateContentForEntry(
+      entry: entry,
+      clientDisplayName: clientDisplayName,
+    );
+    final populatedParagraphs = templateParagraphs.take(19).toList()
+      ..[7] = _replaceTemplateParagraphText(
+        templateParagraphs[7],
+        'Name of client. ${content.clientName}',
+      )
+      ..[8] = _replaceTemplateParagraphText(
+        templateParagraphs[8],
+        'Date: ${content.date}',
+      )
+      ..[10] = _replaceTemplateParagraphText(
+        templateParagraphs[10],
+        content.interactionDetails,
+      )
+      ..[12] = _replaceTemplateParagraphText(
+        templateParagraphs[12],
+        content.mainTopics,
+      )
+      ..[14] = _replaceTemplateParagraphText(
+        templateParagraphs[14],
+        content.outcomes,
+      )
+      ..[16] = _replaceTemplateParagraphText(
+        templateParagraphs[16],
+        content.overallImpression,
+      )
+      ..[18] = _replaceTemplateParagraphText(
+        templateParagraphs[18],
+        content.nextActions,
+      );
+    final paragraphs = [
+      ...populatedParagraphs,
       sectionProperties ?? _payeSectionPropertiesXml,
     ].join();
 
     return '$prefix$paragraphs$bodyClose</w:document>';
   }
 
-  static String _payeDocumentXml(WorkEntry entry) {
-    final sections = _PayeSupportSections.fromEntry(entry);
+  static String _replaceTemplateParagraphText(
+    String paragraphXml,
+    String text,
+  ) {
+    final opening =
+        RegExp(r'^<w:p(?:\s[^>]*)?>').firstMatch(paragraphXml)?.group(0) ??
+        '<w:p>';
+    final paragraphProperties = RegExp(
+      r'<w:pPr[\s\S]*?<\/w:pPr>',
+    ).firstMatch(paragraphXml)?.group(0);
+
+    return [
+      opening,
+      ?paragraphProperties,
+      _personalRun(_blankIfEmpty(text)),
+      '</w:p>',
+    ].join();
+  }
+
+  static String _payeDocumentXml(WorkEntry entry, {String? clientDisplayName}) {
+    final content = templateContentForEntry(
+      entry: entry,
+      clientDisplayName: clientDisplayName,
+    );
     final paragraphs = <String>[
-      for (final section in sections) ...[
-        _personalParagraph(section.title, style: 'Heading1'),
-        _personalParagraph(_blankIfEmpty(section.body)),
-        _personalSpacer,
-      ],
+      for (final line in content.plainText.split('\n'))
+        _personalParagraph(line),
     ].join();
 
     return '''

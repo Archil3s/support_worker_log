@@ -74,7 +74,8 @@ void main() {
       final abDocumentText = _docxText(abLogUpload.bytes);
       final cdDocumentText = _docxText(cdLogUpload.bytes);
 
-      expect(abDocumentText, isNot(contains('Name of client: AB')));
+      expect(abDocumentText, contains('Name of client. AB'));
+      expect(abDocumentText, contains('Template for reporting'));
       expect(abDocumentText, contains('Attendance'));
       expect(abDocumentText, contains('What happened'));
       expect(abDocumentText, contains('Work/task completed'));
@@ -84,10 +85,10 @@ void main() {
       expect(abDocumentText, contains('Next step'));
       expect(abDocumentText, contains('Anything to follow up'));
       expect(abDocumentText, contains('Referrals'));
-      expect(abDocumentText, isNot(contains('Main topic(s)')));
-      expect(abDocumentText, isNot(contains('Outcome(s)')));
-      expect(abDocumentText, isNot(contains('Next action(s)')));
-      expect(abDocumentText, isNot(contains('Overall impression')));
+      expect(abDocumentText, contains('Main topic(s)'));
+      expect(abDocumentText, contains('Outcome(s)'));
+      expect(abDocumentText, contains('Next actions'));
+      expect(abDocumentText, contains('Overall impression'));
       expect(abDocumentText, contains('AB Living Text Notes Log'));
       expect(abDocumentText, contains('31/05/2026 15:00 - AB'));
       expect(abDocumentText, contains('Date: 31/05/2026'));
@@ -96,7 +97,7 @@ void main() {
       expect(abDocumentText, contains('Important: Important'));
       expect(abDocumentText, contains('Reply needed: Yes'));
       expect(abDocumentText, isNot(contains('01/06/2026 08:15 - CD')));
-      expect(cdDocumentText, isNot(contains('Name of client: CD')));
+      expect(cdDocumentText, contains('Name of client. CD'));
       expect(cdDocumentText, contains('CD Living Text Notes Log'));
       expect(cdDocumentText, contains('01/06/2026 08:15 - CD'));
       expect(cdDocumentText, contains('Direction: Text sent'));
@@ -221,10 +222,11 @@ void main() {
     expect(breakdownText, contains('Next step'));
     expect(breakdownText, contains('Anything to follow up'));
     expect(breakdownText, contains('Referrals'));
-    expect(breakdownText, isNot(contains('Main topic(s)')));
-    expect(breakdownText, isNot(contains('Outcome(s)')));
-    expect(breakdownText, isNot(contains('Next action(s)')));
-    expect(breakdownText, isNot(contains('Overall impression')));
+    expect(breakdownText, contains('Template for reporting'));
+    expect(breakdownText, contains('Main topic(s)'));
+    expect(breakdownText, contains('Outcome(s)'));
+    expect(breakdownText, contains('Next actions'));
+    expect(breakdownText, contains('Overall impression'));
   });
 }
 

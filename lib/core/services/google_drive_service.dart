@@ -300,9 +300,11 @@ class _LivingSupportTabCache {
 
   List<_LivingSupportTab> _tabs = const [];
   String? _revisionId;
+  String? _templateImageUri;
   var _loaded = false;
 
   List<_LivingSupportTab> get tabs => _tabs;
+  String? get templateImageUri => _templateImageUri;
 
   Future<void> load() async {
     if (_loaded) return;
@@ -316,6 +318,7 @@ class _LivingSupportTabCache {
     );
     _tabs = _service._livingSupportTabsFromDocument(document);
     _revisionId = _service._revisionId(document);
+    _templateImageUri = _service._firstDocumentImageUri(document);
     _loaded = true;
   }
 
@@ -362,6 +365,21 @@ class _LivingSupportTabCache {
     required String tabId,
     required String text,
   }) async {
+    await _replaceBlock(tabId: tabId, text: text, useTemplate: false);
+  }
+
+  Future<void> replaceTemplateBlock({
+    required String tabId,
+    required String text,
+  }) async {
+    await _replaceBlock(tabId: tabId, text: text, useTemplate: true);
+  }
+
+  Future<void> _replaceBlock({
+    required String tabId,
+    required String text,
+    required bool useTemplate,
+  }) async {
     await load();
 
     final tab = _tabs.firstWhere(
@@ -372,6 +390,7 @@ class _LivingSupportTabCache {
     final deleteEndIndex = tab.text.endsWith('\n')
         ? tab.endIndex - 1
         : tab.endIndex;
+    final payload = useTemplate ? '\n$insertedText' : insertedText;
     final requests = <Map<String, dynamic>>[
       if (tab.text.trim().isNotEmpty && deleteEndIndex > 1)
         {
@@ -386,9 +405,26 @@ class _LivingSupportTabCache {
       {
         'insertText': {
           'location': {'tabId': tab.id, 'index': 1},
-          'text': insertedText,
+          'text': payload,
         },
       },
+      if (useTemplate)
+        ..._service._templateTextStyleRequests(
+          tabId: tab.id,
+          text: insertedText,
+          startIndex: 2,
+        ),
+      if (useTemplate && templateImageUri != null)
+        {
+          'insertInlineImage': {
+            'uri': templateImageUri,
+            'location': {'tabId': tab.id, 'index': 1},
+            'objectSize': {
+              'width': {'magnitude': 151.2, 'unit': 'PT'},
+              'height': {'magnitude': 91.44, 'unit': 'PT'},
+            },
+          },
+        },
     ];
 
     await _service._docsApi.batchUpdate(
@@ -398,7 +434,7 @@ class _LivingSupportTabCache {
       targetRevisionId: _revisionId,
     );
     _revisionId = null;
-    _replaceCachedTabText(tab, '$insertedText\n');
+    _replaceCachedTabText(tab, '$payload\n');
   }
 
   _LivingSupportTab? _findTab({
@@ -1611,38 +1647,34 @@ class GoogleDriveService {
 
         subTabTitles.add(typeTab.title);
 
-        final entriesByPerson = <String, List<LivingSupportDocumentEntry>>{};
-        for (final item in typeGroup.value) {
-          entriesByPerson
-              .putIfAbsent(
-                _folderName(item.personName),
-                () => <LivingSupportDocumentEntry>[],
-              )
-              .add(item);
-        }
-        final personGroups = entriesByPerson.entries.toList()
-          ..sort((a, b) => a.key.compareTo(b.key));
+        final orderedEntries = [...typeGroup.value]
+          ..sort((a, b) {
+            final personCompare = _folderName(
+              a.personName,
+            ).compareTo(_folderName(b.personName));
+            if (personCompare != 0) return personCompare;
 
-        for (final personGroup in personGroups) {
-          final personTab = await tabCache.ensureTab(
-            title: _livingSupportReadyPersonTabName(
-              personGroup.key,
-              typeGroup.key,
-              invoiceTitle,
+            final dateCompare = a.entry.date.compareTo(b.entry.date);
+            if (dateCompare != 0) return dateCompare;
+            return _minutesFromStart(
+              a.entry,
+            ).compareTo(_minutesFromStart(b.entry));
+          });
+
+        for (final item in orderedEntries) {
+          final entryTab = await tabCache.ensureTab(
+            title: _livingSupportPersonEntryTabName(
+              item.entry,
+              item.personName,
             ),
             parentTabId: typeTab.id,
           );
 
-          subTabTitles.add(personTab.title);
+          subTabTitles.add(entryTab.title);
 
-          await tabCache.replaceBlock(
-            tabId: personTab.id,
-            text: _livingSupportReadyPersonBlock(
-              invoiceTitle: invoiceTitle,
-              type: typeGroup.key,
-              personName: personGroup.key,
-              entries: personGroup.value,
-            ),
+          await tabCache.replaceTemplateBlock(
+            tabId: entryTab.id,
+            text: _livingSupportEntryBlock(item),
           );
         }
       }
@@ -1992,7 +2024,7 @@ class GoogleDriveService {
       entryId: item.entry.id,
     );
     final hadExistingContent = dateTab.text.trim().isNotEmpty;
-    await tabCache.replaceBlock(tabId: dateTab.id, text: replacement);
+    await tabCache.replaceTemplateBlock(tabId: dateTab.id, text: replacement);
 
     return existingRange != null || hadExistingContent;
   }
@@ -2017,7 +2049,7 @@ class GoogleDriveService {
       entryId: item.entry.id,
     );
     final hadExistingContent = entryTab.text.trim().isNotEmpty;
-    await tabCache.replaceBlock(tabId: entryTab.id, text: replacement);
+    await tabCache.replaceTemplateBlock(tabId: entryTab.id, text: replacement);
 
     return existingRange != null || hadExistingContent;
   }
@@ -2182,12 +2214,13 @@ class GoogleDriveService {
         : entry.supportNoteBreakdown.trim().isNotEmpty
         ? entry.supportNoteBreakdown.trim()
         : null;
-    final notes = LocalSupportNoteService.payeNotePlainText(
+    final content = LocalSupportNoteService.templateContentForEntry(
       entry: entry,
       noteText: noteText == null ? null : _removeLegacySvilText(noteText),
+      clientDisplayName: _folderName(item.personName),
     );
 
-    return [notes, ''].join('\n');
+    return [content.plainText, ''].join('\n');
   }
 
   String _livingSupportSubmittedSummaryBlock(
@@ -2334,30 +2367,6 @@ class GoogleDriveService {
     ].join('\n');
   }
 
-  String _livingSupportReadyPersonBlock({
-    required String invoiceTitle,
-    required EntryType type,
-    required String personName,
-    required List<LivingSupportDocumentEntry> entries,
-  }) {
-    final ordered = [...entries]
-      ..sort((a, b) {
-        final dateCompare = a.entry.date.compareTo(b.entry.date);
-        if (dateCompare != 0) return dateCompare;
-        return _minutesFromStart(a.entry).compareTo(_minutesFromStart(b.entry));
-      });
-
-    return [
-      'Ready to submit',
-      invoiceTitle,
-      'Type: ${_livingSupportTypeTabName(type)}',
-      'Person: $personName',
-      'Finished not submitted: ${ordered.length}',
-      '',
-      for (final item in ordered) _livingSupportEntryBlock(item).trim(),
-    ].join('\n');
-  }
-
   String _removeLegacySvilText(String noteText) {
     final lines = noteText.split(RegExp(r'\r?\n'));
     final kept = <String>[];
@@ -2430,6 +2439,84 @@ class GoogleDriveService {
   String _revisionId(Map<String, dynamic> document) {
     final revisionId = document['revisionId'];
     return revisionId is String ? revisionId : '';
+  }
+
+  String? _firstDocumentImageUri(Object? value) {
+    if (value is Map) {
+      final imageProperties = value['imageProperties'];
+      if (imageProperties is Map) {
+        final contentUri = imageProperties['contentUri'];
+        if (contentUri is String && contentUri.trim().isNotEmpty) {
+          return contentUri.trim();
+        }
+      }
+
+      for (final child in value.values) {
+        final uri = _firstDocumentImageUri(child);
+        if (uri != null) return uri;
+      }
+    } else if (value is List) {
+      for (final child in value) {
+        final uri = _firstDocumentImageUri(child);
+        if (uri != null) return uri;
+      }
+    }
+
+    return null;
+  }
+
+  List<Map<String, dynamic>> _templateTextStyleRequests({
+    required String tabId,
+    required String text,
+    required int startIndex,
+  }) {
+    final requests = <Map<String, dynamic>>[
+      {
+        'updateTextStyle': {
+          'range': {
+            'tabId': tabId,
+            'startIndex': startIndex,
+            'endIndex': startIndex + text.length,
+          },
+          'textStyle': {
+            'weightedFontFamily': {'fontFamily': 'Arial'},
+            'fontSize': {'magnitude': 11, 'unit': 'PT'},
+          },
+          'fields': 'weightedFontFamily,fontSize',
+        },
+      },
+    ];
+    const headings = {
+      'Template for reporting of interactions with survivors.',
+      'Main topic(s)  (max. 200 words)',
+      'Outcome(s)  (Max. 100 words)',
+      'Overall impression (Max. 150 words)`',
+      'Next actions  Max. 150 words)`',
+    };
+    var offset = 0;
+
+    for (final line in text.split('\n')) {
+      if (headings.contains(line) && line.isNotEmpty) {
+        final title = line.startsWith('Template for reporting');
+        requests.add({
+          'updateTextStyle': {
+            'range': {
+              'tabId': tabId,
+              'startIndex': startIndex + offset,
+              'endIndex': startIndex + offset + line.length,
+            },
+            'textStyle': {
+              'bold': true,
+              'fontSize': {'magnitude': title ? 18 : 11, 'unit': 'PT'},
+            },
+            'fields': 'bold,fontSize',
+          },
+        });
+      }
+      offset += line.length + 1;
+    }
+
+    return requests;
   }
 
   Future<GoogleDriveFile> _replaceGoogleDocThroughDrive({
@@ -2588,21 +2675,6 @@ class GoogleDriveService {
         : 'I${invoiceMatch.group(1)}';
 
     return _livingSupportTabTitle('$label $invoiceLabel');
-  }
-
-  String _livingSupportReadyPersonTabName(
-    String personName,
-    EntryType type,
-    String invoiceTitle,
-  ) {
-    final invoiceMatch = RegExp(r'Invoice\s+(\d+)').firstMatch(invoiceTitle);
-    final invoiceLabel = invoiceMatch == null
-        ? ''
-        : ' I${invoiceMatch.group(1)}';
-
-    return _livingSupportTabTitle(
-      '${_folderName(personName)} ${_livingSupportDateTabPrefix(type)}$invoiceLabel',
-    );
   }
 
   String _livingSupportDateTabPrefix(EntryType type) {

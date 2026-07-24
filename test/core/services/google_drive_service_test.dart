@@ -104,14 +104,18 @@ void main() {
       expect(noteUpload.mimeType, _googleDocsMimeType);
       expect(noteUpload.contentMimeType, _docxMimeType);
       expect(noteUpload.parentId, contains('/Home Visits'));
-      expect(documentText, startsWith('Attendance'));
-      expect(documentText, isNot(contains('Name of client: Jane Smith')));
+      expect(
+        documentText,
+        startsWith('Template for reporting of interactions with survivors.'),
+      );
+      expect(documentText, contains('Name of client. Jane Smith'));
+      expect(documentText, contains('Date: 02/06/2026'));
       expect(documentText, isNot(contains('Interaction: Home Visit')));
-      expect(documentText, isNot(contains('Date/time/length')));
-      expect(documentText, isNot(contains('9:00')));
-      expect(documentText, isNot(contains('60 minutes')));
+      expect(documentText, contains('Date/time/length of interaction.'));
+      expect(documentText, contains('Home Visit; 09:00; 60 minutes.'));
       expect(documentText, isNot(contains('1.00 hours')));
       expect(documentText, isNot(contains('Kilometres')));
+      expect(documentText, contains('Main topic(s)'));
       expect(documentText, contains('What happened'));
       expect(documentText, contains('Test note'));
       expect(documentText, contains('Outcome'));
@@ -160,8 +164,8 @@ void main() {
     expect(noteUpload.parentId, contains('client-notes/Brad Roberts'));
     expect(documentText, contains('What happened'));
     expect(documentText, contains('Full name shown.'));
-    expect(documentText, isNot(contains('Name of client: Brad Roberts')));
-    expect(documentText, isNot(contains('Name of client: BR')));
+    expect(documentText, contains('Name of client. Brad Roberts'));
+    expect(documentText, isNot(contains('Name of client. BR')));
   });
 
   test(
@@ -612,10 +616,14 @@ void main() {
         'Phone 2026-06-02',
       ]);
       final inserted = docsApi.insertedText.single.trimLeft();
-      expect(inserted, startsWith('Attendance'));
+      expect(
+        inserted,
+        startsWith('Template for reporting of interactions with survivors.'),
+      );
       expect(inserted, isNot(contains('Status: Finished')));
-      expect(inserted, isNot(contains('Name of client: AB')));
-      expect(inserted, isNot(contains('Date: 02/06/2026')));
+      expect(inserted, contains('Name of client. AB'));
+      expect(inserted, contains('Date: 02/06/2026'));
+      expect(inserted, contains('Phone Call; 09:30; 30 minutes.'));
       expect(inserted, isNot(contains('Interaction: Phone Call')));
       expect(inserted, isNot(contains('Updated to living doc: Yes')));
       expect(inserted, isNot(contains('Important: Yes')));
@@ -630,6 +638,15 @@ void main() {
       expect(
         docsApi.insertedText.single,
         isNot(contains('sexual harm survivors')),
+      );
+      expect(
+        docsApi.batchRequests.expand((requests) => requests),
+        contains(
+          containsPair(
+            'insertInlineImage',
+            containsPair('uri', 'https://example.com/support-note-logo.png'),
+          ),
+        ),
       );
     },
   );
@@ -681,13 +698,14 @@ void main() {
     expect(
       docsApi.insertedText.single,
       allOf([
-        startsWith('Attendance\nJoseph and support worker'),
+        startsWith('\nTemplate for reporting of interactions with survivors.'),
+        contains('Name of client. Joseph W'),
+        contains('Attendance\nJoseph and support worker'),
         contains('What happened\nConsent form was given.'),
         contains('Work/task completed\nEngagement started.'),
         contains('Support given\nExplained next steps.'),
         contains('Issue/problem\nNo issue raised.'),
         contains('Outcome\nEngagement is good.'),
-        isNot(contains('Name of client: Joseph W')),
         isNot(contains('Updated to living doc: Yes')),
       ]),
     );
@@ -962,7 +980,7 @@ void main() {
           'Invoice 5 2026-05-31 to 2026-06-13',
           'Ready Totals I5',
           'Phone Calls - Inv 5',
-          'Joseph W Phone I5',
+          'Phone Joseph W 2026-06-02 0930 finish',
         ]),
       );
       expect(docsApi.insertedText.join('\n'), contains('Ready phone note.'));
@@ -973,6 +991,15 @@ void main() {
       expect(
         docsApi.insertedText.join('\n'),
         isNot(contains('Submitted text note.')),
+      );
+      expect(
+        docsApi.batchRequests.expand((requests) => requests),
+        contains(
+          containsPair(
+            'insertInlineImage',
+            containsPair('uri', 'https://example.com/support-note-logo.png'),
+          ),
+        ),
       );
     },
   );
@@ -1134,8 +1161,11 @@ void main() {
               .length,
         ),
       );
-      expect(updateRequests.last, containsPair('insertText', isA<Map>()));
-      expect(docsApi.insertedText.last.trimLeft(), startsWith('Attendance'));
+      expect(updateRequests, contains(containsPair('insertText', isA<Map>())));
+      expect(
+        docsApi.insertedText.last.trimLeft(),
+        startsWith('Template for reporting of interactions with survivors.'),
+      );
       expect(docsApi.insertedText.last, isNot(contains('Status: Submitted')));
       expect(docsApi.insertedText.last, contains('Updated text message.'));
       expect(docsApi.insertedText.last, isNot(contains('SWL_ENTRY')));
@@ -1629,14 +1659,17 @@ void main() {
     expect(_docxEntryNames(upload.bytes), contains('word/media/image1.png'));
     expect(documentXml, contains('<w:drawing>'));
     expect(documentXml, contains('r:embed="rId2"'));
-    expect(documentText, startsWith('Attendance'));
+    expect(
+      documentText,
+      startsWith('Template for reporting of interactions with survivors.'),
+    );
     expect(documentText, contains('Client'));
     expect(documentText, contains('Support worker'));
     expect(documentText, contains('Social worker'));
     expect(documentText, isNot(contains('PAYE Support Note')));
-    expect(documentText, isNot(contains('Template for reporting')));
-    expect(documentText, isNot(contains('Date:')));
-    expect(documentText, isNot(contains('Jane Smith')));
+    expect(documentText, contains('Template for reporting'));
+    expect(documentText, contains('Date: 07/06/2026'));
+    expect(documentText, contains('Name of client. Jane Smith'));
     expect(documentText, contains('Roster question answered'));
     expect(documentText, contains('Long session detail.'));
     expect(documentText, contains('Work/task completed'));
@@ -1719,6 +1752,7 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
     : tabs = [...tabs];
 
   final List<_FakeGoogleDocTab> tabs;
+  final String templateImageUri = 'https://example.com/support-note-logo.png';
   final addedTabs = <_FakeGoogleDocTab>[];
   final insertedText = <String>[];
   final batchRequests = <List<Map<String, dynamic>>>[];
@@ -1732,6 +1766,15 @@ class _FakeGoogleDocsApi extends GoogleDocsApiPlatform {
   }) async {
     return {
       'revisionId': 'rev-${_revision++}',
+      'positionedObjects': {
+        'template-logo': {
+          'positionedObjectProperties': {
+            'embeddedObject': {
+              'imageProperties': {'contentUri': templateImageUri},
+            },
+          },
+        },
+      },
       'tabs': [
         for (final tab in tabs.where((tab) => tab.parentId == null))
           _tabJson(tab),
