@@ -1,6 +1,7 @@
 enum AppMode {
   work,
   personal,
+  trips,
   massage,
   mood,
   cleaning,
@@ -16,6 +17,8 @@ extension AppModeLabel on AppMode {
         return 'Work';
       case AppMode.personal:
         return 'Personal';
+      case AppMode.trips:
+        return 'Trips';
       case AppMode.massage:
         return 'Massage';
       case AppMode.mood:
