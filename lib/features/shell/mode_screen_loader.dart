@@ -6,8 +6,7 @@ import '../cleaning/cleaning_screen.dart' deferred as cleaning;
 import '../grocery/presentation/pages/grocery_screen.dart' deferred as grocery;
 import '../massage/massage_screen.dart' deferred as massage;
 import '../mood/presentation/pages/mood_tracker_screen.dart' deferred as mood;
-import '../personal/personal_screen.dart' deferred as personal;
-import '../trips/trips_screen.dart' deferred as trips;
+import '../personal/personal_mode_tabs.dart' deferred as personal;
 
 class ModeScreenLoader extends StatefulWidget {
   const ModeScreenLoader({required this.mode, super.key});
@@ -56,7 +55,6 @@ class _ModeScreenLoaderState extends State<ModeScreenLoader> {
 Future<Widget> _load(AppMode mode) async {
   return switch (mode) {
     AppMode.personal => _loadPersonal(),
-    AppMode.trips => _loadTrips(),
     AppMode.massage => _loadMassage(),
     AppMode.mood => _loadMood(),
     AppMode.cleaning => _loadCleaning(),
@@ -70,12 +68,7 @@ Future<Widget> _load(AppMode mode) async {
 
 Future<Widget> _loadPersonal() async {
   await personal.loadLibrary();
-  return personal.PersonalScreen();
-}
-
-Future<Widget> _loadTrips() async {
-  await trips.loadLibrary();
-  return trips.TripsScreen();
+  return personal.PersonalModeTabs();
 }
 
 Future<Widget> _loadMassage() async {
