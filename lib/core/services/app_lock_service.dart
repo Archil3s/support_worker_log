@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppLockService {
-  static const _appPassword = 'abf02c38-c929-4326-9c8f-e5b0ff56f777';
+  static const _appPassword = 'jdd11Banana1';
   static const _failedAttemptsKey = 'app_lock_failed_attempts_v1';
   static const _lockedUntilKey = 'app_lock_locked_until_v1';
   static const _unlockValidUntilKey = 'app_lock_unlock_valid_until_v1';
