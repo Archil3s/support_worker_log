@@ -209,7 +209,7 @@ class _TripsScreenState extends State<TripsScreen> {
           items: const [
             _SummaryItem('3 days', '12–14 Sep 2026'),
             _SummaryItem('~309 km', 'Blenheim → Christchurch'),
-            _SummaryItem('11:30 am', 'Mini Moo Sunday'),
+            _SummaryItem('2 events', 'Illuminate + Mini Moo'),
           ],
         ),
         const SizedBox(height: 12),
@@ -231,7 +231,7 @@ class _TripsScreenState extends State<TripsScreen> {
         const SizedBox(height: 10),
         _Notice(
           text:
-              'Relaxed road-trip day. The Mini Moo encounter is on Sunday, so Saturday can stay flexible.',
+              'Relaxed road-trip day, with the booked Illuminate Light & Sound Experience at Christchurch Botanic Gardens in the evening.',
         ),
         const SizedBox(height: 12),
         _TimelineCard(
@@ -294,9 +294,33 @@ class _TripsScreenState extends State<TripsScreen> {
           subtitle: 'Saturday-night stay still to be chosen',
           tag: 'OVERNIGHT',
           body:
-              'Check in, have an easy evening, and keep Sunday morning unhurried.',
+              'Check in, settle in, then head to the Botanic Gardens for Illuminate later in the evening.',
           checked: _completed.contains('sat_arrive'),
           onChanged: (value) => _toggle('sat_arrive', value),
+        ),
+        _TimelineCard(
+          time: 'Evening',
+          title: 'ILLUMINATE LIGHT & SOUND EXPERIENCE',
+          subtitle: 'Christchurch Botanic Gardens · 2 admissions · NZ\$35.73',
+          tag: 'BOOKED',
+          feature: true,
+          body:
+              'Saturday 12 September admission for two. Order ILL-2026-83084079. Check the ticket email for the entry time before heading to the Botanic Gardens.',
+          checked: _completed.contains('illuminate'),
+          onChanged: (value) => _toggle('illuminate', value),
+          actions: [
+            _LinkAction(
+              label: 'Event website',
+              filled: true,
+              onTap: () => _open('https://www.illuminateshow.co.nz/'),
+            ),
+            _LinkAction(
+              label: 'Directions',
+              onTap: () => _open(
+                'https://www.google.com/maps/dir/?api=1&destination=Christchurch+Botanic+Gardens,+Christchurch,+New+Zealand',
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 22),
         const _SectionHeader(
@@ -442,6 +466,23 @@ class _TripsScreenState extends State<TripsScreen> {
         ),
         const SizedBox(height: 12),
         _BookingCard(
+          icon: Icons.lightbulb_rounded,
+          title: 'Illuminate Light & Sound Experience',
+          status: 'BOOKED',
+          rows: const [
+            ('Date', 'Saturday 12 September 2026'),
+            ('Tickets', '2 × Single Admission'),
+            ('Venue', 'Christchurch Botanic Gardens'),
+            ('Total price', 'NZ\$35.73'),
+            ('GST', 'NZ\$4.66'),
+            ('Order', 'ILL-2026-83084079'),
+            ('Entry time', 'Check ticket email'),
+          ],
+          primaryLabel: 'Open Illuminate',
+          onPrimary: () => _open('https://www.illuminateshow.co.nz/'),
+        ),
+        const SizedBox(height: 12),
+        _BookingCard(
           icon: Icons.pets_rounded,
           title: 'Mini Moo Encounter',
           status: 'PLAN CONFIRMED',
@@ -496,6 +537,7 @@ class _TripsScreenState extends State<TripsScreen> {
         ...[
           ('fuel_ready', 'Fuel / EV charge sorted'),
           ('sat_stay_booked', 'Saturday-night Christchurch accommodation booked'),
+          ('illuminate_tickets', 'Illuminate tickets ready'),
           ('moo_booking_ready', 'Mini Moo booking/tickets ready'),
           ('park_admission', 'Orana general admission sorted'),
           ('closed_shoes', 'Closed-toe footwear packed'),
@@ -541,7 +583,7 @@ class _TripsScreenState extends State<TripsScreen> {
   }
 
   Widget _buildBudget() {
-    const fixed = 158.0; // Mini Moo + two adult park admissions.
+    const fixed = 193.73; // Illuminate + Mini Moo + two adult park admissions.
     final total = fixed + _fuel + _saturdayStay + _food + _extras;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
@@ -553,6 +595,11 @@ class _TripsScreenState extends State<TripsScreen> {
         const SizedBox(height: 12),
         _BudgetHero(total: total),
         const SizedBox(height: 12),
+        const _BudgetLine(
+          label: 'Illuminate tickets × 2',
+          value: 'NZ\$35.73',
+          fixed: true,
+        ),
         _BudgetLine(label: 'Mini Moo tickets', value: 'NZ\$79', fixed: true),
         const _BudgetLine(
           label: 'Orana admission × 2',
@@ -611,6 +658,7 @@ class _TripsScreenState extends State<TripsScreen> {
     'kaikoura',
     'leave_kaikoura',
     'sat_arrive',
+    'illuminate',
     'sun_leave',
     'orana_checkin',
     'mini_moo',
@@ -669,7 +717,7 @@ class _TripHero extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Saturday road trip, Sunday Mini Moo, Sunday-night Airbnb, then home Monday.',
+                'Saturday road trip and Illuminate, Sunday Mini Moo, Sunday-night Airbnb, then home Monday.',
                 style: TextStyle(color: Color(0xFFE9DED7), height: 1.45),
               ),
               const SizedBox(height: 14),
@@ -677,6 +725,7 @@ class _TripHero extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  _HeroChip(icon: Icons.lightbulb_rounded, label: 'Illuminate Saturday'),
                   _HeroChip(icon: Icons.pets_rounded, label: 'Mini Moo 11:30 am'),
                   _HeroChip(icon: Icons.house_rounded, label: 'Airbnb 13–14 Sep'),
                   _HeroChip(icon: Icons.route_rounded, label: 'Blenheim start'),
@@ -1426,7 +1475,7 @@ class _BudgetHero extends StatelessWidget {
             ),
           ),
           Text(
-            'NZ\$${total.toStringAsFixed(0)}',
+            'NZ\$${total.toStringAsFixed(2)}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 28,
